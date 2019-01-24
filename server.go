@@ -39,6 +39,7 @@ func NewServer(address string) (*Server, error) {
 // Runs the gRPC server; blocks until server stops
 func (s *Server) Run() error {
 	// TODO: Run Cache Job that Purges the cache of TTL'd entries
+	// TODO: Check the total size of the cache, enforce some upper limit so we don't grab all the memory on the system
 	/*go func() {
 		for {
 			fmt.Printf("Size: %d\n", s.cache.Size())
@@ -61,16 +62,21 @@ func (s *Server) Address() string {
 
 // Determine whether rate limiting should take place.
 func (s *Server) ShouldRateLimit(ctx context.Context, req *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
+	// TODO: Implement for generic clients
 	return nil, nil
 }
 
 // Client implementations should use this method since they calculate the key and know which peer to use.
 func (s *Server) ShouldRateLimitByKey(ctx context.Context, req *pb.RateLimitKeyRequest) (*pb.RateLimitResponse, error) {
-
-	/*for _, entry := range req.Entries {
-
-	}*/
-	return &pb.RateLimitResponse{}, nil
+	var results []*pb.DescriptorStatus
+	for _, entry := range req.Entries {
+		status, err := s.getRateLimt(ctx, entry)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, status)
+	}
+	return &pb.RateLimitResponse{Statuses: results}, nil
 }
 
 func (s *Server) getRateLimt(ctx context.Context, entry *pb.KeyRequestEntry) (*pb.DescriptorStatus, error) {
@@ -84,6 +90,11 @@ func (s *Server) getRateLimt(ctx context.Context, entry *pb.KeyRequestEntry) (*p
 		}
 		return status, nil
 	}
+
+	// TODO: Calculate the over limit rate and time bucket
+	// TODO: Have the cache return the TTL
+	// TODO: Add the TTL to the cache
+	// TODO: Calculate the OfHitsAccepted
 
 	// Add a new rate limit
 	status := &pb.DescriptorStatus{

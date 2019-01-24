@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/mailgun/gubernator"
-	"github.com/mailgun/gubernator/proto"
+	"github.com/mailgun/gubernator/pb"
 )
 
 // Given a comma separated string, return a slice of string items.
@@ -65,13 +65,21 @@ func client(peers []string) {
 	//var count uint32
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
-		_, err := client.RateLimit(ctx, "recipients_per_second", 1, []*proto.RateLimitDescriptor_Entry{
-			{
-				//Key:   "account",
-				//Value: randomString(10, "ID-"),
-				Key: randomString(10, "ID-"),
+		_, err := client.RateLimit(ctx, "test", &pb.RateLimitDescriptor{
+			Entries: []*pb.RateLimitDescriptor_Entry{
+				{
+					//Key:   "account",
+					//Value: randomString(10, "ID-"),
+					Key: randomString(10, "ID-"),
+				},
+			},
+			Hits: 1,
+			RateLimit: &pb.RateLimit{
+				RequestsPerSpan: 10,
+				SpanInSeconds:   5,
 			},
 		})
+
 		if err != nil {
 			fmt.Printf("error: %s\n", err)
 			os.Exit(1)

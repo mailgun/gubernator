@@ -2,11 +2,10 @@ package gubernator_test
 
 import (
 	"context"
+	"github.com/mailgun/gubernator"
+	"github.com/mailgun/gubernator/pb"
 	"math/rand"
 	"testing"
-
-	"github.com/mailgun/gubernator"
-	"github.com/mailgun/gubernator/proto"
 )
 
 func randomString(n int, prefix string) string {
@@ -43,9 +42,11 @@ func BenchmarkServer_GetRateLimitByKey(b *testing.B) {
 
 	b.Run("GetRateLimitByKey", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
-			_, err := client.RateLimit(context.Background(), "", 1, []*proto.RateLimitDescriptor_Entry{
-				{
-					Key: randomString(10, "ID-"),
+			_, err := client.RateLimit(context.Background(), "", &pb.RateLimitDescriptor{
+				Entries: []*pb.RateLimitDescriptor_Entry{
+					{
+						Key: randomString(10, "ID-"),
+					},
 				},
 			})
 			if err != nil {

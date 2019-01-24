@@ -1,19 +1,18 @@
 package gubernator
 
 import (
-	"github.com/mailgun/gubernator/proto"
-	"github.com/valyala/bytebufferpool"
+	"github.com/mailgun/gubernator/pb"
 	"google.golang.org/grpc"
 )
 
 type PeerPicker interface {
-	Get(*bytebufferpool.ByteBuffer, *PeerInfo) error
+	Get([]byte, *PeerInfo) error
 	GetPeer(host string) *PeerInfo
 	Size() int
 }
 
 type PeerInfo struct {
-	client   proto.RateLimitServiceClient
+	client   pb.RateLimitServiceClient
 	conn     *grpc.ClientConn
 	HostName string
 }

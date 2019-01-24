@@ -2,9 +2,8 @@ package gubernator
 
 import (
 	"context"
-	"github.com/mailgun/gubernator/proto"
+	"github.com/mailgun/gubernator/pb"
 	"github.com/pkg/errors"
-	"github.com/valyala/bytebufferpool"
 	"google.golang.org/grpc"
 	"sync"
 )
@@ -76,20 +75,17 @@ func (cl *Cluster) Update(hosts []string) map[string]error {
 	return nil
 }
 
-func (cl *Cluster) GetRateLimitByKey(ctx context.Context, key *bytebufferpool.ByteBuffer, hits uint32) (*proto.RateLimitResponse, error) {
+func (cl *Cluster) GetRateLimitByKey(ctx context.Context, req *pb.KeyRequestEntry) (*pb.RateLimitResponse, error) {
 	// TODO: combine requests if called multiple times within a few miliseconds.
 
-	// TODO: Refactor GetRateLimitByKey() to accept multiple requests at a time.
-
 	var peer PeerInfo
-	if err := cl.picker.Get(key, &peer); err != nil {
+	if err := cl.picker.Get(req.Key, &peer); err != nil {
 		return nil, err
 	}
 	//fmt.Printf("Key: '%s' Pick: %s\n", key.Bytes(), peer.HostName)
 
-	return peer.client.GetRateLimitByKey(ctx, &proto.RateLimitKeyRequest{
-		Key:        key.Bytes(),
-		HitsAddend: hits,
+	return peer.client.ShouldRateLimitByKey(ctx, &pb.RateLimitKeyRequest{
+		Entries: []*pb.KeyRequestEntry{req},
 	})
 }
 
@@ -103,6 +99,6 @@ func newPeerConnection(hostName string) (*PeerInfo, error) {
 	return &PeerInfo{
 		HostName: hostName,
 		conn:     conn,
-		client:   proto.NewRateLimitServiceClient(conn),
+		client:   pb.NewRateLimitServiceClient(conn),
 	}, nil
 }

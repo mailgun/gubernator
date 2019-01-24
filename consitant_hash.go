@@ -2,7 +2,6 @@ package gubernator
 
 import (
 	"github.com/pkg/errors"
-	"github.com/valyala/bytebufferpool"
 	"hash/crc32"
 	"sort"
 )
@@ -47,12 +46,12 @@ func (ch *consistantHash) GetPeer(host string) *PeerInfo {
 }
 
 // Given a key, return the peer that key is assigned too
-func (ch *consistantHash) Get(key *bytebufferpool.ByteBuffer, peer *PeerInfo) error {
+func (ch *consistantHash) Get(key []byte, peer *PeerInfo) error {
 	if ch.Size() == 0 {
 		return errors.New("unable to pick a peer; peer pool is empty")
 	}
 
-	hash := int(ch.hashFunc(key.Bytes()))
+	hash := int(ch.hashFunc(key))
 
 	// Binary search for appropriate peer
 	idx := sort.Search(len(ch.peerKeys), func(i int) bool { return ch.peerKeys[i] >= hash })

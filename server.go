@@ -2,7 +2,7 @@ package gubernator
 
 import (
 	"context"
-	"github.com/mailgun/gubernator/proto"
+	"github.com/mailgun/gubernator/pb"
 	"github.com/mailgun/holster"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -32,7 +32,7 @@ func NewServer(address string) (*Server, error) {
 		grpcServer: server,
 		cache:      holster.NewLRUCache(0),
 	}
-	proto.RegisterRateLimitServiceServer(server, &s)
+	pb.RegisterRateLimitServiceServer(server, &s)
 	return &s, nil
 }
 
@@ -60,38 +60,38 @@ func (s *Server) Address() string {
 }
 
 // Determine whether rate limiting should take place.
-func (s *Server) ShouldRateLimit(ctx context.Context, req *proto.RateLimitRequest) (*proto.RateLimitResponse, error) {
+func (s *Server) ShouldRateLimit(ctx context.Context, req *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
 	return nil, nil
 }
 
 // Client implementations should use this method since they calculate the key and know which peer to use.
-func (s *Server) GetRateLimitByKey(ctx context.Context, req *proto.RateLimitKeyRequest) (*proto.RateLimitResponse, error) {
+func (s *Server) ShouldRateLimitByKey(ctx context.Context, req *pb.RateLimitKeyRequest) (*pb.RateLimitResponse, error) {
+
+	/*for _, entry := range req.Entries {
+
+	}*/
+	return &pb.RateLimitResponse{}, nil
+}
+
+func (s *Server) getRateLimt(ctx context.Context, entry *pb.KeyRequestEntry) (*pb.DescriptorStatus, error) {
 	// Get from cache
-	item, ok := s.cache.Get(string(req.Key))
+	item, ok := s.cache.Get(string(entry.Key))
 	if ok {
-		status := item.(*proto.RateLimitResponse_DescriptorStatus)
-		status.LimitRemaining = status.CurrentLimit.RequestsPerUnit - req.HitsAddend
+		status := item.(*pb.DescriptorStatus)
+		status.LimitRemaining = status.CurrentLimit - entry.Hits
 		if status.LimitRemaining <= 0 {
-			status.Code = proto.RateLimitResponse_OVER_LIMIT
+			status.Code = pb.DescriptorStatus_OVER_LIMIT
 		}
-		return &proto.RateLimitResponse{
-			OverallCode: status.Code,
-			Statuses:    []*proto.RateLimitResponse_DescriptorStatus{status},
-		}, nil
+		return status, nil
 	}
 
 	// Add a new rate limit
-	status := &proto.RateLimitResponse_DescriptorStatus{
-		Code: proto.RateLimitResponse_OK,
-		CurrentLimit: &proto.RateLimit{
-			RequestsPerUnit: 10,
-		},
-		LimitRemaining: req.HitsAddend - 10,
+	status := &pb.DescriptorStatus{
+		Code:           pb.DescriptorStatus_OK,
+		CurrentLimit:   10,
+		LimitRemaining: entry.Hits - 10,
 	}
-	s.cache.Add(string(req.Key), status)
+	s.cache.Add(string(entry.Key), status)
 
-	return &proto.RateLimitResponse{
-		OverallCode: status.Code,
-		Statuses:    []*proto.RateLimitResponse_DescriptorStatus{status},
-	}, nil
+	return status, nil
 }

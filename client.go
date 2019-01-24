@@ -22,41 +22,39 @@ func (c *Client) IsConnected() bool {
 	return true
 }
 
-func (c *Client) RateLimit(ctx context.Context, req *proto.RateLimitRequest) (*proto.RateLimitResponse, error) {
+func (c *Client) RateLimit(ctx context.Context, domain string, hits uint32, entries []*proto.RateLimitDescriptor_Entry) (*proto.RateLimitResponse, error) {
 	var key bytebufferpool.ByteBuffer
 
 	// TODO: Keep key buffers in a buffer pool to avoid un-necessary garbage collection
 	// Or Keep proto.KeyRequests in a pool
 
 	// Generate key from the request
-	if err := c.generateKey(&key, req); err != nil {
+	if err := c.generateKey(&key, domain, entries); err != nil {
 		return nil, err
 	}
 
-	keyReq := proto.RateLimitKeyRequest{
+	/*keyReq := proto.RateLimitKeyRequest{
 		Key:        key.Bytes(),
-		HitsAddend: req.HitsAddend,
-	}
+		HitsAddend: hits,
+	}*/
 
-	return c.cluster.GetRateLimitByKey(ctx, &keyReq)
+	return c.cluster.GetRateLimitByKey(ctx, &key, hits)
 }
 
-func (c *Client) generateKey(b *bytebufferpool.ByteBuffer, req *proto.RateLimitRequest) error {
+func (c *Client) generateKey(b *bytebufferpool.ByteBuffer, domain string, entries []*proto.RateLimitDescriptor_Entry) error {
 
 	// TODO: Check provided Domain
-	// TODO: Check provided at least one descriptor
+	// TODO: Check provided at least one entry
 
 	b.Reset()
-	b.WriteString(req.Domain)
+	b.WriteString(domain)
 	b.WriteByte('_')
 
-	for _, des := range req.Descriptors {
-		for _, entry := range des.Entries {
-			b.WriteString(entry.Key)
-			b.WriteByte('_')
-			b.WriteString(entry.Value)
-			b.WriteByte('_')
-		}
+	for _, entry := range entries {
+		b.WriteString(entry.Key)
+		b.WriteByte('_')
+		b.WriteString(entry.Value)
+		b.WriteByte('_')
 	}
 	return nil
 }

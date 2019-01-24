@@ -28,6 +28,7 @@ func newConsitantHashPicker(peers []*PeerInfo, fn HashFunc) *consistantHash {
 
 	for _, peer := range peers {
 		hash := int(ch.hashFunc([]byte(peer.HostName)))
+		//fmt.Printf("Hash: %d\n", hash)
 		ch.peerKeys = append(ch.peerKeys, hash)
 		ch.peerMap[hash] = peer
 	}
@@ -61,6 +62,7 @@ func (ch *consistantHash) Get(key *bytebufferpool.ByteBuffer, peer *PeerInfo) er
 		idx = 0
 	}
 
-	peer = ch.peerMap[ch.peerKeys[idx]]
+	item := ch.peerMap[ch.peerKeys[idx]]
+	*peer = *item
 	return nil
 }

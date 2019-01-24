@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/mailgun/gubernator/proto"
 	"github.com/pkg/errors"
+	"github.com/valyala/bytebufferpool"
 	"google.golang.org/grpc"
 	"sync"
 )
@@ -14,13 +15,26 @@ type Cluster struct {
 }
 
 // Create a new cluster using the peers provided
-func NewCluster(peers []string) (*Cluster, map[string]error) {
-	cl := Cluster{}
-	errs := cl.Update(peers)
-	if errs != nil {
-		return &cl, errs
+func NewCluster(hosts []string) (*Cluster, map[string]error) {
+	// Connect to all the peers
+	var peers []*PeerInfo
+	errs := make(map[string]error)
+	for _, host := range hosts {
+		peer, err := newPeerConnection(host)
+		if err != nil {
+			errs[host] = err
+			continue
+		}
+		peers = append(peers, peer)
 	}
-	return &cl, nil
+
+	if len(errs) == 0 {
+		errs = nil
+	}
+
+	return &Cluster{
+		picker: newConsitantHashPicker(peers, nil),
+	}, errs
 }
 
 // Return the size of the cluster
@@ -62,14 +76,21 @@ func (cl *Cluster) Update(hosts []string) map[string]error {
 	return nil
 }
 
-func (cl *Cluster) GetRateLimitByKey(ctx context.Context, keyReq *proto.RateLimitKeyRequest) (*proto.RateLimitResponse, error) {
+func (cl *Cluster) GetRateLimitByKey(ctx context.Context, key *bytebufferpool.ByteBuffer, hits uint32) (*proto.RateLimitResponse, error) {
 	// TODO: combine requests if called multiple times within a few miliseconds.
 
 	// TODO: Refactor GetRateLimitByKey() to accept multiple requests at a time.
 
-	// TODO: Make the call
+	var peer PeerInfo
+	if err := cl.picker.Get(key, &peer); err != nil {
+		return nil, err
+	}
+	//fmt.Printf("Key: '%s' Pick: %s\n", key.Bytes(), peer.HostName)
 
-	return nil, nil
+	return peer.client.GetRateLimitByKey(ctx, &proto.RateLimitKeyRequest{
+		Key:        key.Bytes(),
+		HitsAddend: hits,
+	})
 }
 
 // Given a host, return a PeerInfo with an initialized GRPC client

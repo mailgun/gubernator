@@ -19,18 +19,8 @@ func randomString(n int, prefix string) string {
 }
 
 func BenchmarkServer_GetRateLimitByKey(b *testing.B) {
-
-	var servers []*gubernator.Server
-	var peers []string
-	for i := 0; i < 6; i++ {
-		srv, err := gubernator.NewServer("")
-		if err != nil {
-			b.Errorf("NewServer() err: %s", err)
-		}
-		peers = append(peers, srv.Address())
-		go srv.Run()
-		servers = append(servers, srv)
-	}
+	startCluster()
+	defer stopCluster()
 
 	client, errs := gubernator.NewClient(peers)
 	if errs != nil {
@@ -48,16 +38,15 @@ func BenchmarkServer_GetRateLimitByKey(b *testing.B) {
 						Key: randomString(10, "ID-"),
 					},
 				},
+				RateLimit: &pb.RateLimit{
+					RequestsPerSpan: 10,
+					SpanInSeconds:   5,
+				},
+				Hits: 1,
 			})
 			if err != nil {
 				b.Errorf("client.RateLimit() err: %s", err)
 			}
 		}
 	})
-
-	// Stop all servers
-	for _, srv := range servers {
-		srv.Stop()
-	}
-
 }

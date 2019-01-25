@@ -41,7 +41,7 @@ func (c *Client) IsConnected() bool {
 	return c.picker.Size() != 0
 }
 
-func (c *Client) RateLimit(ctx context.Context, domain string, descriptor *pb.RateLimitDescriptor) (*pb.RateLimitResponse, error) {
+func (c *Client) RateLimit(ctx context.Context, domain string, descriptor *pb.RateLimitDescriptor) (*pb.DescriptorStatus, error) {
 	var key bytebufferpool.ByteBuffer
 
 	// TODO: Keep key buffers in a buffer pool to avoid un-necessary garbage collection
@@ -66,11 +66,21 @@ func (c *Client) RateLimit(ctx context.Context, domain string, descriptor *pb.Ra
 	}
 	//fmt.Printf("Key: '%s' Pick: %s\n", key.Bytes(), peer.HostName)
 
-	return peer.client.ShouldRateLimitByKey(ctx, &pb.RateLimitKeyRequest{
+	resp, err := peer.client.ShouldRateLimitByKey(ctx, &pb.RateLimitKeyRequest{
 		Entries: []*pb.KeyRequestEntry{&keyReq},
 	})
 
 	// TODO: put buffer back into pool
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(resp.Statuses) == 0 {
+		return nil, errors.New("server responded with empty descriptor status")
+	}
+
+	return resp.Statuses[0], nil
 }
 
 func (c *Client) generateKey(b *bytebufferpool.ByteBuffer, domain string, descriptor *pb.RateLimitDescriptor) error {

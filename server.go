@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/mailgun/gubernator/lru"
 	"github.com/mailgun/gubernator/pb"
@@ -91,6 +92,10 @@ func (s *Server) ShouldRateLimitByKey(ctx context.Context, req *pb.RateLimitKeyR
 func (s *Server) getRateLimt(ctx context.Context, entry *pb.KeyRequestEntry) (*pb.DescriptorStatus, error) {
 	// TODO: Optionally verify we are the owner of this key
 
+	if entry.Hits == 0 {
+		entry.Hits = 1
+	}
+
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	item, expire, ok := s.cache.Get(string(entry.Key))
@@ -103,22 +108,31 @@ func (s *Server) getRateLimt(ctx context.Context, entry *pb.KeyRequestEntry) (*p
 		remaining := status.LimitRemaining - entry.Hits
 
 		// If we are over our limit
-		if remaining <= 0 {
+		if remaining < 0 {
 			status.OfHitsAccepted = status.CurrentLimit - status.LimitRemaining
-			status.LimitRemaining = 0
+			remaining = 0
 			status.Code = pb.DescriptorStatus_OVER_LIMIT
 		}
+		status.LimitRemaining = remaining
 		status.ResetTime = expire
 		return status, nil
 	}
+
+	if entry.RateLimit == nil {
+		return nil, errors.New("required field 'RateLimit' missing from 'KeyRequestEntry'")
+	}
+
+	now := time.Now().UTC().Unix()
+	expire = now + entry.RateLimit.SpanInSeconds
 
 	// Add a new rate limit
 	status := &pb.DescriptorStatus{
 		Code:           pb.DescriptorStatus_OK,
 		CurrentLimit:   entry.RateLimit.RequestsPerSpan,
 		LimitRemaining: entry.RateLimit.RequestsPerSpan - entry.Hits,
+		ResetTime:      expire,
 	}
-	s.cache.Add(string(entry.Key), status, entry.RateLimit.SpanInSeconds)
+	s.cache.Add(string(entry.Key), status, expire)
 
 	return status, nil
 }

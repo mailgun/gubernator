@@ -2,11 +2,13 @@ package gubernator
 
 import (
 	"context"
+	"net"
+	"sync"
+
+	"github.com/mailgun/gubernator/lru"
 	"github.com/mailgun/gubernator/pb"
-	"github.com/mailgun/holster"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
-	"net"
 )
 
 const (
@@ -16,7 +18,8 @@ const (
 type Server struct {
 	listener   net.Listener
 	grpcServer *grpc.Server
-	cache      *holster.LRUCache
+	cache      *lru.Cache
+	mutex      sync.Mutex
 }
 
 // New creates a gRPC server instance.
@@ -30,7 +33,8 @@ func NewServer(address string) (*Server, error) {
 	s := Server{
 		listener:   listener,
 		grpcServer: server,
-		cache:      holster.NewLRUCache(0),
+		// TODO: Set a limit on the size of the cache, so old entries expire
+		cache: lru.NewLRUCache(0),
 	}
 	pb.RegisterRateLimitServiceServer(server, &s)
 	return &s, nil
@@ -38,14 +42,16 @@ func NewServer(address string) (*Server, error) {
 
 // Runs the gRPC server; blocks until server stops
 func (s *Server) Run() error {
-	// TODO: Run Cache Job that Purges the cache of TTL'd entries
-	// TODO: Check the total size of the cache, enforce some upper limit so we don't grab all the memory on the system
+	// TODO: Perhaps allow resizing the cache on the fly depending on the number of cache hits
+	// TODO: Emit metrics
 	/*go func() {
 		for {
 			fmt.Printf("Size: %d\n", s.cache.Size())
 			time.Sleep(time.Second)
 		}
 	}()*/
+
+	// TODO: Register this server with our peer syncer
 
 	return s.grpcServer.Serve(s.listener)
 }
@@ -63,6 +69,9 @@ func (s *Server) Address() string {
 // Determine whether rate limiting should take place.
 func (s *Server) ShouldRateLimit(ctx context.Context, req *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
 	// TODO: Implement for generic clients
+
+	// TODO: Optionally verify we are the owner of this key
+	// TODO: Forward the request to the correct owner if needed
 	return nil, nil
 }
 
@@ -80,29 +89,36 @@ func (s *Server) ShouldRateLimitByKey(ctx context.Context, req *pb.RateLimitKeyR
 }
 
 func (s *Server) getRateLimt(ctx context.Context, entry *pb.KeyRequestEntry) (*pb.DescriptorStatus, error) {
-	// Get from cache
-	item, ok := s.cache.Get(string(entry.Key))
+	// TODO: Optionally verify we are the owner of this key
+
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	item, expire, ok := s.cache.Get(string(entry.Key))
 	if ok {
 		status := item.(*pb.DescriptorStatus)
-		status.LimitRemaining = status.CurrentLimit - entry.Hits
-		if status.LimitRemaining <= 0 {
+		if status.Code == pb.DescriptorStatus_OVER_LIMIT {
+			return status, nil
+		}
+
+		remaining := status.LimitRemaining - entry.Hits
+
+		// If we are over our limit
+		if remaining <= 0 {
+			status.OfHitsAccepted = status.CurrentLimit - status.LimitRemaining
+			status.LimitRemaining = 0
 			status.Code = pb.DescriptorStatus_OVER_LIMIT
 		}
+		status.ResetTime = expire
 		return status, nil
 	}
-
-	// TODO: Calculate the over limit rate and time bucket
-	// TODO: Have the cache return the TTL
-	// TODO: Add the TTL to the cache
-	// TODO: Calculate the OfHitsAccepted
 
 	// Add a new rate limit
 	status := &pb.DescriptorStatus{
 		Code:           pb.DescriptorStatus_OK,
-		CurrentLimit:   10,
-		LimitRemaining: entry.Hits - 10,
+		CurrentLimit:   entry.RateLimit.RequestsPerSpan,
+		LimitRemaining: entry.RateLimit.RequestsPerSpan - entry.Hits,
 	}
-	s.cache.Add(string(entry.Key), status)
+	s.cache.Add(string(entry.Key), status, entry.RateLimit.SpanInSeconds)
 
 	return status, nil
 }

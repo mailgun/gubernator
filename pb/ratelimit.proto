@@ -63,7 +63,7 @@ message DescriptorStatus {
   // send 500 emails of the 1,000 emails it originally wished to send.
   uint32 of_hits_accepted = 4;
   // This is the time when the rate limit span will be reset as a unix timestamp.
-  uint64 reset_time = 5;
+  int64 reset_time = 5;
 }
 
 message RateLimitResponse {
@@ -82,7 +82,7 @@ message RateLimit {
   // The number of requests that can occur during the span before the rate limit is reached
   uint32 requests_per_span = 1;
   // Span is the time span the requests_per_span is enforced
-  uint32 span_in_seconds = 2;
+  int64 span_in_seconds = 2;
 }
 
 // This is used by Gubernator clients who already have the domain and descriptors and created a hash key

@@ -45,14 +45,17 @@ func NewServer(address string) (*Server, error) {
 func (s *Server) Run() error {
 	// TODO: Perhaps allow resizing the cache on the fly depending on the number of cache hits
 	// TODO: Emit metrics
+
+	// TODO: Create PeerSync service that uses leader election and can sync the list of peers
+	// TODO: Implement a GRPC interface to retrieve the peer listing from the CH for rate limit clients
+	// TODO: Use https://github.com/nats-io/graft as the basis for leader election
+
 	/*go func() {
 		for {
 			fmt.Printf("Size: %d\n", s.cache.Size())
 			time.Sleep(time.Second)
 		}
 	}()*/
-
-	// TODO: Register this server with our peer syncer
 
 	return s.grpcServer.Serve(s.listener)
 }

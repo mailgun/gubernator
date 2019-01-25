@@ -15,6 +15,10 @@ type Client struct {
 }
 
 func NewClient(hosts []string) (*Client, map[string]error) {
+	// TODO: Have NewClient() pick a random peer and ask that peer to provide a list of peers, then connect to all peers
+	// TODO: Provide an option to skip this step ^^  gubernator.SkipFetchPeers() for servers that want to use the client
+	// TODO: Or users that want to manage the peers themselves
+
 	// Connect to all the peers
 	var peers []*PeerInfo
 	errs := make(map[string]error)

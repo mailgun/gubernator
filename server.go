@@ -46,9 +46,8 @@ func (s *Server) Run() error {
 	// TODO: Perhaps allow resizing the cache on the fly depending on the number of cache hits
 	// TODO: Emit metrics
 
-	// TODO: Create PeerSync service that uses leader election and can sync the list of peers
+	// TODO: Create PeerSync service that uses leader election in ETCD and can sync the list of peers
 	// TODO: Implement a GRPC interface to retrieve the peer listing from the CH for rate limit clients
-	// TODO: Use https://github.com/nats-io/graft as the basis for leader election
 
 	/*go func() {
 		for {
@@ -108,15 +107,24 @@ func (s *Server) getRateLimt(ctx context.Context, entry *pb.KeyRequestEntry) (*p
 			return status, nil
 		}
 
-		remaining := status.LimitRemaining - entry.Hits
+		remaining := int32(status.LimitRemaining - entry.Hits)
 
+		//fmt.Printf("Remain: %d\n", remaining)
+		//fmt.Printf("Limit: %d\n", status.CurrentLimit)
+		//fmt.Printf("LimitRemain: %d\n", status.LimitRemaining)
 		// If we are over our limit
 		if remaining < 0 {
-			status.OfHitsAccepted = status.CurrentLimit - status.LimitRemaining
+			// If our hits caused us to go over the limit
+			if status.LimitRemaining != 0 {
+				// Record how many hits might have been accepted before we hit the limit
+				status.OfHitsAccepted = status.CurrentLimit - status.LimitRemaining
+			}
 			remaining = 0
 			status.Code = pb.DescriptorStatus_OVER_LIMIT
 		}
-		status.LimitRemaining = remaining
+		//fmt.Printf("Off: %d\n", status.OfHitsAccepted)
+
+		status.LimitRemaining = uint32(remaining)
 		status.ResetTime = expire
 		return status, nil
 	}

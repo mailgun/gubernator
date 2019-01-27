@@ -48,16 +48,16 @@ func TestOverTheLimit(t *testing.T) {
 	client, errs := gubernator.NewClient(peers)
 	require.Nil(t, errs)
 
-	descriptor := &pb.RateLimitDescriptor{
-		Entries: []*pb.RateLimitDescriptor_Entry{
+	descriptor := &pb.Descriptor{
+		Entries: []*pb.Descriptor_Entry{
 			{
 				Key:   "account",
 				Value: "1234",
 			},
 		},
-		RateLimit: &pb.RateLimit{
-			RequestsPerSpan: 2,
-			SpanInSeconds:   5,
+		RateLimit: &pb.RateLimitDuration{
+			Requests: 2,
+			Duration: gubernator.Second * 5,
 		},
 		Hits: 1,
 	}
@@ -66,27 +66,27 @@ func TestOverTheLimit(t *testing.T) {
 
 	require.Nil(t, err)
 	assert.Equal(t, pb.DescriptorStatus_OK, resp.Code)
-	assert.Equal(t, uint32(1), resp.LimitRemaining)
-	assert.Equal(t, uint32(2), resp.CurrentLimit)
-	assert.Equal(t, uint32(0), resp.OfHitsAccepted)
+	assert.Equal(t, int64(1), resp.LimitRemaining)
+	assert.Equal(t, int64(2), resp.CurrentLimit)
+	assert.Equal(t, int64(0), resp.OfHitsAccepted)
 	assert.True(t, resp.ResetTime != 0)
 
 	resp, err = client.RateLimit(context.Background(), "domain", descriptor)
 
 	require.Nil(t, err)
 	assert.Equal(t, pb.DescriptorStatus_OK, resp.Code)
-	assert.Equal(t, uint32(0), resp.LimitRemaining)
-	assert.Equal(t, uint32(2), resp.CurrentLimit)
-	assert.Equal(t, uint32(0), resp.OfHitsAccepted)
+	assert.Equal(t, int64(0), resp.LimitRemaining)
+	assert.Equal(t, int64(2), resp.CurrentLimit)
+	assert.Equal(t, int64(0), resp.OfHitsAccepted)
 	assert.True(t, resp.ResetTime != 0)
 
 	resp, err = client.RateLimit(context.Background(), "domain", descriptor)
 
 	require.Nil(t, err)
 	assert.Equal(t, pb.DescriptorStatus_OVER_LIMIT, resp.Code)
-	assert.Equal(t, uint32(0), resp.LimitRemaining)
-	assert.Equal(t, uint32(2), resp.CurrentLimit)
-	assert.Equal(t, uint32(0), resp.OfHitsAccepted)
+	assert.Equal(t, int64(0), resp.LimitRemaining)
+	assert.Equal(t, int64(2), resp.CurrentLimit)
+	assert.Equal(t, int64(0), resp.OfHitsAccepted)
 	assert.True(t, resp.ResetTime != 0)
 
 }

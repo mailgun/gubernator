@@ -32,15 +32,15 @@ func BenchmarkServer_GetRateLimitByKey(b *testing.B) {
 
 	b.Run("GetRateLimitByKey", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
-			_, err := client.RateLimit(context.Background(), "", &pb.RateLimitDescriptor{
-				Entries: []*pb.RateLimitDescriptor_Entry{
+			_, err := client.RateLimit(context.Background(), "", &pb.Descriptor{
+				Entries: []*pb.Descriptor_Entry{
 					{
 						Key: randomString(10, "ID-"),
 					},
 				},
-				RateLimit: &pb.RateLimit{
-					RequestsPerSpan: 10,
-					SpanInSeconds:   5,
+				RateLimit: &pb.RateLimitDuration{
+					Requests: 10,
+					Duration: 5,
 				},
 				Hits: 1,
 			})

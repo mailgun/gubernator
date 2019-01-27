@@ -49,6 +49,12 @@ func (s *Server) Run() error {
 	// TODO: Create PeerSync service that uses leader election in ETCD and can sync the list of peers
 	// TODO: Implement a GRPC interface to retrieve the peer listing from the CH for rate limit clients
 
+	// TODO: PeerSync (Custom RAFT Implementation)
+	// TODO: Registering - server just came up and is attempting to find the leader to get the peer list
+	// TODO: Follower - server has the peer list, but is not the leader, waits for peer list updates from the leader
+	// TODO: Leader - server has the peer list and is authoritative, sends peer list to all followers
+	// TODO: Implement a GRPC interface to Register and Send a Peer list from the leader to the followers
+
 	/*go func() {
 		for {
 			fmt.Printf("Size: %d\n", s.cache.Size())
@@ -69,8 +75,7 @@ func (s *Server) Address() string {
 	return s.listener.Addr().String()
 }
 
-// Determine whether rate limiting should take place.
-func (s *Server) ShouldRateLimit(ctx context.Context, req *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
+func (s *Server) GetRateLimit(ctx context.Context, req *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
 	// TODO: Implement for generic clients
 
 	// TODO: Optionally verify we are the owner of this key
@@ -78,11 +83,10 @@ func (s *Server) ShouldRateLimit(ctx context.Context, req *pb.RateLimitRequest) 
 	return nil, nil
 }
 
-// Client implementations should use this method since they calculate the key and know which peer to use.
-func (s *Server) ShouldRateLimitByKey(ctx context.Context, req *pb.RateLimitKeyRequest) (*pb.RateLimitResponse, error) {
+func (s *Server) GetRateLimitByKey(ctx context.Context, req *pb.RateLimitKeyRequest) (*pb.RateLimitResponse, error) {
 	var results []*pb.DescriptorStatus
 	for _, entry := range req.Entries {
-		status, err := s.getRateLimt(ctx, entry)
+		status, err := s.getEntryStatus(ctx, entry)
 		if err != nil {
 			return nil, err
 		}
@@ -91,9 +95,7 @@ func (s *Server) ShouldRateLimitByKey(ctx context.Context, req *pb.RateLimitKeyR
 	return &pb.RateLimitResponse{Statuses: results}, nil
 }
 
-func (s *Server) getRateLimt(ctx context.Context, entry *pb.KeyRequestEntry) (*pb.DescriptorStatus, error) {
-	// TODO: Optionally verify we are the owner of this key
-
+func (s *Server) getEntryStatus(ctx context.Context, entry *pb.RateLimitKeyRequest_Entry) (*pb.DescriptorStatus, error) {
 	if entry.Hits == 0 {
 		entry.Hits = 1
 	}
@@ -107,7 +109,7 @@ func (s *Server) getRateLimt(ctx context.Context, entry *pb.KeyRequestEntry) (*p
 			return status, nil
 		}
 
-		remaining := int32(status.LimitRemaining - entry.Hits)
+		remaining := status.LimitRemaining - entry.Hits
 
 		//fmt.Printf("Remain: %d\n", remaining)
 		//fmt.Printf("Limit: %d\n", status.CurrentLimit)
@@ -124,23 +126,23 @@ func (s *Server) getRateLimt(ctx context.Context, entry *pb.KeyRequestEntry) (*p
 		}
 		//fmt.Printf("Off: %d\n", status.OfHitsAccepted)
 
-		status.LimitRemaining = uint32(remaining)
+		status.LimitRemaining = remaining
 		status.ResetTime = expire
 		return status, nil
 	}
 
 	if entry.RateLimit == nil {
-		return nil, errors.New("required field 'RateLimit' missing from 'KeyRequestEntry'")
+		return nil, errors.New("required field 'RateLimit' missing from 'RateLimitKeyRequest_Entry'")
 	}
 
 	now := time.Now().UTC().Unix()
-	expire = now + entry.RateLimit.SpanInSeconds
+	expire = now + entry.RateLimit.Duration
 
 	// Add a new rate limit
 	status := &pb.DescriptorStatus{
 		Code:           pb.DescriptorStatus_OK,
-		CurrentLimit:   entry.RateLimit.RequestsPerSpan,
-		LimitRemaining: entry.RateLimit.RequestsPerSpan - entry.Hits,
+		CurrentLimit:   entry.RateLimit.Requests,
+		LimitRemaining: entry.RateLimit.Requests - entry.Hits,
 		ResetTime:      expire,
 	}
 	s.cache.Add(string(entry.Key), status, expire)

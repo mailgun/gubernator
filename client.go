@@ -9,6 +9,12 @@ import (
 	"sync"
 )
 
+const (
+	Second = 1000
+	Minute = 60 * Second
+	Hour   = 60 * Minute
+)
+
 type Client struct {
 	picker PeerPicker
 	mutex  sync.Mutex
@@ -18,6 +24,8 @@ func NewClient(hosts []string) (*Client, map[string]error) {
 	// TODO: Have NewClient() pick a random peer and ask that peer to provide a list of peers, then connect to all peers
 	// TODO: Provide an option to skip this step ^^  gubernator.SkipFetchPeers() for servers that want to use the client
 	// TODO: Or users that want to manage the peers themselves
+
+	// TODO: ^^ DONT DO THIS... I THINK. Instead call a call back func to get the peers
 
 	// Connect to all the peers
 	var peers []*PeerInfo
@@ -45,7 +53,7 @@ func (c *Client) IsConnected() bool {
 	return c.picker.Size() != 0
 }
 
-func (c *Client) RateLimit(ctx context.Context, domain string, descriptor *pb.RateLimitDescriptor) (*pb.DescriptorStatus, error) {
+func (c *Client) RateLimit(ctx context.Context, domain string, descriptor *pb.Descriptor) (*pb.DescriptorStatus, error) {
 	var key bytebufferpool.ByteBuffer
 
 	// TODO: Keep key buffers in a buffer pool to avoid un-necessary garbage collection
@@ -56,7 +64,7 @@ func (c *Client) RateLimit(ctx context.Context, domain string, descriptor *pb.Ra
 		return nil, err
 	}
 
-	keyReq := pb.KeyRequestEntry{
+	keyReq := pb.RateLimitKeyRequest_Entry{
 		Key:       key.Bytes(),
 		Hits:      descriptor.Hits,
 		RateLimit: descriptor.RateLimit,
@@ -70,8 +78,8 @@ func (c *Client) RateLimit(ctx context.Context, domain string, descriptor *pb.Ra
 	}
 	//fmt.Printf("Key: '%s' Pick: %s\n", key.Bytes(), peer.HostName)
 
-	resp, err := peer.client.ShouldRateLimitByKey(ctx, &pb.RateLimitKeyRequest{
-		Entries: []*pb.KeyRequestEntry{&keyReq},
+	resp, err := peer.client.GetRateLimitByKey(ctx, &pb.RateLimitKeyRequest{
+		Entries: []*pb.RateLimitKeyRequest_Entry{&keyReq},
 	})
 
 	// TODO: put buffer back into pool
@@ -87,7 +95,7 @@ func (c *Client) RateLimit(ctx context.Context, domain string, descriptor *pb.Ra
 	return resp.Statuses[0], nil
 }
 
-func (c *Client) generateKey(b *bytebufferpool.ByteBuffer, domain string, descriptor *pb.RateLimitDescriptor) error {
+func (c *Client) generateKey(b *bytebufferpool.ByteBuffer, domain string, descriptor *pb.Descriptor) error {
 
 	// TODO: Check provided Domain
 	// TODO: Check provided at least one entry

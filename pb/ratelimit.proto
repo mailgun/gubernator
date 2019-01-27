@@ -1,4 +1,4 @@
-// NOTE: Copied from https://github.com/lyft/ratelimit/blob/master/proto/ratelimit/ratelimit.proto and modified
+// NOTE: Inspired by https://github.com/lyft/ratelimit/blob/master/proto/ratelimit/ratelimit.proto
 
 syntax = "proto3";
 
@@ -8,25 +8,54 @@ option cc_generic_services = true;
 
 package pb.gubernator;
 
+import "common.proto";
 
 service RateLimitService {
-  // Determine whether rate limiting should take place.
-  rpc ShouldRateLimit (RateLimitRequest) returns (RateLimitResponse) {}
+  // Given a rate limit descriptor return a descriptor status
+  rpc GetRateLimit (RateLimitRequest) returns (RateLimitResponse) {}
 
-  // Client implementations should use this method since they calculate the key and know which peer to use.
-  rpc ShouldRateLimitByKey (RateLimitKeyRequest) returns (RateLimitResponse) {}
+  // Client implementations can use this method if the decriptor key is already known
+  rpc GetRateLimitByKey (RateLimitKeyRequest) returns (RateLimitResponse) {}
+
+  // TODO: Implement get peers
+
+  // TODO: Implement config API (In another file)
 }
 
 message RateLimitRequest {
-  // All rate limit requests must specify a domain. This enables the configuration to be per
-  // application without fear of overlap. E.g., "envoy".
+  // The domain scopes the request to avoid collisions with other services or applications.
   string domain = 1;
-  // All rate limit requests must specify at least one RateLimitDescriptor, but can specify multiple descriptors
-  // to be individually evaluated
-  repeated RateLimitDescriptor descriptors = 2;
+  // Rate limit requests must specify at least one descriptor
+  repeated Descriptor descriptors = 2;
 }
 
-message RateLimitDescriptor {
+message RateLimitResponse {
+  // A list of DescriptorStatus messages which matches the length of the descriptor list passed
+  // in the RateLimitRequest. This can be used by the caller to determine which individual
+  // descriptors failed and/or what the currently configured limits are for all of them.
+  repeated DescriptorStatus statuses = 2;
+}
+
+// This is used by Gubernator clients who already have the domain and descriptors and created a hash key
+message RateLimitKeyRequest {
+  message Entry {
+    // The key identifies the specific rate limit the request is for
+    bytes key = 1;
+    // Rate limit requests can optionally specify the number of hits a request adds to the matched limit. If the
+    // value is not set in the message, a request increases the matched limit by 1.
+    int64 hits = 2;
+    // This is the rate limit the requested for this descriptor. If the rate limit doesn't currently exist for
+    // this descriptor it will be created and enforced for subsequent requests
+    RateLimitDuration rate_limit = 3;
+  }
+
+  // Requests must specify at least one KeyRequestEntry, but can specify multiple descriptors
+  // to be individually evaluated
+  repeated Entry entries = 1;
+}
+
+// Describes a rate limit
+message Descriptor {
   message Entry {
     string key = 1;
     string value = 2;
@@ -36,13 +65,14 @@ message RateLimitDescriptor {
   repeated Entry entries = 1;
   // Rate limit requests optionally specify the number of hits a request adds to the matched limit. If the
   // value is not set, a request increases the matched limit by 1.
-  uint32 hits = 2;
+  int64 hits = 2;
 
   // This is the rate limit the requested for this descriptor. If the rate limit doesn't currently exist for
   // this descriptor it will be created and enforced for subsequent requests
-  RateLimit rate_limit = 3;
+  RateLimitDuration rate_limit = 3;
 }
 
+// The return status of a descriptor submitted via RateLimitRequest
 message DescriptorStatus {
   enum Code {
     UNKNOWN = 0;
@@ -52,54 +82,20 @@ message DescriptorStatus {
 
   // The response code for this descriptor.
   Code code = 1;
-  // The current limit for the requested span.
-  uint32 current_limit = 2;
-  // If Code is not OVER_LIMIT, This is the limit remaining in the current time span.
-  uint32 limit_remaining = 3;
+  // The current limit for the requested rate limit.
+  int64 current_limit = 2;
+  // If Code is not OVER_LIMIT, This is the limit remaining
+  int64 limit_remaining = 3;
   // Of the number of hits recieved, this is the number of hits that are allowed before the limit was reached.
   // IE: If a service wants to limit the number of recipients are sent an email, and it sends a request to the
   // rate limit service for 1,000 recipents, but only 500 of the 1,000 hits are available before the limit is reached
   // the service will respond with OVER_LIMIT and a `of_hits_accepted` of 500. Indicating the service can
   // send 500 emails of the 1,000 emails it originally wished to send.
-  uint32 of_hits_accepted = 4;
+  int64 of_hits_accepted = 4;
   // This is the time when the rate limit span will be reset as a unix timestamp.
   int64 reset_time = 5;
+
+  // This is additional metadata that a client might find useful. (IE: Additional headers, corrdinator ownership, etc..)
+  map<string, string> metadata = 6;
 }
 
-message RateLimitResponse {
-  // If the request for this rate limit is not handled by the host that recieved it, this field will
-  // be populated with the host name of the rate limit service that is the corrdinator for the requested
-  // rate limit. Clients should send all future requests for this descriptor to this host.
-  string coordinator = 1;
-  // A list of DescriptorStatus messages which matches the length of the descriptor list passed
-  // in the RateLimitRequest. This can be used by the caller to determine which individual
-  // descriptors failed and/or what the currently configured limits are for all of them.
-  repeated DescriptorStatus statuses = 2;
-}
-
-// Defines a rate limit span in seconds and requests per span
-message RateLimit {
-  // The number of requests that can occur during the span before the rate limit is reached
-  uint32 requests_per_span = 1;
-  // Span is the time span the requests_per_span is enforced
-  int64 span_in_seconds = 2;
-}
-
-// This is used by Gubernator clients who already have the domain and descriptors and created a hash key
-message RateLimitKeyRequest {
-  // Requests must specify at least one KeyRequestEntry, but can specify multiple descriptors
-  // to be individually evaluated
-  repeated KeyRequestEntry entries = 1;
-}
-
-message KeyRequestEntry {
-  // The key identifies the specific rate limit the request is for
-  bytes key = 1;
-  // Rate limit requests can optionally specify the number of hits a request adds to the matched limit. If the
-  // value is not set in the message, a request increases the matched limit by 1.
-  uint32 hits = 2;
-  // This is the rate limit the requested for this descriptor. If the rate limit doesn't currently exist for
-  // this descriptor it will be created and enforced for subsequent requests
-  RateLimit rate_limit = 3;
-
-}

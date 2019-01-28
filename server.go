@@ -2,14 +2,13 @@ package gubernator
 
 import (
 	"context"
-	"net"
-	"sync"
-	"time"
-
 	"github.com/mailgun/gubernator/lru"
 	"github.com/mailgun/gubernator/pb"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"net"
+	"sync"
+	"time"
 )
 
 const (
@@ -102,32 +101,35 @@ func (s *Server) getEntryStatus(ctx context.Context, entry *pb.RateLimitKeyReque
 
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	item, expire, ok := s.cache.Get(string(entry.Key))
+	item, ok := s.cache.Get(string(entry.Key))
 	if ok {
+		// The following semantic allows for requests of more than the limit to be rejected, but subsequent
+		// requests within the same duration that are under the limit to succeed. IE: client attempts to
+		// send 1000 emails but 100 is their limit. The request is rejected as over the limit, but since we
+		// don't store OVER_LIMIT in the cache the client can retry within the same rate limit duration with
+		// 100 emails and the request will succeed.
+
 		status := item.(*pb.DescriptorStatus)
-		if status.Code == pb.DescriptorStatus_OVER_LIMIT {
+		// If we are already at the limit
+		if status.LimitRemaining == 0 {
+			status.Status = pb.DescriptorStatus_OVER_LIMIT
 			return status, nil
 		}
 
-		remaining := status.LimitRemaining - entry.Hits
-
-		//fmt.Printf("Remain: %d\n", remaining)
-		//fmt.Printf("Limit: %d\n", status.CurrentLimit)
-		//fmt.Printf("LimitRemain: %d\n", status.LimitRemaining)
-		// If we are over our limit
-		if remaining < 0 {
-			// If our hits caused us to go over the limit
-			if status.LimitRemaining != 0 {
-				// Record how many hits might have been accepted before we hit the limit
-				status.OfHitsAccepted = status.CurrentLimit - status.LimitRemaining
-			}
-			remaining = 0
-			status.Code = pb.DescriptorStatus_OVER_LIMIT
+		// If requested hits takes the remainder
+		if status.LimitRemaining == entry.Hits {
+			status.LimitRemaining = 0
+			return status, nil
 		}
-		//fmt.Printf("Off: %d\n", status.OfHitsAccepted)
 
-		status.LimitRemaining = remaining
-		status.ResetTime = expire
+		// If requested is more than available, then return over the limit without updating the cache.
+		if entry.Hits > status.LimitRemaining {
+			retStatus := *status
+			retStatus.Status = pb.DescriptorStatus_OVER_LIMIT
+			return &retStatus, nil
+		}
+
+		status.LimitRemaining -= entry.Hits
 		return status, nil
 	}
 
@@ -135,16 +137,20 @@ func (s *Server) getEntryStatus(ctx context.Context, entry *pb.RateLimitKeyReque
 		return nil, errors.New("required field 'RateLimit' missing from 'RateLimitKeyRequest_Entry'")
 	}
 
-	now := time.Now().UTC().Unix()
-	expire = now + entry.RateLimit.Duration
-
-	// Add a new rate limit
+	// Add a new rate limit to the cache
+	expire := time.Now().Add(time.Duration(entry.RateLimit.Duration) * time.Millisecond)
 	status := &pb.DescriptorStatus{
-		Code:           pb.DescriptorStatus_OK,
+		Status:         pb.DescriptorStatus_OK,
 		CurrentLimit:   entry.RateLimit.Requests,
 		LimitRemaining: entry.RateLimit.Requests - entry.Hits,
-		ResetTime:      expire,
+		ResetTime:      expire.Unix() / Second,
 	}
+
+	// Kind of a weird corner case, but the client could be dumb
+	if entry.Hits > entry.RateLimit.Requests {
+		status.LimitRemaining = 0
+	}
+
 	s.cache.Add(string(entry.Key), status, expire)
 
 	return status, nil

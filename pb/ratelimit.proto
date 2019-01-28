@@ -56,13 +56,9 @@ message RateLimitKeyRequest {
 
 // Describes a rate limit
 message Descriptor {
-  message Entry {
-    string key = 1;
-    string value = 2;
-  }
+  // A map of key value pairs that make up the descriptor
+  map<string, string> values = 1;
 
-  // A list of key value pairs that make up the descriptor
-  repeated Entry entries = 1;
   // Rate limit requests optionally specify the number of hits a request adds to the matched limit. If the
   // value is not set, a request increases the matched limit by 1.
   int64 hits = 2;
@@ -74,28 +70,21 @@ message Descriptor {
 
 // The return status of a descriptor submitted via RateLimitRequest
 message DescriptorStatus {
-  enum Code {
+  enum Status {
     UNKNOWN = 0;
     OK = 1;
     OVER_LIMIT = 2;
   }
 
-  // The response code for this descriptor.
-  Code code = 1;
+  // The status of this descriptor.
+  Status status = 1;
   // The current limit for the requested rate limit.
   int64 current_limit = 2;
   // If Code is not OVER_LIMIT, This is the limit remaining
   int64 limit_remaining = 3;
-  // Of the number of hits recieved, this is the number of hits that are allowed before the limit was reached.
-  // IE: If a service wants to limit the number of recipients are sent an email, and it sends a request to the
-  // rate limit service for 1,000 recipents, but only 500 of the 1,000 hits are available before the limit is reached
-  // the service will respond with OVER_LIMIT and a `of_hits_accepted` of 500. Indicating the service can
-  // send 500 emails of the 1,000 emails it originally wished to send.
-  int64 of_hits_accepted = 4;
   // This is the time when the rate limit span will be reset as a unix timestamp.
-  int64 reset_time = 5;
-
+  int64 reset_time = 4;
   // This is additional metadata that a client might find useful. (IE: Additional headers, corrdinator ownership, etc..)
-  map<string, string> metadata = 6;
+  map<string, string> metadata = 5;
 }
 

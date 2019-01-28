@@ -3,13 +3,15 @@ package gubernator_test
 import (
 	"context"
 	"fmt"
+	"os"
+	"testing"
+	"time"
+
 	"github.com/mailgun/gubernator"
 	"github.com/mailgun/gubernator/pb"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"os"
-	"testing"
 )
 
 var peers []string
@@ -48,45 +50,87 @@ func TestOverTheLimit(t *testing.T) {
 	client, errs := gubernator.NewClient(peers)
 	require.Nil(t, errs)
 
-	descriptor := &pb.Descriptor{
-		Entries: []*pb.Descriptor_Entry{
-			{
-				Key:   "account",
-				Value: "1234",
-			},
+	tests := []struct {
+		Remaining int64
+		Status    pb.DescriptorStatus_Code
+	}{
+		{
+			Remaining: 1,
+			Status:    pb.DescriptorStatus_OK,
 		},
-		RateLimit: &pb.RateLimitDuration{
-			Requests: 2,
-			Duration: gubernator.Second * 5,
+		{
+			Remaining: 0,
+			Status:    pb.DescriptorStatus_OK,
 		},
-		Hits: 1,
+		{
+			Remaining: 0,
+			Status:    pb.DescriptorStatus_OVER_LIMIT,
+		},
 	}
 
-	resp, err := client.RateLimit(context.Background(), "domain", descriptor)
+	for _, test := range tests {
+		resp, err := client.RateLimit(context.Background(), "domain", &pb.Descriptor{
+			Values: map[string]string{
+				"account": "1234",
+			},
+			RateLimit: &pb.RateLimitDuration{
+				Requests: 2,
+				Duration: gubernator.Second * 1,
+			},
+			Hits: 1,
+		})
+		require.Nil(t, err)
 
-	require.Nil(t, err)
-	assert.Equal(t, pb.DescriptorStatus_OK, resp.Code)
-	assert.Equal(t, int64(1), resp.LimitRemaining)
-	assert.Equal(t, int64(2), resp.CurrentLimit)
-	assert.Equal(t, int64(0), resp.OfHitsAccepted)
-	assert.True(t, resp.ResetTime != 0)
+		assert.Equal(t, test.Status, resp.Status)
+		assert.Equal(t, test.Remaining, resp.LimitRemaining)
+		assert.Equal(t, int64(2), resp.CurrentLimit)
+		assert.True(t, resp.ResetTime != 0)
+	}
+}
 
-	resp, err = client.RateLimit(context.Background(), "domain", descriptor)
+func TestUnderLimitDuration(t *testing.T) {
+	client, errs := gubernator.NewClient(peers)
+	require.Nil(t, errs)
 
-	require.Nil(t, err)
-	assert.Equal(t, pb.DescriptorStatus_OK, resp.Code)
-	assert.Equal(t, int64(0), resp.LimitRemaining)
-	assert.Equal(t, int64(2), resp.CurrentLimit)
-	assert.Equal(t, int64(0), resp.OfHitsAccepted)
-	assert.True(t, resp.ResetTime != 0)
+	tests := []struct {
+		Remaining int64
+		Status    pb.DescriptorStatus_Status
+		Sleep     time.Duration
+	}{
+		{
+			Remaining: 1,
+			Status:    pb.DescriptorStatus_OK,
+			Sleep:     time.Duration(0),
+		},
+		{
+			Remaining: 0,
+			Status:    pb.DescriptorStatus_OK,
+			Sleep:     time.Duration(time.Millisecond * 5),
+		},
+		{
+			Remaining: 1,
+			Status:    pb.DescriptorStatus_OK,
+			Sleep:     time.Duration(0),
+		},
+	}
 
-	resp, err = client.RateLimit(context.Background(), "domain", descriptor)
+	for _, test := range tests {
+		resp, err := client.RateLimit(context.Background(), "domain", &pb.Descriptor{
+			Values: map[string]string{
+				"account": "1234",
+			},
+			RateLimit: &pb.RateLimitDuration{
+				Requests: 2,
+				Duration: gubernator.Millisecond * 5,
+			},
+			Hits: 1,
+		})
+		require.Nil(t, err)
 
-	require.Nil(t, err)
-	assert.Equal(t, pb.DescriptorStatus_OVER_LIMIT, resp.Code)
-	assert.Equal(t, int64(0), resp.LimitRemaining)
-	assert.Equal(t, int64(2), resp.CurrentLimit)
-	assert.Equal(t, int64(0), resp.OfHitsAccepted)
-	assert.True(t, resp.ResetTime != 0)
-
+		assert.Equal(t, test.Status, resp.Status)
+		assert.Equal(t, test.Remaining, resp.LimitRemaining)
+		assert.Equal(t, int64(2), resp.CurrentLimit)
+		assert.True(t, resp.ResetTime != 0)
+		time.Sleep(test.Sleep)
+	}
 }

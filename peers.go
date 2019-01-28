@@ -12,7 +12,7 @@ type PeerPicker interface {
 }
 
 type PeerInfo struct {
-	client   pb.RateLimitServiceClient
+	rsClient pb.RateLimitServiceClient
 	conn     *grpc.ClientConn
 	HostName string
 }

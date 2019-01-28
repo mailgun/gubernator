@@ -10,27 +10,60 @@ import (
 )
 
 const (
-	Second = 1000
-	Minute = 60 * Second
-	Hour   = 60 * Minute
+	Millisecond = 1
+	Second      = 1000
+	Minute      = 60 * Second
+	Hour        = 60 * Minute
 )
 
-type Client struct {
-	picker PeerPicker
-	mutex  sync.Mutex
+type UserClient struct {
+	picker         PeerPicker
+	mutex          sync.Mutex
+	skipFetchPeers bool
 }
 
-func NewClient(hosts []string) (*Client, map[string]error) {
-	// TODO: Have NewClient() pick a random peer and ask that peer to provide a list of peers, then connect to all peers
-	// TODO: Provide an option to skip this step ^^  gubernator.SkipFetchPeers() for servers that want to use the client
-	// TODO: Or users that want to manage the peers themselves
+/*type ClientOpt func(*Client)
 
-	// TODO: ^^ DONT DO THIS... I THINK. Instead call a call back func to get the peers
+// Tell the client to skip fetching a list of peers from nodes in the cluster.
+// Use this if you are manually managing the peer listing via NewClient() and UpdatePeers().
+func SkipFetchPeers(c *Client) {
+	c.skipFetchPeers = true
+}*/
 
-	// Connect to all the peers
-	var peers []*PeerInfo
+func NewClient(hosts []string) (*UserClient, map[string]error) {
 	errs := make(map[string]error)
+	var err error
+
+	cl := UserClient{}
+
+	// If requested, attempt to fetch a list of peers from node in the cluster
+	var firstPeer *PeerInfo
 	for _, host := range hosts {
+		firstPeer, err = newPeerConnection(host)
+		if err != nil {
+			errs[host] = err
+			continue
+		}
+		// TODO: Ask a peer to provide a complete peer listing
+		//hosts = firstPeer.confClient.GetPeers()
+		break
+	}
+
+	// If unable to connect to any of the peers provided
+	if len(errs) >= len(hosts) {
+		return nil, errs
+	}
+
+	// Connect to all the peers we know about
+	var peers []*PeerInfo
+	for _, host := range hosts {
+
+		// Avoid reconnecting to the first peer
+		if firstPeer != nil && firstPeer.HostName == host {
+			peers = append(peers, firstPeer)
+			continue
+		}
+
 		peer, err := newPeerConnection(host)
 		if err != nil {
 			errs[host] = err
@@ -43,17 +76,20 @@ func NewClient(hosts []string) (*Client, map[string]error) {
 		errs = nil
 	}
 
-	return &Client{
-		picker: newConsitantHashPicker(peers, nil),
-	}, errs
+	cl.picker = newConsitantHashPicker(peers, nil)
+
+}
+
+func NewServerClient(hosts []string) (*UserClient, map[string]error) {
+
 }
 
 // Return the size of the cluster
-func (c *Client) IsConnected() bool {
+func (c *UserClient) IsConnected() bool {
 	return c.picker.Size() != 0
 }
 
-func (c *Client) RateLimit(ctx context.Context, domain string, descriptor *pb.Descriptor) (*pb.DescriptorStatus, error) {
+func (c *UserClient) RateLimit(ctx context.Context, domain string, descriptor *pb.Descriptor) (*pb.DescriptorStatus, error) {
 	var key bytebufferpool.ByteBuffer
 
 	// TODO: Keep key buffers in a buffer pool to avoid un-necessary garbage collection
@@ -70,7 +106,7 @@ func (c *Client) RateLimit(ctx context.Context, domain string, descriptor *pb.De
 		RateLimit: descriptor.RateLimit,
 	}
 
-	// TODO: combine requests if called multiple times within a few miliseconds.
+	// TODO: combine requests if called multiple times within a few milliseconds.
 
 	var peer PeerInfo
 	if err := c.picker.Get(keyReq.Key, &peer); err != nil {
@@ -78,7 +114,7 @@ func (c *Client) RateLimit(ctx context.Context, domain string, descriptor *pb.De
 	}
 	//fmt.Printf("Key: '%s' Pick: %s\n", key.Bytes(), peer.HostName)
 
-	resp, err := peer.client.GetRateLimitByKey(ctx, &pb.RateLimitKeyRequest{
+	resp, err := peer.rsClient.GetRateLimitByKey(ctx, &pb.RateLimitKeyRequest{
 		Entries: []*pb.RateLimitKeyRequest_Entry{&keyReq},
 	})
 
@@ -95,7 +131,7 @@ func (c *Client) RateLimit(ctx context.Context, domain string, descriptor *pb.De
 	return resp.Statuses[0], nil
 }
 
-func (c *Client) generateKey(b *bytebufferpool.ByteBuffer, domain string, descriptor *pb.Descriptor) error {
+func (c *UserClient) generateKey(b *bytebufferpool.ByteBuffer, domain string, descriptor *pb.Descriptor) error {
 
 	// TODO: Check provided Domain
 	// TODO: Check provided at least one entry
@@ -117,7 +153,7 @@ func (c *Client) generateKey(b *bytebufferpool.ByteBuffer, domain string, descri
 //  * Any peer that is not in the list provided will be disconnected and removed from the list of peers.
 //  * Any peer that fails to connect it will not be added to the list of peers.
 //  * If return map is not nil, the map contains the error for each peer that failed to connect.
-func (c *Client) Update(hosts []string) map[string]error {
+func (c *UserClient) Update(hosts []string) map[string]error {
 	errs := make(map[string]error)
 	var peers []*PeerInfo
 	for _, host := range hosts {
@@ -158,6 +194,6 @@ func newPeerConnection(hostName string) (*PeerInfo, error) {
 	return &PeerInfo{
 		HostName: hostName,
 		conn:     conn,
-		client:   pb.NewRateLimitServiceClient(conn),
+		rsClient: pb.NewRateLimitServiceClient(conn),
 	}, nil
 }

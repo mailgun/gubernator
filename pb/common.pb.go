@@ -38,6 +38,9 @@ type RateLimitDuration struct {
 	// The number of requests that can occur for the duration of the rate limit
 	Requests int64 `protobuf:"varint,1,opt,name=requests" json:"requests,omitempty"`
 	// The duration of the rate limit in milliseconds
+	// Second = 1000 Milliseconds
+	// Minute = 60000 Milliseconds
+	// Hour = 3600000 Milliseconds
 	Duration int64 `protobuf:"varint,2,opt,name=duration" json:"duration,omitempty"`
 }
 

@@ -61,10 +61,8 @@ func NewLRUCache(maxEntries int) *Cache {
 	}
 }
 
-// Adds a value to the cache with a TTL
-func (c *Cache) Add(key Key, value interface{}, expire int64) bool {
-	// TODO: Simplify expireAt and use int64 and seconds for expire calculation
-	expireAt := time.Unix(expire, 0)
+// Adds a value to the cache with an expiration
+func (c *Cache) Add(key Key, value interface{}, expireAt time.Time) bool {
 	return c.addRecord(&cacheRecord{
 		key:      key,
 		value:    value,
@@ -91,7 +89,7 @@ func (c *Cache) addRecord(record *cacheRecord) bool {
 }
 
 // Get looks up a key's value from the cache.
-func (c *Cache) Get(key Key) (value interface{}, expire int64, ok bool) {
+func (c *Cache) Get(key Key) (value interface{}, ok bool) {
 
 	if ele, hit := c.cache[key]; hit {
 		entry := ele.Value.(*cacheRecord)
@@ -104,7 +102,7 @@ func (c *Cache) Get(key Key) (value interface{}, expire int64, ok bool) {
 		}
 		c.stats.Hit++
 		c.ll.MoveToFront(ele)
-		return entry.value, entry.expireAt.Unix(), true
+		return entry.value, true
 	}
 	c.stats.Miss++
 	return

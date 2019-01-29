@@ -13,7 +13,15 @@ import (
 
 const (
 	maxRequestSize = 1 * 1024 * 1024 // 1Mb
+	second         = 1000
 )
+
+/*const (
+	Millisecond = 1
+	Second      = 1000
+	Minute      = 60 * Second
+	Hour        = 60 * Minute
+)*/
 
 type Server struct {
 	listener net.Listener
@@ -35,7 +43,6 @@ func NewServer(conf ServerConfig) (*Server, error) {
 	s := Server{
 		// TODO: Set a limit on the size of the cache, so old entries expire
 		cache:    lru.NewLRUCache(0),
-		client:   NewPeerClient(),
 		listener: listener,
 		grpc:     server,
 		conf:     conf,
@@ -59,7 +66,7 @@ func (s *Server) updateConfig(conf *ClusterConfig) {
 			picker.Add(info)
 			continue
 		}
-		picker.Add(&PeerInfo{Host: peer})
+		picker.Add(NewPeerClient(peer))
 	}
 
 	// TODO: schedule a disconnect for old peers once they are no longer in flight
@@ -102,9 +109,8 @@ func (s *Server) Address() string {
 }
 
 func (s *Server) GetRateLimit(ctx context.Context, req *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
-	// TODO: Implement for simple clients
-
 	// TODO: Verify we are the owner of this key
+	// TOOD: If we are owner, then fulfill the request
 	// TODO: Forward the request to the correct owner if needed
 	return nil, nil
 }
@@ -170,7 +176,7 @@ func (s *Server) getEntryStatus(ctx context.Context, entry *pb.RateLimitKeyReque
 		Status:         pb.DescriptorStatus_OK,
 		CurrentLimit:   entry.RateLimit.Requests,
 		LimitRemaining: entry.RateLimit.Requests - entry.Hits,
-		ResetTime:      expire.Unix() / Second,
+		ResetTime:      expire.Unix() / second,
 	}
 
 	// Kind of a weird corner case, but the client could be dumb

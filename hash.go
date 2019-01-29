@@ -12,13 +12,13 @@ type HashFunc func(data []byte) uint32
 type ConsistantHash struct {
 	hashFunc HashFunc
 	peerKeys []int
-	peerMap  map[int]*PeerInfo
+	peerMap  map[int]*PeerClient
 }
 
 func NewConsistantHash(fn HashFunc) *ConsistantHash {
 	ch := &ConsistantHash{
 		hashFunc: fn,
-		peerMap:  make(map[int]*PeerInfo),
+		peerMap:  make(map[int]*PeerClient),
 	}
 
 	if ch.hashFunc == nil {
@@ -27,8 +27,15 @@ func NewConsistantHash(fn HashFunc) *ConsistantHash {
 	return ch
 }
 
+func (ch *ConsistantHash) New() PeerPicker {
+	return &ConsistantHash{
+		hashFunc: ch.hashFunc,
+		peerMap:  make(map[int]*PeerClient),
+	}
+}
+
 // Adds a peer to the hash
-func (ch *ConsistantHash) Add(peer *PeerInfo) {
+func (ch *ConsistantHash) Add(peer *PeerClient) {
 	hash := int(ch.hashFunc([]byte(peer.Host)))
 	ch.peerKeys = append(ch.peerKeys, hash)
 	ch.peerMap[hash] = peer
@@ -41,12 +48,12 @@ func (ch *ConsistantHash) Size() int {
 }
 
 // Returns the peer by hostname
-func (ch *ConsistantHash) GetPeer(host string) *PeerInfo {
+func (ch *ConsistantHash) GetPeer(host string) *PeerClient {
 	return ch.peerMap[int(ch.hashFunc([]byte(host)))]
 }
 
 // Given a key, return the peer that key is assigned too
-func (ch *ConsistantHash) Get(key []byte, peerInfo *PeerInfo) error {
+func (ch *ConsistantHash) Get(key []byte, peerInfo *PeerClient) error {
 	if ch.Size() == 0 {
 		return errors.New("unable to pick a peer; pool is empty")
 	}

@@ -24,3 +24,10 @@ func (sc *StaticClusterConfig) OnUpdate(cb func(config *ClusterConfig)) {
 	// Calls the call back immediately with our current config
 	cb(&sc.Conf)
 }
+
+func (sc *StaticClusterConfig) Start() error {
+	return nil
+}
+
+func (sc *StaticClusterConfig) Stop() {
+}

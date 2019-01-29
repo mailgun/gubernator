@@ -19,7 +19,14 @@ var servers []*gubernator.Server
 
 func startCluster() error {
 	for i := 0; i < 6; i++ {
-		srv, err := gubernator.NewServer("")
+		srv, err := gubernator.NewServer(gubernator.ServerConfig{
+			Picker: gubernator.NewConsistantHash(nil),
+			ClusterConfig: &gubernator.StaticClusterConfig{
+				Conf: gubernator.ClusterConfig{
+					Peers: peers,
+				},
+			},
+		})
 		if err != nil {
 			return errors.Wrap(err, "NewServer()")
 		}
@@ -47,12 +54,12 @@ func TestMain(m *testing.M) {
 }
 
 func TestOverTheLimit(t *testing.T) {
-	client, errs := gubernator.NewClient(peers)
+	client, errs := gubernator.NewClient("domain", peers)
 	require.Nil(t, errs)
 
 	tests := []struct {
 		Remaining int64
-		Status    pb.DescriptorStatus_Code
+		Status    pb.DescriptorStatus_Status
 	}{
 		{
 			Remaining: 1,
@@ -69,27 +76,25 @@ func TestOverTheLimit(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		resp, err := client.RateLimit(context.Background(), "domain", &pb.Descriptor{
-			Values: map[string]string{
+		resp, err := client.GetRateLimit(context.Background(), &gubernator.Request{
+			Descriptors: map[string]string{
 				"account": "1234",
 			},
-			RateLimit: &pb.RateLimitDuration{
-				Requests: 2,
-				Duration: gubernator.Second * 1,
-			},
-			Hits: 1,
+			Limit:    2,
+			Duration: time.Second * 1,
+			Hits:     1,
 		})
 		require.Nil(t, err)
 
 		assert.Equal(t, test.Status, resp.Status)
 		assert.Equal(t, test.Remaining, resp.LimitRemaining)
 		assert.Equal(t, int64(2), resp.CurrentLimit)
-		assert.True(t, resp.ResetTime != 0)
+		assert.False(t, resp.ResetTime.IsZero())
 	}
 }
 
 func TestUnderLimitDuration(t *testing.T) {
-	client, errs := gubernator.NewClient(peers)
+	client, errs := gubernator.NewClient("domain", peers)
 	require.Nil(t, errs)
 
 	tests := []struct {
@@ -115,22 +120,20 @@ func TestUnderLimitDuration(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		resp, err := client.RateLimit(context.Background(), "domain", &pb.Descriptor{
-			Values: map[string]string{
+		resp, err := client.GetRateLimit(context.Background(), &gubernator.Request{
+			Descriptors: map[string]string{
 				"account": "1234",
 			},
-			RateLimit: &pb.RateLimitDuration{
-				Requests: 2,
-				Duration: gubernator.Millisecond * 5,
-			},
-			Hits: 1,
+			Limit:    2,
+			Duration: time.Millisecond * 5,
+			Hits:     1,
 		})
 		require.Nil(t, err)
 
 		assert.Equal(t, test.Status, resp.Status)
 		assert.Equal(t, test.Remaining, resp.LimitRemaining)
 		assert.Equal(t, int64(2), resp.CurrentLimit)
-		assert.True(t, resp.ResetTime != 0)
+		assert.False(t, resp.ResetTime.IsZero())
 		time.Sleep(test.Sleep)
 	}
 }

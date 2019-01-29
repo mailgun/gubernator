@@ -9,13 +9,6 @@ import (
 	"github.com/mailgun/gubernator/pb"
 )
 
-const (
-	Millisecond = 1
-	Second      = 1000
-	Minute      = 60 * Second
-	Hour        = 60 * Minute
-)
-
 type Status int
 
 const (
@@ -28,7 +21,6 @@ const (
 // TODO: Will batch requests for performance, once peer.PeerClient supports it
 type Client struct {
 	client *PeerClient
-	peer   *PeerInfo
 	domain string
 }
 
@@ -45,7 +37,7 @@ func NewClient(domain string, peers []string) (*Client, error) {
 
 	return &Client{
 		domain: domain,
-		peer:   &PeerInfo{Host: peers[0]},
+		client: NewPeerClient(peers[0]),
 	}, nil
 }
 
@@ -61,16 +53,18 @@ type Request struct {
 }
 
 type Response struct {
+	// The current limit imposed on this rate limit
+	CurrentLimit int64
 	// The number of remaining hits in this rate limit (provided by GetRateLimit)
 	LimitRemaining int64
 	// The time when the rate limit duration resets (provided by GetRateLimit)
-	Reset time.Time
+	ResetTime time.Time
 	// Indicates if the requested hit is over the limit
 	Status Status
 }
 
 func (c *Client) GetRateLimit(ctx context.Context, req *Request) (*Response, error) {
-	status, err := c.client.GetRateLimit(ctx, c.peer, &pb.Descriptor{
+	status, err := c.client.GetRateLimit(ctx, &pb.Descriptor{
 		RateLimit: &pb.RateLimitDuration{
 			Requests: req.Limit,
 			Duration: int64(req.Duration / time.Millisecond),
@@ -83,7 +77,8 @@ func (c *Client) GetRateLimit(ctx context.Context, req *Request) (*Response, err
 	}
 	return &Response{
 		Status:         Status(status.Status),
-		Reset:          time.Unix(0, status.ResetTime*int64(time.Millisecond)),
+		ResetTime:      time.Unix(0, status.ResetTime*int64(time.Millisecond)),
 		LimitRemaining: status.LimitRemaining,
+		CurrentLimit:   status.CurrentLimit,
 	}, nil
 }

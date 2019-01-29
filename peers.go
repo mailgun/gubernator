@@ -6,36 +6,33 @@ import (
 	"github.com/mailgun/gubernator/pb"
 	"github.com/valyala/bytebufferpool"
 	"google.golang.org/grpc"
-	"sync"
 )
 
 type PeerPicker interface {
-	GetPeer(host string) *PeerInfo
-	Get([]byte, *PeerInfo) error
+	GetPeer(host string) *PeerClient
+	Get([]byte, *PeerClient) error
 	New() PeerPicker
-	Add(*PeerInfo)
+	Add(*PeerClient)
 	Size() int
-}
-
-type PeerInfo struct {
-	Client pb.RateLimitServiceClient
-	conn   *grpc.ClientConn
-	Host   string
 }
 
 // TODO: Eventually this client will take multiple requests made concurrently and batch them into a single request
 // TODO: This will reduce the propagation of thundering heard effect to peers in our cluster.
 type PeerClient struct {
-	mutex sync.Mutex
+	client pb.RateLimitServiceClient
+	conn   *grpc.ClientConn
+	Host   string
 }
 
-func NewPeerClient() *PeerClient {
-	return &PeerClient{}
+func NewPeerClient(host string) *PeerClient {
+	return &PeerClient{
+		Host: host,
+	}
 }
 
 // TODO: Given a single rate limit descriptor, batch similar requests into a single request and return the result to callers when complete
-func (c *PeerClient) GetRateLimit(ctx context.Context, peer *PeerInfo, d *pb.Descriptor) (*pb.DescriptorStatus, error) {
-	resp, err := peer.Client.GetRateLimit(ctx, &pb.RateLimitRequest{
+func (c *PeerClient) GetRateLimit(ctx context.Context, d *pb.Descriptor) (*pb.DescriptorStatus, error) {
+	resp, err := c.client.GetRateLimit(ctx, &pb.RateLimitRequest{
 		Descriptors: []*pb.Descriptor{d},
 	})
 	if err != nil {
@@ -50,7 +47,7 @@ func (c *PeerClient) GetRateLimit(ctx context.Context, peer *PeerInfo, d *pb.Des
 }
 
 // TODO: Given a single rate limit key request entry, batch similar requests into a single request and return the result to callers when complete
-func (c *PeerClient) GetRateLimitByKey(ctx context.Context, peer *PeerInfo, r *pb.RateLimitKeyRequest_Entry) (*pb.DescriptorStatus, error) {
+func (c *PeerClient) GetRateLimitByKey(ctx context.Context, r *pb.RateLimitKeyRequest_Entry) (*pb.DescriptorStatus, error) {
 	/*var key bytebufferpool.ByteBuffer
 
 	// TODO: Keep key buffers in a buffer pool to avoid un-necessary garbage collection
@@ -78,7 +75,7 @@ func (c *PeerClient) GetRateLimitByKey(ctx context.Context, peer *PeerInfo, r *p
 
 	// TODO: If PeerInfo is not connected, Then dial the server
 
-	resp, err := peer.Client.GetRateLimitByKey(ctx, &pb.RateLimitKeyRequest{
+	resp, err := c.client.GetRateLimitByKey(ctx, &pb.RateLimitKeyRequest{
 		Entries: []*pb.RateLimitKeyRequest_Entry{r},
 	})
 

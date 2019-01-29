@@ -27,14 +27,11 @@ func BenchmarkServer_GetRateLimitByKey(b *testing.B) {
 	// TODO: Get rid of the PeerInfo, This will allow us to remove a peer from the pool and
 	// TODO: PeerClient will be responsible for closing the connection after the last connection
 	// TODO: In flight is complete
-	client := gubernator.NewPeerClient()
-	peer := gubernator.PeerInfo{
-		Host: peers[0],
-	}
+	client := gubernator.NewPeerClient(peers[0])
 
 	b.Run("GetRateLimitByKey", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
-			_, err := client.GetRateLimitByKey(context.Background(), &peer, &pb.RateLimitKeyRequest_Entry{
+			_, err := client.GetRateLimitByKey(context.Background(), &pb.RateLimitKeyRequest_Entry{
 				Key: randomBytes(10),
 				RateLimit: &pb.RateLimitDuration{
 					Requests: 10,
@@ -55,7 +52,7 @@ func BenchmarkServer_GetRateLimit(b *testing.B) {
 
 	client, err := gubernator.NewClient("domain", peers)
 	if err != nil {
-		b.Errorf("NewClient err: %s - %s", err)
+		b.Errorf("NewClient err: %s", err)
 	}
 
 	b.Run("GetRateLimit", func(b *testing.B) {

@@ -20,7 +20,7 @@ type Server struct {
 	grpc     *grpc.Server
 	cache    *lru.Cache
 	mutex    sync.Mutex
-	client   *UserClient
+	client   *PeerClient
 	conf     ServerConfig
 }
 
@@ -35,7 +35,7 @@ func NewServer(conf ServerConfig) (*Server, error) {
 	s := Server{
 		// TODO: Set a limit on the size of the cache, so old entries expire
 		cache:    lru.NewLRUCache(0),
-		client:   NewClient(),
+		client:   NewPeerClient(),
 		listener: listener,
 		grpc:     server,
 		conf:     conf,
@@ -50,7 +50,7 @@ func NewServer(conf ServerConfig) (*Server, error) {
 }
 
 // Called by ClusterConfiger when the cluster config changes
-func (s *Server) updateConfig(conf *ClusterConfig) error {
+func (s *Server) updateConfig(conf *ClusterConfig) {
 	// Create a new instance of the picker
 	picker := s.conf.Picker.New()
 
@@ -68,7 +68,6 @@ func (s *Server) updateConfig(conf *ClusterConfig) error {
 	s.mutex.Lock()
 	s.conf.Picker = picker
 	s.mutex.Unlock()
-	return nil
 }
 
 // Runs the gRPC server; blocks until server stops
@@ -105,7 +104,7 @@ func (s *Server) Address() string {
 func (s *Server) GetRateLimit(ctx context.Context, req *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
 	// TODO: Implement for simple clients
 
-	// TODO: Optionally verify we are the owner of this key
+	// TODO: Verify we are the owner of this key
 	// TODO: Forward the request to the correct owner if needed
 	return nil, nil
 }

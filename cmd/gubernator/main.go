@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/mailgun/gubernator"
-	"github.com/mailgun/gubernator/pb"
 )
 
 // Given a comma separated string, return a slice of string items.
@@ -40,44 +39,26 @@ func main() {
 	case "server":
 		server(os.Args[2])
 	case "client":
-		client(StringToSlice(os.Args[2]))
+		clientCLI(StringToSlice(os.Args[2]))
 	}
 }
 
-func client(peers []string) {
-	fmt.Printf("NewClient\n")
-	// Create a new client
-	client, errs := gubernator.NewClient(peers)
-	if errs != nil {
-		for host, err := range errs {
-			fmt.Printf("peer error: %s - %s\n", host, err)
-		}
-	}
-
-	fmt.Printf("one\n")
-	// Ensure at least one peer is connected
-	if !client.IsConnected() {
-		fmt.Printf("Not connected to cluster")
+func clientCLI(peers []string) {
+	client, err := gubernator.NewClient("test", peers)
+	if err != nil {
+		fmt.Printf("error: %s\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("connected\n")
 
-	//var count uint32
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
-		_, err := client.RateLimit(ctx, "test", &pb.RateLimitDescriptor{
-			Entries: []*pb.RateLimitDescriptor_Entry{
-				{
-					//Key:   "account",
-					//Value: randomString(10, "ID-"),
-					Key: randomString(10, "ID-"),
-				},
+		_, err := client.GetRateLimit(ctx, &gubernator.Request{
+			Descriptors: map[string]string{
+				"account": randomString(10, "ID-"),
 			},
-			Hits: 1,
-			RateLimit: &pb.RateLimit{
-				RequestsPerSpan: 10,
-				SpanInSeconds:   5,
-			},
+			Limit:    10,
+			Duration: time.Second * 5,
+			Hits:     1,
 		})
 
 		if err != nil {

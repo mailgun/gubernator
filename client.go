@@ -2,150 +2,88 @@ package gubernator
 
 import (
 	"context"
+	"errors"
+	"math/rand"
+	"time"
+
 	"github.com/mailgun/gubernator/pb"
-	"github.com/pkg/errors"
-	"github.com/valyala/bytebufferpool"
-	"google.golang.org/grpc"
-	"sync"
 )
 
-type UserClient struct {
-	cluster ClusterConfiger
-	picker  PeerPicker
-	mutex   sync.Mutex
+const (
+	Millisecond = 1
+	Second      = 1000
+	Minute      = 60 * Second
+	Hour        = 60 * Minute
+)
+
+type Status int
+
+const (
+	Unknown   Status = 0
+	OK        Status = 1
+	OverLimit Status = 2
+)
+
+// A thin client over the GetRateLimit() GRPC call.
+// TODO: Will batch requests for performance, once peer.PeerClient supports it
+type Client struct {
+	client *PeerClient
+	peer   *PeerInfo
+	domain string
 }
 
-func NewClient() *UserClient {
-	c := UserClient{}
-
-	return &c
-	/*errs := ClientError{}
-
-	// Connect to all the peers we know about
-	var peerInfo []*PeerInfo
-	for _, peer := range peers {
-		info, err := newPeerConnection(peer)
-		if err != nil {
-			errs.Add(err)
-			continue
-		}
-		peerInfo = append(peerInfo, info)
+// Creates a new simple client with a domain
+func NewClient(domain string, peers []string) (*Client, error) {
+	if len(peers) == 0 {
+		return nil, errors.New("peer list is empty; must provide atleast one peer")
 	}
 
-	if errs.Size() == len(peers) {
-		return nil, errs.Err(errors.New("unable to connect to any peers"))
-	}*/
-}
-
-// Return the size of the cluster as reported by the cluster config
-func (c *UserClient) ClusterSize() int {
-	return c.picker.Size()
-}
-
-func (c *UserClient) ForwardRequest(ctx context.Context, peer *PeerInfo, r *pb.RateLimitKeyRequest_Entry) (*pb.DescriptorStatus, error) {
-	/*var key bytebufferpool.ByteBuffer
-
-	// TODO: Keep key buffers in a buffer pool to avoid un-necessary garbage collection
-	// Or Keep pb.KeyRequests in a pool
-
-	// Generate key from the request
-	if err := c.generateKey(&key, domain, descriptor); err != nil {
-		return nil, err
-	}
-
-	keyReq := pb.RateLimitKeyRequest_Entry{
-		Key:       key.Bytes(),
-		Hits:      descriptor.Hits,
-		RateLimit: descriptor.RateLimit,
-	}*/
-
-	// TODO: combine requests if called multiple times within a few milliseconds.
-
-	/*// TODO: Lock before accessing the picker
-	var peer PeerInfo
-	if err := c.picker.Get(r.Key, &peer); err != nil {
-		return nil, err
-	}
-	//fmt.Printf("Key: '%s' Pick: %s\n", key.Bytes(), peer.Host)*/
-
-	// TODO: If PeerInfo is not connected, Then dial the server
-
-	resp, err := peer.rsClient.GetRateLimitByKey(ctx, &pb.RateLimitKeyRequest{
-		Entries: []*pb.RateLimitKeyRequest_Entry{r},
+	// Randomize the order of the peers
+	rand.Shuffle(len(peers), func(i, j int) {
+		peers[i], peers[j] = peers[j], peers[i]
 	})
 
+	return &Client{
+		domain: domain,
+		peer:   &PeerInfo{Host: peers[0]},
+	}, nil
+}
+
+type Request struct {
+	// Descriptors that identify this rate limit
+	Descriptors map[string]string
+	// Number of requests allowed for this rate limit request
+	Limit int64
+	// The length of the duration
+	Duration time.Duration
+	// How many hits to send to the rate limit server
+	Hits int64
+}
+
+type Response struct {
+	// The number of remaining hits in this rate limit (provided by GetRateLimit)
+	LimitRemaining int64
+	// The time when the rate limit duration resets (provided by GetRateLimit)
+	Reset time.Time
+	// Indicates if the requested hit is over the limit
+	Status Status
+}
+
+func (c *Client) GetRateLimit(ctx context.Context, req *Request) (*Response, error) {
+	status, err := c.client.GetRateLimit(ctx, c.peer, &pb.Descriptor{
+		RateLimit: &pb.RateLimitDuration{
+			Requests: req.Limit,
+			Duration: int64(req.Duration / time.Millisecond),
+		},
+		Values: req.Descriptors,
+		Hits:   req.Hits,
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	if len(resp.Statuses) == 0 {
-		return nil, errors.New("server responded with empty descriptor status")
-	}
-
-	return resp.Statuses[0], nil
-}
-
-func (c *UserClient) generateKey(b *bytebufferpool.ByteBuffer, domain string, descriptor *pb.Descriptor) error {
-
-	// TODO: Check provided Domain
-	// TODO: Check provided at least one entry
-
-	b.Reset()
-	b.WriteString(domain)
-	b.WriteByte('_')
-
-	for key, value := range descriptor.Values {
-		b.WriteString(key)
-		b.WriteByte('_')
-		b.WriteString(value)
-		b.WriteByte('_')
-	}
-	return nil
-}
-
-// Updates the list of peers in the cluster with the following semantics
-//  * Any peer that is not in the list provided will be disconnected and removed from the list of peers.
-//  * Any peer that fails to connect it will not be added to the list of peers.
-//  * If return map is not nil, the map contains the error for each peer that failed to connect.
-func (c *UserClient) Update(hosts []string) map[string]error {
-	errs := make(map[string]error)
-	var peers []*PeerInfo
-	for _, host := range hosts {
-		peer := c.picker.GetPeer(host)
-		var err error
-
-		if peer == nil {
-			peer, err = newPeerConnection(host)
-			if err != nil {
-				errs[host] = err
-				continue
-			}
-		}
-		peers = append(peers, peer)
-	}
-
-	c.mutex.Lock()
-	// Create a new picker based on consistent hash algorithm
-	c.picker = newConsitantHashPicker(peers, nil)
-	c.mutex.Unlock()
-
-	if len(errs) != 0 {
-		return errs
-	}
-	return nil
-}
-
-// Given a host, return a PeerInfo with an initialized GRPC client
-func newPeerConnection(hostName string) (*PeerInfo, error) {
-	// TODO: Allow TLS connections
-	conn, err := grpc.Dial(hostName, grpc.WithInsecure())
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to dial peer %s", hostName)
-	}
-
-	return &PeerInfo{
-		Host:     hostName,
-		conn:     conn,
-		rsClient: pb.NewRateLimitServiceClient(conn),
+	return &Response{
+		Status:         Status(status.Status),
+		Reset:          time.Unix(0, status.ResetTime*int64(time.Millisecond)),
+		LimitRemaining: status.LimitRemaining,
 	}, nil
 }

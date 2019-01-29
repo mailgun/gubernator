@@ -16,28 +16,59 @@ const (
 )
 
 type Server struct {
-	listener   net.Listener
-	grpcServer *grpc.Server
-	cache      *lru.Cache
-	mutex      sync.Mutex
+	listener net.Listener
+	grpc     *grpc.Server
+	cache    *lru.Cache
+	mutex    sync.Mutex
+	client   *UserClient
+	conf     ServerConfig
 }
 
 // New creates a gRPC server instance.
-func NewServer(address string) (*Server, error) {
-	listener, err := net.Listen("tcp", address)
+func NewServer(conf ServerConfig) (*Server, error) {
+	listener, err := net.Listen("tcp", conf.ListenAddress)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to listen")
+		return nil, errors.Wrapf(err, "failed to listen on %s", conf.ListenAddress)
 	}
 
 	server := grpc.NewServer(grpc.MaxRecvMsgSize(maxRequestSize))
 	s := Server{
-		listener:   listener,
-		grpcServer: server,
 		// TODO: Set a limit on the size of the cache, so old entries expire
-		cache: lru.NewLRUCache(0),
+		cache:    lru.NewLRUCache(0),
+		client:   NewClient(),
+		listener: listener,
+		grpc:     server,
+		conf:     conf,
 	}
+	// Register our server with grpc
 	pb.RegisterRateLimitServiceServer(server, &s)
+
+	// Register our config update callback
+	conf.ClusterConfig.OnUpdate(s.updateConfig)
+
 	return &s, nil
+}
+
+// Called by ClusterConfiger when the cluster config changes
+func (s *Server) updateConfig(conf *ClusterConfig) error {
+	// Create a new instance of the picker
+	picker := s.conf.Picker.New()
+
+	for _, peer := range conf.Peers {
+		if info := s.conf.Picker.GetPeer(peer); info != nil {
+			picker.Add(info)
+			continue
+		}
+		picker.Add(&PeerInfo{Host: peer})
+	}
+
+	// TODO: schedule a disconnect for old peers once they are no longer in flight
+
+	// Replace our current picker
+	s.mutex.Lock()
+	s.conf.Picker = picker
+	s.mutex.Unlock()
+	return nil
 }
 
 // Runs the gRPC server; blocks until server stops
@@ -45,14 +76,7 @@ func (s *Server) Run() error {
 	// TODO: Perhaps allow resizing the cache on the fly depending on the number of cache hits
 	// TODO: Emit metrics
 
-	// TODO: Create PeerSync service that uses leader election in ETCD and can sync the list of peers
 	// TODO: Implement a GRPC interface to retrieve the peer listing from the CH for rate limit clients
-
-	// TODO: PeerSync (Custom RAFT Implementation)
-	// TODO: Registering - server just came up and is attempting to find the leader to get the peer list
-	// TODO: Follower - server has the peer list, but is not the leader, waits for peer list updates from the leader
-	// TODO: Leader - server has the peer list and is authoritative, sends peer list to all followers
-	// TODO: Implement a GRPC interface to Register and Send a Peer list from the leader to the followers
 
 	/*go func() {
 		for {
@@ -61,12 +85,16 @@ func (s *Server) Run() error {
 		}
 	}()*/
 
-	return s.grpcServer.Serve(s.listener)
+	if err := s.conf.ClusterConfig.Start(); err != nil {
+		return errors.Wrap(err, "failed to fetch cluster config")
+	}
+
+	return s.grpc.Serve(s.listener)
 }
 
-// Stops gRPC server
 func (s *Server) Stop() {
-	s.grpcServer.Stop()
+	s.grpc.Stop()
+	s.conf.ClusterConfig.Stop()
 }
 
 // Return the address the server is listening too
@@ -75,7 +103,7 @@ func (s *Server) Address() string {
 }
 
 func (s *Server) GetRateLimit(ctx context.Context, req *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
-	// TODO: Implement for generic clients
+	// TODO: Implement for simple clients
 
 	// TODO: Optionally verify we are the owner of this key
 	// TODO: Forward the request to the correct owner if needed

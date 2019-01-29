@@ -9,88 +9,41 @@ import (
 	"sync"
 )
 
-const (
-	Millisecond = 1
-	Second      = 1000
-	Minute      = 60 * Second
-	Hour        = 60 * Minute
-)
-
 type UserClient struct {
-	picker         PeerPicker
-	mutex          sync.Mutex
-	skipFetchPeers bool
+	cluster ClusterConfiger
+	picker  PeerPicker
+	mutex   sync.Mutex
 }
 
-/*type ClientOpt func(*Client)
+func NewClient() *UserClient {
+	c := UserClient{}
 
-// Tell the client to skip fetching a list of peers from nodes in the cluster.
-// Use this if you are manually managing the peer listing via NewClient() and UpdatePeers().
-func SkipFetchPeers(c *Client) {
-	c.skipFetchPeers = true
-}*/
-
-func NewClient(hosts []string) (*UserClient, map[string]error) {
-	errs := make(map[string]error)
-	var err error
-
-	cl := UserClient{}
-
-	// If requested, attempt to fetch a list of peers from node in the cluster
-	var firstPeer *PeerInfo
-	for _, host := range hosts {
-		firstPeer, err = newPeerConnection(host)
-		if err != nil {
-			errs[host] = err
-			continue
-		}
-		// TODO: Ask a peer to provide a complete peer listing
-		//hosts = firstPeer.confClient.GetPeers()
-		break
-	}
-
-	// If unable to connect to any of the peers provided
-	if len(errs) >= len(hosts) {
-		return nil, errs
-	}
+	return &c
+	/*errs := ClientError{}
 
 	// Connect to all the peers we know about
-	var peers []*PeerInfo
-	for _, host := range hosts {
-
-		// Avoid reconnecting to the first peer
-		if firstPeer != nil && firstPeer.HostName == host {
-			peers = append(peers, firstPeer)
-			continue
-		}
-
-		peer, err := newPeerConnection(host)
+	var peerInfo []*PeerInfo
+	for _, peer := range peers {
+		info, err := newPeerConnection(peer)
 		if err != nil {
-			errs[host] = err
+			errs.Add(err)
 			continue
 		}
-		peers = append(peers, peer)
+		peerInfo = append(peerInfo, info)
 	}
 
-	if len(errs) == 0 {
-		errs = nil
-	}
-
-	cl.picker = newConsitantHashPicker(peers, nil)
-
+	if errs.Size() == len(peers) {
+		return nil, errs.Err(errors.New("unable to connect to any peers"))
+	}*/
 }
 
-func NewServerClient(hosts []string) (*UserClient, map[string]error) {
-
+// Return the size of the cluster as reported by the cluster config
+func (c *UserClient) ClusterSize() int {
+	return c.picker.Size()
 }
 
-// Return the size of the cluster
-func (c *UserClient) IsConnected() bool {
-	return c.picker.Size() != 0
-}
-
-func (c *UserClient) RateLimit(ctx context.Context, domain string, descriptor *pb.Descriptor) (*pb.DescriptorStatus, error) {
-	var key bytebufferpool.ByteBuffer
+func (c *UserClient) ForwardRequest(ctx context.Context, peer *PeerInfo, r *pb.RateLimitKeyRequest_Entry) (*pb.DescriptorStatus, error) {
+	/*var key bytebufferpool.ByteBuffer
 
 	// TODO: Keep key buffers in a buffer pool to avoid un-necessary garbage collection
 	// Or Keep pb.KeyRequests in a pool
@@ -104,21 +57,22 @@ func (c *UserClient) RateLimit(ctx context.Context, domain string, descriptor *p
 		Key:       key.Bytes(),
 		Hits:      descriptor.Hits,
 		RateLimit: descriptor.RateLimit,
-	}
+	}*/
 
 	// TODO: combine requests if called multiple times within a few milliseconds.
 
+	/*// TODO: Lock before accessing the picker
 	var peer PeerInfo
-	if err := c.picker.Get(keyReq.Key, &peer); err != nil {
+	if err := c.picker.Get(r.Key, &peer); err != nil {
 		return nil, err
 	}
-	//fmt.Printf("Key: '%s' Pick: %s\n", key.Bytes(), peer.HostName)
+	//fmt.Printf("Key: '%s' Pick: %s\n", key.Bytes(), peer.Host)*/
+
+	// TODO: If PeerInfo is not connected, Then dial the server
 
 	resp, err := peer.rsClient.GetRateLimitByKey(ctx, &pb.RateLimitKeyRequest{
-		Entries: []*pb.RateLimitKeyRequest_Entry{&keyReq},
+		Entries: []*pb.RateLimitKeyRequest_Entry{r},
 	})
-
-	// TODO: put buffer back into pool
 
 	if err != nil {
 		return nil, err
@@ -140,10 +94,10 @@ func (c *UserClient) generateKey(b *bytebufferpool.ByteBuffer, domain string, de
 	b.WriteString(domain)
 	b.WriteByte('_')
 
-	for _, entry := range descriptor.Entries {
-		b.WriteString(entry.Key)
+	for key, value := range descriptor.Values {
+		b.WriteString(key)
 		b.WriteByte('_')
-		b.WriteString(entry.Value)
+		b.WriteString(value)
 		b.WriteByte('_')
 	}
 	return nil
@@ -170,8 +124,6 @@ func (c *UserClient) Update(hosts []string) map[string]error {
 		peers = append(peers, peer)
 	}
 
-	// TODO: schedule a disconnect for old peers once they are no longer in flight
-
 	c.mutex.Lock()
 	// Create a new picker based on consistent hash algorithm
 	c.picker = newConsitantHashPicker(peers, nil)
@@ -192,7 +144,7 @@ func newPeerConnection(hostName string) (*PeerInfo, error) {
 	}
 
 	return &PeerInfo{
-		HostName: hostName,
+		Host:     hostName,
 		conn:     conn,
 		rsClient: pb.NewRateLimitServiceClient(conn),
 	}, nil

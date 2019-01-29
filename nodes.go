@@ -6,13 +6,15 @@ import (
 )
 
 type PeerPicker interface {
-	Get([]byte, *PeerInfo) error
 	GetPeer(host string) *PeerInfo
+	Get([]byte, *PeerInfo) error
+	New() PeerPicker
+	Add(*PeerInfo)
 	Size() int
 }
 
 type PeerInfo struct {
 	rsClient pb.RateLimitServiceClient
 	conn     *grpc.ClientConn
-	HostName string
+	Host     string
 }

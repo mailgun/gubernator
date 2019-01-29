@@ -9,27 +9,12 @@ import (
 	"github.com/mailgun/gubernator/pb"
 )
 
-// A simple client that picks a random node in the cluster and makes all
-// requests through that node. This client preforms no key optimization and
-// does not participate in node list syncing but is the simplest client to use.
-type SimpleClient struct {
-	connectedNode *PeerInfo
-	nodes         []string
-	domain        string
-}
-
-// Creates a new simple client with a domain
-func NewSimpleClient(domain string, nodes []string) *SimpleClient {
-	// Randomize the order of the nodes
-	rand.Shuffle(len(nodes), func(i, j int) {
-		nodes[i], nodes[j] = nodes[j], nodes[i]
-	})
-
-	return &SimpleClient{
-		domain: domain,
-		nodes:  nodes,
-	}
-}
+const (
+	Millisecond = 1
+	Second      = 1000
+	Minute      = 60 * Second
+	Hour        = 60 * Minute
+)
 
 type Status int
 
@@ -38,6 +23,28 @@ const (
 	OK        Status = 1
 	OverLimit Status = 2
 )
+
+// A simple client that picks a random peer in the cluster and makes all
+// requests through that peer. This client preforms no key optimization and
+// does not participate in peer list syncing but is the simplest client to use.
+type SimpleClient struct {
+	connectedNode *PeerInfo
+	peers         []string
+	domain        string
+}
+
+// Creates a new simple client with a domain
+func NewSimpleClient(domain string, peers []string) *SimpleClient {
+	// Randomize the order of the peers
+	rand.Shuffle(len(peers), func(i, j int) {
+		peers[i], peers[j] = peers[j], peers[i]
+	})
+
+	return &SimpleClient{
+		domain: domain,
+		peers:  peers,
+	}
+}
 
 type Request struct {
 	// Descriptors that identify this rate limit
@@ -94,17 +101,21 @@ func (sc *SimpleClient) GetRateLimit(ctx context.Context, req *Request) (*Respon
 	}, nil
 }
 
-// Attempt to connect to any node in our node list
+// Attempt to connect to any peer
 func (sc *SimpleClient) connect() error {
 	var err error
 
 	errs := ClientError{}
-	for _, node := range sc.nodes {
-		sc.connectedNode, err = newPeerConnection(node)
+	for _, peer := range sc.peers {
+		sc.connectedNode, err = newPeerConnection(peer)
 		if err != nil {
 			errs.Add(err)
 		}
 		break
+	}
+
+	if errs.Size() == len(sc.peers) {
+		return errs.Err(errors.New("unable to connect to any peers"))
 	}
 	return nil
 }

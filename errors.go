@@ -1,21 +1,23 @@
 package gubernator
 
 type ClientError struct {
-	Errs []error
-	Err  error
+	errs []error
+	err  error
 }
 
 func (ce *ClientError) Error() string {
-	return ce.Err.Error()
+	return ce.err.Error()
+}
+
+func (ce *ClientError) Err(err error) *ClientError {
+	ce.err = err
+	return ce
 }
 
 func (ce *ClientError) Add(err error) {
-	ce.Errs = append(ce.Errs, err)
+	ce.errs = append(ce.errs, err)
 }
 
-func (ce *ClientError) IfErr(err error) error {
-	if len(ce.Errs) == 0 {
-		return nil
-	}
-	return err
+func (ce *ClientError) Size() int {
+	return len(ce.errs)
 }

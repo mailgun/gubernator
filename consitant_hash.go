@@ -26,8 +26,7 @@ func newConsitantHashPicker(peers []*PeerInfo, fn HashFunc) *consistantHash {
 	}
 
 	for _, peer := range peers {
-		hash := int(ch.hashFunc([]byte(peer.HostName)))
-		//fmt.Printf("Hash: %d\n", hash)
+		hash := int(ch.hashFunc([]byte(peer.Host)))
 		ch.peerKeys = append(ch.peerKeys, hash)
 		ch.peerMap[hash] = peer
 	}
@@ -46,9 +45,9 @@ func (ch *consistantHash) GetPeer(host string) *PeerInfo {
 }
 
 // Given a key, return the peer that key is assigned too
-func (ch *consistantHash) Get(key []byte, peer *PeerInfo) error {
+func (ch *consistantHash) Get(key []byte, peerInfo *PeerInfo) error {
 	if ch.Size() == 0 {
-		return errors.New("unable to pick a peer; peer pool is empty")
+		return errors.New("unable to pick a peer; pool is empty")
 	}
 
 	hash := int(ch.hashFunc(key))
@@ -62,6 +61,6 @@ func (ch *consistantHash) Get(key []byte, peer *PeerInfo) error {
 	}
 
 	item := ch.peerMap[ch.peerKeys[idx]]
-	*peer = *item
+	*peerInfo = *item
 	return nil
 }

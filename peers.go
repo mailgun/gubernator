@@ -2,13 +2,14 @@ package gubernator
 
 import (
 	"context"
-	"errors"
 	"github.com/mailgun/gubernator/pb"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
 
 type PeerPicker interface {
 	GetPeer(host string) *PeerClient
+	Peers() []*PeerClient
 	Get([]byte, *PeerClient) error
 	New() PeerPicker
 	Add(*PeerClient)
@@ -17,24 +18,30 @@ type PeerPicker interface {
 
 // TODO: Eventually this client will take multiple requests made concurrently and batch them into a single request
 // TODO: This will reduce the propagation of thundering heard effect to peers in our cluster.
+// TODO: When implementing batching, allow upstream context cancels to abort processing for an request,  not the entire
+// TODO: batch request
 type PeerClient struct {
-	client pb.RateLimitServiceClient
-	conn   *grpc.ClientConn
-	Host   string
+	client  pb.RateLimitServiceClient
+	conn    *grpc.ClientConn
+	host    string
+	isOwner bool // true if this peer refers to this server instance
 }
 
 func NewPeerClient(host string) *PeerClient {
 	return &PeerClient{
-		Host: host,
+		host: host,
 	}
 }
 
-// TODO: Given a single rate limit descriptor, batch similar requests into a single request and return the result to callers when complete
-func (c *PeerClient) GetRateLimit(ctx context.Context, d *pb.Descriptor) (*pb.DescriptorStatus, error) {
-
-	// TODO: If PeerInfo is not connected, Then dial the server   <------ DO THIS NEXT
+func (c *PeerClient) GetRateLimit(ctx context.Context, domain string, d *pb.Descriptor) (*pb.DescriptorStatus, error) {
+	if c.conn == nil {
+		if err := c.dialPeer(); err != nil {
+			return nil, err
+		}
+	}
 
 	resp, err := c.client.GetRateLimit(ctx, &pb.RateLimitRequest{
+		Domain:      domain,
 		Descriptors: []*pb.Descriptor{d},
 	})
 	if err != nil {
@@ -48,9 +55,12 @@ func (c *PeerClient) GetRateLimit(ctx context.Context, d *pb.Descriptor) (*pb.De
 	return resp.Statuses[0], nil
 }
 
-// TODO: Given a single rate limit key request entry, batch similar requests into a single request and return the result to callers when complete
 func (c *PeerClient) GetRateLimitByKey(ctx context.Context, r *pb.RateLimitKeyRequest_Entry) (*pb.DescriptorStatus, error) {
-	// TODO: If PeerInfo is not connected, Then dial the server
+	if c.conn == nil {
+		if err := c.dialPeer(); err != nil {
+			return nil, err
+		}
+	}
 
 	resp, err := c.client.GetRateLimitByKey(ctx, &pb.RateLimitKeyRequest{
 		Entries: []*pb.RateLimitKeyRequest_Entry{r},
@@ -67,17 +77,16 @@ func (c *PeerClient) GetRateLimitByKey(ctx context.Context, r *pb.RateLimitKeyRe
 	return resp.Statuses[0], nil
 }
 
-// Given a host, return a PeerInfo with an initialized GRPC client
-/*func newPeerConnection(hostName string) (*gubernator.PeerInfo, error) {
+// Dial to a peer and initialize the GRPC client
+func (c *PeerClient) dialPeer() error {
 	// TODO: Allow TLS connections
-	conn, err := grpc.Dial(hostName, grpc.WithInsecure())
+
+	var err error
+	c.conn, err = grpc.Dial(c.host, grpc.WithInsecure())
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to dial peer %s", hostName)
+		return errors.Wrapf(err, "failed to dial peer %s", c.host)
 	}
 
-	return &gubernator.PeerInfo{
-		Host:   hostName,
-		conn:   conn,
-		PeerClient: pb.NewRateLimitServiceClient(conn),
-	}, nil
-}*/
+	c.client = pb.NewRateLimitServiceClient(c.conn)
+	return nil
+}

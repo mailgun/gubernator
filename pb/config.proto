@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+option go_package = "pb";
+
+option cc_generic_services = true;
+
+package pb.gubernator;
+
+service ConfigServer {
+    // Given a rate limit descriptor return a descriptor status
+    rpc GetPeers (GetPeersRequest) returns (GetPeersResponse) {}
+
+    // Maybe add methods to get and set rate limits configs
+    // This would be useful for clients that do control the the rate
+    // limit and can't define it in the request
+}
+
+message GetPeersRequest { }
+
+message GetPeersResponse {
+    repeated string peers = 1;
+}

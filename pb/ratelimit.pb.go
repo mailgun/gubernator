@@ -39,7 +39,7 @@ var DescriptorStatus_Status_value = map[string]int32{
 func (x DescriptorStatus_Status) String() string {
 	return proto.EnumName(DescriptorStatus_Status_name, int32(x))
 }
-func (DescriptorStatus_Status) EnumDescriptor() ([]byte, []int) { return fileDescriptor1, []int{4, 0} }
+func (DescriptorStatus_Status) EnumDescriptor() ([]byte, []int) { return fileDescriptor2, []int{4, 0} }
 
 type RateLimitRequest struct {
 	// The domain scopes the request to avoid collisions with other services or applications.
@@ -51,7 +51,7 @@ type RateLimitRequest struct {
 func (m *RateLimitRequest) Reset()                    { *m = RateLimitRequest{} }
 func (m *RateLimitRequest) String() string            { return proto.CompactTextString(m) }
 func (*RateLimitRequest) ProtoMessage()               {}
-func (*RateLimitRequest) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{0} }
+func (*RateLimitRequest) Descriptor() ([]byte, []int) { return fileDescriptor2, []int{0} }
 
 func (m *RateLimitRequest) GetDomain() string {
 	if m != nil {
@@ -77,7 +77,7 @@ type RateLimitResponse struct {
 func (m *RateLimitResponse) Reset()                    { *m = RateLimitResponse{} }
 func (m *RateLimitResponse) String() string            { return proto.CompactTextString(m) }
 func (*RateLimitResponse) ProtoMessage()               {}
-func (*RateLimitResponse) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{1} }
+func (*RateLimitResponse) Descriptor() ([]byte, []int) { return fileDescriptor2, []int{1} }
 
 func (m *RateLimitResponse) GetStatuses() []*DescriptorStatus {
 	if m != nil {
@@ -96,7 +96,7 @@ type RateLimitKeyRequest struct {
 func (m *RateLimitKeyRequest) Reset()                    { *m = RateLimitKeyRequest{} }
 func (m *RateLimitKeyRequest) String() string            { return proto.CompactTextString(m) }
 func (*RateLimitKeyRequest) ProtoMessage()               {}
-func (*RateLimitKeyRequest) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{2} }
+func (*RateLimitKeyRequest) Descriptor() ([]byte, []int) { return fileDescriptor2, []int{2} }
 
 func (m *RateLimitKeyRequest) GetEntries() []*RateLimitKeyRequest_Entry {
 	if m != nil {
@@ -119,7 +119,7 @@ type RateLimitKeyRequest_Entry struct {
 func (m *RateLimitKeyRequest_Entry) Reset()                    { *m = RateLimitKeyRequest_Entry{} }
 func (m *RateLimitKeyRequest_Entry) String() string            { return proto.CompactTextString(m) }
 func (*RateLimitKeyRequest_Entry) ProtoMessage()               {}
-func (*RateLimitKeyRequest_Entry) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{2, 0} }
+func (*RateLimitKeyRequest_Entry) Descriptor() ([]byte, []int) { return fileDescriptor2, []int{2, 0} }
 
 func (m *RateLimitKeyRequest_Entry) GetKey() []byte {
 	if m != nil {
@@ -157,7 +157,7 @@ type Descriptor struct {
 func (m *Descriptor) Reset()                    { *m = Descriptor{} }
 func (m *Descriptor) String() string            { return proto.CompactTextString(m) }
 func (*Descriptor) ProtoMessage()               {}
-func (*Descriptor) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{3} }
+func (*Descriptor) Descriptor() ([]byte, []int) { return fileDescriptor2, []int{3} }
 
 func (m *Descriptor) GetValues() map[string]string {
 	if m != nil {
@@ -197,7 +197,7 @@ type DescriptorStatus struct {
 func (m *DescriptorStatus) Reset()                    { *m = DescriptorStatus{} }
 func (m *DescriptorStatus) String() string            { return proto.CompactTextString(m) }
 func (*DescriptorStatus) ProtoMessage()               {}
-func (*DescriptorStatus) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{4} }
+func (*DescriptorStatus) Descriptor() ([]byte, []int) { return fileDescriptor2, []int{4} }
 
 func (m *DescriptorStatus) GetStatus() DescriptorStatus_Status {
 	if m != nil {
@@ -353,9 +353,9 @@ var _RateLimitService_serviceDesc = grpc.ServiceDesc{
 	Metadata: "ratelimit.proto",
 }
 
-func init() { proto.RegisterFile("ratelimit.proto", fileDescriptor1) }
+func init() { proto.RegisterFile("ratelimit.proto", fileDescriptor2) }
 
-var fileDescriptor1 = []byte{
+var fileDescriptor2 = []byte{
 	// 545 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x54, 0xcd, 0x6e, 0xd3, 0x40,
 	0x10, 0xee, 0x3a, 0x8d, 0xd3, 0x4c, 0x7e, 0xea, 0x0e, 0x08, 0x99, 0x48, 0xa8, 0x91, 0x11, 0x90,

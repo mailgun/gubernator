@@ -2,14 +2,15 @@ package gubernator
 
 import (
 	"context"
+	"net"
+	"sync"
+	"time"
+
 	"github.com/mailgun/gubernator/lru"
 	"github.com/mailgun/gubernator/pb"
 	"github.com/pkg/errors"
 	"github.com/valyala/bytebufferpool"
 	"google.golang.org/grpc"
-	"net"
-	"sync"
-	"time"
 )
 
 const (
@@ -17,23 +18,17 @@ const (
 	second         = 1000
 )
 
-/*const (
-	Millisecond = 1
-	Second      = 1000
-	Minute      = 60 * Second
-	Hour        = 60 * Minute
-)*/
-
 type Server struct {
-	listener net.Listener
-	grpc     *grpc.Server
-	cache    *lru.Cache
-	mutex    sync.Mutex
-	client   *PeerClient
-	conf     ServerConfig
+	listener   net.Listener
+	grpc       *grpc.Server
+	cache      *lru.Cache
+	cacheMutex sync.Mutex
+	peerMutex  sync.RWMutex
+	client     *PeerClient
+	conf       ServerConfig
 }
 
-// New creates a gRPC server instance.
+// New creates a server instance.
 func NewServer(conf ServerConfig) (*Server, error) {
 	listener, err := net.Listen("tcp", conf.ListenAddress)
 	if err != nil {
@@ -42,48 +37,32 @@ func NewServer(conf ServerConfig) (*Server, error) {
 
 	server := grpc.NewServer(grpc.MaxRecvMsgSize(maxRequestSize))
 	s := Server{
-		// TODO: Set a limit on the size of the cache, so old entries expire
-		cache:    lru.NewLRUCache(0),
+		cache:    lru.NewLRUCache(conf.MaxCacheSize),
 		listener: listener,
 		grpc:     server,
 		conf:     conf,
 	}
 	// Register our server with grpc
 	pb.RegisterRateLimitServiceServer(server, &s)
+	pb.RegisterConfigServerServer(server, &s)
 
 	// Register our config update callback
-	conf.ClusterConfig.OnUpdate(s.updateConfig)
+	conf.PeerSyncer.OnUpdate(s.updateConfig)
+
+	if conf.AdvertiseAddress == "" {
+		conf.AdvertiseAddress = s.Address()
+	}
 
 	return &s, nil
 }
 
-// Called by ClusterConfiger when the cluster config changes
-func (s *Server) updateConfig(conf *ClusterConfig) {
-	// Create a new instance of the picker
-	picker := s.conf.Picker.New()
-
-	for _, peer := range conf.Peers {
-		if info := s.conf.Picker.GetPeer(peer); info != nil {
-			picker.Add(info)
-			continue
-		}
-		picker.Add(NewPeerClient(peer))
-	}
-
-	// TODO: schedule a disconnect for old peers once they are no longer in flight
-
-	// Replace our current picker
-	s.mutex.Lock()
-	s.conf.Picker = picker
-	s.mutex.Unlock()
-}
-
 // Runs the gRPC server; blocks until server stops
 func (s *Server) Run() error {
-	// TODO: Perhaps allow resizing the cache on the fly depending on the number of cache hits
-	// TODO: Emit metrics
+	// TODO: Allow resizing the cache on the fly depending on the number of cache
+	// TODO: hits, so we don't use the MAX cache all the time
 
-	// TODO: Implement a GRPC interface to retrieve the peer listing from the CH for rate limit clients
+	// TODO: Emit metrics <-- (THRAWN) Do this next
+	// Create a Metrics client which can be configured via `ServerConfig`
 
 	/*go func() {
 		for {
@@ -92,8 +71,8 @@ func (s *Server) Run() error {
 		}
 	}()*/
 
-	if err := s.conf.ClusterConfig.Start(); err != nil {
-		return errors.Wrap(err, "failed to fetch cluster config")
+	if err := s.conf.PeerSyncer.Start(s.conf.AdvertiseAddress); err != nil {
+		return errors.Wrap(err, "failed to sync configs with other peers")
 	}
 
 	return s.grpc.Serve(s.listener)
@@ -101,7 +80,7 @@ func (s *Server) Run() error {
 
 func (s *Server) Stop() {
 	s.grpc.Stop()
-	s.conf.ClusterConfig.Stop()
+	s.conf.PeerSyncer.Stop()
 }
 
 // Return the address the server is listening too
@@ -109,6 +88,7 @@ func (s *Server) Address() string {
 	return s.listener.Addr().String()
 }
 
+// TODO: Determine what the server Quality of Service is and set context timeouts for each relayed request?
 func (s *Server) GetRateLimit(ctx context.Context, req *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
 	var results []*pb.DescriptorStatus
 
@@ -121,51 +101,52 @@ func (s *Server) GetRateLimit(ctx context.Context, req *pb.RateLimitRequest) (*p
 			return nil, err
 		}
 
-		// TODO: Verify we are the owner of this key
-		// TODO: If we are owner, then fulfill the request without making a remote call
-
 		if desc.RateLimit == nil {
 			return nil, errors.New("required field 'RateLimit' missing from 'Descriptor'")
 		}
 
+		s.peerMutex.RLock()
 		var peer PeerClient
 		if err := s.conf.Picker.Get(key.B, &peer); err != nil {
+			s.peerMutex.RUnlock()
 			return nil, errors.Wrapf(err, "while finding peer that owns key '%s'", string(key.B))
 		}
+		s.peerMutex.RUnlock()
 
-		resp, err := peer.GetRateLimitByKey(ctx, &pb.RateLimitKeyRequest_Entry{
-			Key:       key.B,
-			Hits:      desc.Hits,
-			RateLimit: desc.RateLimit,
-		})
-		if err != nil {
-			return nil, errors.Wrapf(err, "while fetching key '%s' from peer", string(key.B))
+		var resp *pb.DescriptorStatus
+		var err error
+
+		// If our server instance is the owner of this rate limit
+		if peer.isOwner {
+			// Query our local cache for the rate limit key
+			resp, err = s.getEntryStatus(ctx, &pb.RateLimitKeyRequest_Entry{
+				Key:       key.B,
+				Hits:      desc.Hits,
+				RateLimit: desc.RateLimit,
+			})
+			if err != nil {
+				return nil, errors.Wrapf(err, "while fetching key '%s' from peer", string(key.B))
+			}
+		} else {
+			// Make an RPC call to the peer that owns this rate limit
+			resp, err = peer.GetRateLimitByKey(ctx, &pb.RateLimitKeyRequest_Entry{
+				Key:       key.B,
+				Hits:      desc.Hits,
+				RateLimit: desc.RateLimit,
+			})
+			if err != nil {
+				return nil, errors.Wrapf(err, "while fetching key '%s' from peer", string(key.B))
+			}
+
+			// Inform the client of the owner key of the key
+			resp.Metadata = map[string]string{"owner": peer.host}
 		}
-
 		results = append(results, resp)
 	}
 
 	return &pb.RateLimitResponse{
 		Statuses: results,
 	}, nil
-}
-
-func generateKey(b *bytebufferpool.ByteBuffer, domain string, descriptor *pb.Descriptor) error {
-
-	// TODO: Check provided Domain
-	// TODO: Check provided at least one entry
-
-	b.Reset()
-	b.WriteString(domain)
-	b.WriteByte('_')
-
-	for key, value := range descriptor.Values {
-		b.WriteString(key)
-		b.WriteByte('_')
-		b.WriteString(value)
-		b.WriteByte('_')
-	}
-	return nil
 }
 
 func (s *Server) GetRateLimitByKey(ctx context.Context, req *pb.RateLimitKeyRequest) (*pb.RateLimitResponse, error) {
@@ -180,13 +161,27 @@ func (s *Server) GetRateLimitByKey(ctx context.Context, req *pb.RateLimitKeyRequ
 	return &pb.RateLimitResponse{Statuses: results}, nil
 }
 
+func (s *Server) GetPeers(ctx context.Context, in *pb.GetPeersRequest) (*pb.GetPeersResponse, error) {
+	s.peerMutex.RLock()
+	defer s.peerMutex.RUnlock()
+
+	var results []string
+	for _, peer := range s.conf.Picker.Peers() {
+		results = append(results, peer.host)
+	}
+
+	return &pb.GetPeersResponse{
+		Peers: results,
+	}, nil
+}
+
 func (s *Server) getEntryStatus(ctx context.Context, entry *pb.RateLimitKeyRequest_Entry) (*pb.DescriptorStatus, error) {
 	if entry.Hits == 0 {
 		entry.Hits = 1
 	}
 
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
+	s.cacheMutex.Lock()
+	defer s.cacheMutex.Unlock()
 	item, ok := s.cache.Get(string(entry.Key))
 	if ok {
 		// The following semantic allows for requests of more than the limit to be rejected, but subsequent
@@ -240,4 +235,49 @@ func (s *Server) getEntryStatus(ctx context.Context, entry *pb.RateLimitKeyReque
 	s.cache.Add(string(entry.Key), status, expire)
 
 	return status, nil
+}
+
+// TODO: Add a test for peer updates
+// Called by PeerSyncer when the cluster config changes
+func (s *Server) updateConfig(conf *PeerConfig) {
+	picker := s.conf.Picker.New()
+
+	for _, peer := range conf.Peers {
+		peerInfo := NewPeerClient(peer)
+
+		if info := s.conf.Picker.GetPeer(peer); info != nil {
+			peerInfo = info
+		}
+
+		// If this peer refers to this server instance
+		if peer == s.conf.AdvertiseAddress {
+			peerInfo.isOwner = true
+		}
+
+		picker.Add(peerInfo)
+	}
+
+	// TODO: schedule a disconnect for old PeerClients once they are no longer in flight
+
+	// Replace our current picker
+	s.peerMutex.Lock()
+	s.conf.Picker = picker
+	s.peerMutex.Unlock()
+}
+
+func generateKey(b *bytebufferpool.ByteBuffer, domain string, descriptor *pb.Descriptor) error {
+
+	// TODO: Check provided Domain
+	// TODO: Check provided at least one entry
+
+	b.Reset()
+	b.WriteString(domain)
+	b.WriteByte('_')
+
+	for key, value := range descriptor.Values {
+		b.WriteString(key)
+		b.WriteByte('_')
+		b.WriteString(value)
+	}
+	return nil
 }

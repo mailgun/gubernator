@@ -34,9 +34,17 @@ func (ch *ConsistantHash) New() PeerPicker {
 	}
 }
 
+func (ch *ConsistantHash) Peers() []*PeerClient {
+	var results []*PeerClient
+	for _, v := range ch.peerMap {
+		results = append(results, v)
+	}
+	return results
+}
+
 // Adds a peer to the hash
 func (ch *ConsistantHash) Add(peer *PeerClient) {
-	hash := int(ch.hashFunc([]byte(peer.Host)))
+	hash := int(ch.hashFunc([]byte(peer.host)))
 	ch.peerKeys = append(ch.peerKeys, hash)
 	ch.peerMap[hash] = peer
 	sort.Ints(ch.peerKeys)

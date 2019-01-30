@@ -3,29 +3,25 @@ package gubernator_test
 import (
 	"context"
 	"fmt"
-	"os"
-	"testing"
-	"time"
-
 	"github.com/mailgun/gubernator"
-	"github.com/mailgun/gubernator/pb"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"os"
+	"testing"
+	"time"
 )
 
 var peers []string
 var servers []*gubernator.Server
 
 func startCluster() error {
+	syncer := gubernator.LocalPeerSyncer{}
+
 	for i := 0; i < 6; i++ {
 		srv, err := gubernator.NewServer(gubernator.ServerConfig{
-			Picker: gubernator.NewConsistantHash(nil),
-			ClusterConfig: &gubernator.StaticClusterConfig{
-				Conf: gubernator.ClusterConfig{
-					Peers: peers,
-				},
-			},
+			Picker:     gubernator.NewConsistantHash(nil),
+			PeerSyncer: &syncer,
 		})
 		if err != nil {
 			return errors.Wrap(err, "NewServer()")
@@ -34,6 +30,11 @@ func startCluster() error {
 		go srv.Run()
 		servers = append(servers, srv)
 	}
+
+	syncer.Update(gubernator.PeerConfig{
+		Peers: peers,
+	})
+
 	return nil
 }
 
@@ -54,24 +55,24 @@ func TestMain(m *testing.M) {
 }
 
 func TestOverTheLimit(t *testing.T) {
-	client, errs := gubernator.NewClient("domain", peers)
+	client, errs := gubernator.NewClient("test_over_limit", peers)
 	require.Nil(t, errs)
 
 	tests := []struct {
 		Remaining int64
-		Status    pb.DescriptorStatus_Status
+		Status    gubernator.Status
 	}{
 		{
 			Remaining: 1,
-			Status:    pb.DescriptorStatus_OK,
+			Status:    gubernator.UnderLimit,
 		},
 		{
 			Remaining: 0,
-			Status:    pb.DescriptorStatus_OK,
+			Status:    gubernator.UnderLimit,
 		},
 		{
 			Remaining: 0,
-			Status:    pb.DescriptorStatus_OVER_LIMIT,
+			Status:    gubernator.OverLimit,
 		},
 	}
 
@@ -94,27 +95,27 @@ func TestOverTheLimit(t *testing.T) {
 }
 
 func TestUnderLimitDuration(t *testing.T) {
-	client, errs := gubernator.NewClient("domain", peers)
+	client, errs := gubernator.NewClient("test_under_limit_duration", peers)
 	require.Nil(t, errs)
 
 	tests := []struct {
 		Remaining int64
-		Status    pb.DescriptorStatus_Status
+		Status    gubernator.Status
 		Sleep     time.Duration
 	}{
 		{
 			Remaining: 1,
-			Status:    pb.DescriptorStatus_OK,
+			Status:    gubernator.UnderLimit,
 			Sleep:     time.Duration(0),
 		},
 		{
 			Remaining: 0,
-			Status:    pb.DescriptorStatus_OK,
+			Status:    gubernator.UnderLimit,
 			Sleep:     time.Duration(time.Millisecond * 5),
 		},
 		{
 			Remaining: 1,
-			Status:    pb.DescriptorStatus_OK,
+			Status:    gubernator.UnderLimit,
 			Sleep:     time.Duration(0),
 		},
 	}

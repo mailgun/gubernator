@@ -20,13 +20,6 @@ func randomBytes(n int) []byte {
 }
 
 func BenchmarkServer_GetRateLimitByKey(b *testing.B) {
-	startCluster()
-	defer stopCluster()
-
-	// TODO: Make the PeerPicker take a list of PeerClients instead of PeerInfo
-	// TODO: Get rid of the PeerInfo, This will allow us to remove a peer from the pool and
-	// TODO: PeerClient will be responsible for closing the connection after the last connection
-	// TODO: In flight is complete
 	client := gubernator.NewPeerClient(peers[0])
 
 	b.Run("GetRateLimitByKey", func(b *testing.B) {
@@ -47,9 +40,6 @@ func BenchmarkServer_GetRateLimitByKey(b *testing.B) {
 }
 
 func BenchmarkServer_GetRateLimit(b *testing.B) {
-	startCluster()
-	defer stopCluster()
-
 	client, err := gubernator.NewClient("domain", peers)
 	if err != nil {
 		b.Errorf("NewClient err: %s", err)
@@ -69,3 +59,5 @@ func BenchmarkServer_GetRateLimit(b *testing.B) {
 		}
 	})
 }
+
+// TODO: Benchmark with fanout to simulate thundering heard of simultaneous requests from many clients

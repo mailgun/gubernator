@@ -6,10 +6,13 @@ Package pb is a generated protocol buffer package.
 
 It is generated from these files:
 	common.proto
+	config.proto
 	ratelimit.proto
 
 It has these top-level messages:
 	RateLimitDuration
+	GetPeersRequest
+	GetPeersResponse
 	RateLimitRequest
 	RateLimitResponse
 	RateLimitKeyRequest

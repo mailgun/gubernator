@@ -12,9 +12,9 @@ import (
 type Status int
 
 const (
-	Unknown   Status = 0
-	OK        Status = 1
-	OverLimit Status = 2
+	Unknown    Status = 0
+	UnderLimit Status = 1
+	OverLimit  Status = 2
 )
 
 // A thin client over the GetRateLimit() GRPC call.
@@ -64,7 +64,7 @@ type Response struct {
 }
 
 func (c *Client) GetRateLimit(ctx context.Context, req *Request) (*Response, error) {
-	status, err := c.client.GetRateLimit(ctx, &pb.Descriptor{
+	status, err := c.client.GetRateLimit(ctx, c.domain, &pb.Descriptor{
 		RateLimit: &pb.RateLimitDuration{
 			Requests: req.Limit,
 			Duration: int64(req.Duration / time.Millisecond),

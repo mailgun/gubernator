@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"github.com/mailgun/gubernator/pb"
-	"github.com/valyala/bytebufferpool"
 	"google.golang.org/grpc"
 )
 
@@ -32,6 +31,9 @@ func NewPeerClient(host string) *PeerClient {
 
 // TODO: Given a single rate limit descriptor, batch similar requests into a single request and return the result to callers when complete
 func (c *PeerClient) GetRateLimit(ctx context.Context, d *pb.Descriptor) (*pb.DescriptorStatus, error) {
+
+	// TODO: If PeerInfo is not connected, Then dial the server   <------ DO THIS NEXT
+
 	resp, err := c.client.GetRateLimit(ctx, &pb.RateLimitRequest{
 		Descriptors: []*pb.Descriptor{d},
 	})
@@ -48,31 +50,6 @@ func (c *PeerClient) GetRateLimit(ctx context.Context, d *pb.Descriptor) (*pb.De
 
 // TODO: Given a single rate limit key request entry, batch similar requests into a single request and return the result to callers when complete
 func (c *PeerClient) GetRateLimitByKey(ctx context.Context, r *pb.RateLimitKeyRequest_Entry) (*pb.DescriptorStatus, error) {
-	/*var key bytebufferpool.ByteBuffer
-
-	// TODO: Keep key buffers in a buffer pool to avoid un-necessary garbage collection
-	// Or Keep pb.KeyRequests in a pool
-
-	// Generate key from the request
-	if err := c.generateKey(&key, domain, descriptor); err != nil {
-		return nil, err
-	}
-
-	keyReq := pb.RateLimitKeyRequest_Entry{
-		Key:       key.Bytes(),
-		Hits:      descriptor.Hits,
-		RateLimit: descriptor.RateLimit,
-	}*/
-
-	// TODO: combine requests if called multiple times within a few milliseconds.
-
-	/*// TODO: Lock before accessing the picker
-	var peer PeerInfo
-	if err := c.picker.Get(r.Key, &peer); err != nil {
-		return nil, err
-	}
-	//fmt.Printf("Key: '%s' Pick: %s\n", key.Bytes(), peer.Host)*/
-
 	// TODO: If PeerInfo is not connected, Then dial the server
 
 	resp, err := c.client.GetRateLimitByKey(ctx, &pb.RateLimitKeyRequest{
@@ -88,24 +65,6 @@ func (c *PeerClient) GetRateLimitByKey(ctx context.Context, r *pb.RateLimitKeyRe
 	}
 
 	return resp.Statuses[0], nil
-}
-
-func (c *PeerClient) generateKey(b *bytebufferpool.ByteBuffer, domain string, descriptor *pb.Descriptor) error {
-
-	// TODO: Check provided Domain
-	// TODO: Check provided at least one entry
-
-	b.Reset()
-	b.WriteString(domain)
-	b.WriteByte('_')
-
-	for key, value := range descriptor.Values {
-		b.WriteString(key)
-		b.WriteByte('_')
-		b.WriteString(value)
-		b.WriteByte('_')
-	}
-	return nil
 }
 
 // Given a host, return a PeerInfo with an initialized GRPC client

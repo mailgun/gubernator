@@ -5,6 +5,7 @@ import (
 	"github.com/mailgun/gubernator/lru"
 	"github.com/mailgun/gubernator/pb"
 	"github.com/pkg/errors"
+	"github.com/valyala/bytebufferpool"
 	"google.golang.org/grpc"
 	"net"
 	"sync"
@@ -109,10 +110,62 @@ func (s *Server) Address() string {
 }
 
 func (s *Server) GetRateLimit(ctx context.Context, req *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
-	// TODO: Verify we are the owner of this key
-	// TOOD: If we are owner, then fulfill the request
-	// TODO: Forward the request to the correct owner if needed
-	return nil, nil
+	var results []*pb.DescriptorStatus
+
+	// TODO: Support getting multiple keys in an async manner (FanOut)
+	for _, desc := range req.Descriptors {
+		// TODO: Get buffer out of pool
+		var key bytebufferpool.ByteBuffer
+
+		if err := generateKey(&key, req.Domain, desc); err != nil {
+			return nil, err
+		}
+
+		// TODO: Verify we are the owner of this key
+		// TODO: If we are owner, then fulfill the request without making a remote call
+
+		if desc.RateLimit == nil {
+			return nil, errors.New("required field 'RateLimit' missing from 'Descriptor'")
+		}
+
+		var peer PeerClient
+		if err := s.conf.Picker.Get(key.B, &peer); err != nil {
+			return nil, errors.Wrapf(err, "while finding peer that owns key '%s'", string(key.B))
+		}
+
+		resp, err := peer.GetRateLimitByKey(ctx, &pb.RateLimitKeyRequest_Entry{
+			Key:       key.B,
+			Hits:      desc.Hits,
+			RateLimit: desc.RateLimit,
+		})
+		if err != nil {
+			return nil, errors.Wrapf(err, "while fetching key '%s' from peer", string(key.B))
+		}
+
+		results = append(results, resp)
+	}
+
+	return &pb.RateLimitResponse{
+		Statuses: results,
+	}, nil
+}
+
+func generateKey(b *bytebufferpool.ByteBuffer, domain string, descriptor *pb.Descriptor) error {
+
+	// TODO: Check provided Domain
+	// TODO: Check provided at least one entry
+
+	b.Reset()
+	b.WriteString(domain)
+	b.WriteByte('_')
+
+	for key, value := range descriptor.Values {
+		b.WriteString(key)
+		b.WriteByte('_')
+		b.WriteString(value)
+		b.WriteByte('_')
+	}
+	return nil
 }
 
 func (s *Server) GetRateLimitByKey(ctx context.Context, req *pb.RateLimitKeyRequest) (*pb.RateLimitResponse, error) {

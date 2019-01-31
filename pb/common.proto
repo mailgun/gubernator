@@ -5,12 +5,21 @@ option go_package = "pb";
 package pb.gubernator;
 
 // Defines a rate limit duration and requests per duration
-message RateLimitDuration {
+message RateLimitConfig {
+    enum Algorithm {
+        TOKEN_BUCKET = 0;
+        LEAKY_BUCKET = 1;
+    }
+
     // The number of requests that can occur for the duration of the rate limit
-    int64 requests = 1;
+    int64 limit = 1;
+
     // The duration of the rate limit in milliseconds
     // Second = 1000 Milliseconds
     // Minute = 60000 Milliseconds
     // Hour = 3600000 Milliseconds
     int64 duration = 2;
+
+    // The algorithm used to calculate the rate limit
+    Algorithm algorithm = 3;
 }

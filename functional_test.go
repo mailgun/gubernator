@@ -81,9 +81,10 @@ func TestOverTheLimit(t *testing.T) {
 			Descriptors: map[string]string{
 				"account": "1234",
 			},
-			Limit:    2,
-			Duration: time.Second * 1,
-			Hits:     1,
+			Algorithm: gubernator.TokenBucket,
+			Duration:  time.Second * 1,
+			Limit:     2,
+			Hits:      1,
 		})
 		require.Nil(t, err)
 
@@ -94,8 +95,8 @@ func TestOverTheLimit(t *testing.T) {
 	}
 }
 
-func TestUnderLimitDuration(t *testing.T) {
-	client, errs := gubernator.NewClient("test_under_limit_duration", peers)
+func TestTokenBucket(t *testing.T) {
+	client, errs := gubernator.NewClient("test_token_bucket", peers)
 	require.Nil(t, errs)
 
 	tests := []struct {
@@ -125,9 +126,10 @@ func TestUnderLimitDuration(t *testing.T) {
 			Descriptors: map[string]string{
 				"account": "1234",
 			},
-			Limit:    2,
-			Duration: time.Millisecond * 5,
-			Hits:     1,
+			Algorithm: gubernator.TokenBucket,
+			Duration:  time.Millisecond * 5,
+			Limit:     2,
+			Hits:      1,
 		})
 		require.Nil(t, err)
 
@@ -138,3 +140,14 @@ func TestUnderLimitDuration(t *testing.T) {
 		time.Sleep(test.Sleep)
 	}
 }
+
+/*func TestLeakyBucket(t *testing.T) {
+	gubernator.LeakyBucketAlgo(nil, &pb.RateLimitKeyRequest_Entry{
+		Hits: 1,
+		RateLimitConfig: &pb.RateLimitConfig{
+			Limit:     10,
+			Duration:  1000,
+			Algorithm: pb.RateLimitConfig_LEAKY_BUCKET,
+		},
+	})
+}*/

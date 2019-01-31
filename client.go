@@ -10,11 +10,15 @@ import (
 )
 
 type Status int
+type Algorithm int
 
 const (
 	Unknown    Status = 0
 	UnderLimit Status = 1
 	OverLimit  Status = 2
+
+	TokenBucket Algorithm = 0
+	LeakyBucket Algorithm = 1
 )
 
 // A thin client over the GetRateLimit() GRPC call.
@@ -50,6 +54,8 @@ type Request struct {
 	Duration time.Duration
 	// How many hits to send to the rate limit server
 	Hits int64
+	// The Algorithm used to calculate the rate limit
+	Algorithm Algorithm
 }
 
 type Response struct {
@@ -65,9 +71,10 @@ type Response struct {
 
 func (c *Client) GetRateLimit(ctx context.Context, req *Request) (*Response, error) {
 	status, err := c.client.GetRateLimit(ctx, c.domain, &pb.Descriptor{
-		RateLimit: &pb.RateLimitDuration{
-			Requests: req.Limit,
-			Duration: int64(req.Duration / time.Millisecond),
+		RateLimitConfig: &pb.RateLimitConfig{
+			Limit:     req.Limit,
+			Duration:  int64(req.Duration / time.Millisecond),
+			Algorithm: pb.RateLimitConfig_Algorithm(req.Algorithm),
 		},
 		Values: req.Descriptors,
 		Hits:   req.Hits,

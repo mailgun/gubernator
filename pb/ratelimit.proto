@@ -46,7 +46,7 @@ message RateLimitKeyRequest {
     int64 hits = 2;
     // This is the rate limit the requested for this descriptor. If the rate limit doesn't currently exist for
     // this descriptor it will be created and enforced for subsequent requests
-    RateLimitDuration rate_limit = 3;
+    RateLimitConfig rate_limit_config = 3;
   }
 
   // Requests must specify at least one KeyRequestEntry, but can specify multiple descriptors
@@ -65,7 +65,7 @@ message Descriptor {
 
   // This is the rate limit the requested for this descriptor. If the rate limit doesn't currently exist for
   // this descriptor it will be created and enforced for subsequent requests
-  RateLimitDuration rate_limit = 3;
+  RateLimitConfig rate_limit_config = 3;
 }
 
 // The return status of a descriptor submitted via RateLimitRequest

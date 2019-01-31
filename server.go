@@ -4,7 +4,6 @@ import (
 	"context"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/mailgun/gubernator/lru"
 	"github.com/mailgun/gubernator/pb"
@@ -15,7 +14,6 @@ import (
 
 const (
 	maxRequestSize = 1 * 1024 * 1024 // 1Mb
-	second         = 1000
 )
 
 type Server struct {
@@ -101,8 +99,8 @@ func (s *Server) GetRateLimit(ctx context.Context, req *pb.RateLimitRequest) (*p
 			return nil, err
 		}
 
-		if desc.RateLimit == nil {
-			return nil, errors.New("required field 'RateLimit' missing from 'Descriptor'")
+		if desc.RateLimitConfig == nil {
+			return nil, errors.New("required field 'RateLimitConfig' missing from 'Descriptor'")
 		}
 
 		s.peerMutex.RLock()
@@ -118,11 +116,11 @@ func (s *Server) GetRateLimit(ctx context.Context, req *pb.RateLimitRequest) (*p
 
 		// If our server instance is the owner of this rate limit
 		if peer.isOwner {
-			// Query our local cache for the rate limit key
-			resp, err = s.getEntryStatus(ctx, &pb.RateLimitKeyRequest_Entry{
-				Key:       key.B,
-				Hits:      desc.Hits,
-				RateLimit: desc.RateLimit,
+			// Apply our rate limit algorithm to the request
+			resp, err = s.applyAlgorithm(&pb.RateLimitKeyRequest_Entry{
+				RateLimitConfig: desc.RateLimitConfig,
+				Hits:            desc.Hits,
+				Key:             key.B,
 			})
 			if err != nil {
 				return nil, errors.Wrapf(err, "while fetching key '%s' from peer", string(key.B))
@@ -130,9 +128,9 @@ func (s *Server) GetRateLimit(ctx context.Context, req *pb.RateLimitRequest) (*p
 		} else {
 			// Make an RPC call to the peer that owns this rate limit
 			resp, err = peer.GetRateLimitByKey(ctx, &pb.RateLimitKeyRequest_Entry{
-				Key:       key.B,
-				Hits:      desc.Hits,
-				RateLimit: desc.RateLimit,
+				RateLimitConfig: desc.RateLimitConfig,
+				Hits:            desc.Hits,
+				Key:             key.B,
 			})
 			if err != nil {
 				return nil, errors.Wrapf(err, "while fetching key '%s' from peer", string(key.B))
@@ -152,7 +150,7 @@ func (s *Server) GetRateLimit(ctx context.Context, req *pb.RateLimitRequest) (*p
 func (s *Server) GetRateLimitByKey(ctx context.Context, req *pb.RateLimitKeyRequest) (*pb.RateLimitResponse, error) {
 	var results []*pb.DescriptorStatus
 	for _, entry := range req.Entries {
-		status, err := s.getEntryStatus(ctx, entry)
+		status, err := s.applyAlgorithm(entry)
 		if err != nil {
 			return nil, err
 		}
@@ -175,66 +173,23 @@ func (s *Server) GetPeers(ctx context.Context, in *pb.GetPeersRequest) (*pb.GetP
 	}, nil
 }
 
-func (s *Server) getEntryStatus(ctx context.Context, entry *pb.RateLimitKeyRequest_Entry) (*pb.DescriptorStatus, error) {
+func (s *Server) applyAlgorithm(entry *pb.RateLimitKeyRequest_Entry) (*pb.DescriptorStatus, error) {
 	if entry.Hits == 0 {
 		entry.Hits = 1
 	}
 
+	if entry.RateLimitConfig == nil {
+		return nil, errors.New("required field 'RateLimitConfig' missing from 'RateLimitKeyRequest_Entry'")
+	}
+
 	s.cacheMutex.Lock()
 	defer s.cacheMutex.Unlock()
-	item, ok := s.cache.Get(string(entry.Key))
-	if ok {
-		// The following semantic allows for requests of more than the limit to be rejected, but subsequent
-		// requests within the same duration that are under the limit to succeed. IE: client attempts to
-		// send 1000 emails but 100 is their limit. The request is rejected as over the limit, but since we
-		// don't store OVER_LIMIT in the cache the client can retry within the same rate limit duration with
-		// 100 emails and the request will succeed.
 
-		status := item.(*pb.DescriptorStatus)
-		// If we are already at the limit
-		if status.LimitRemaining == 0 {
-			status.Status = pb.DescriptorStatus_OVER_LIMIT
-			return status, nil
-		}
-
-		// If requested hits takes the remainder
-		if status.LimitRemaining == entry.Hits {
-			status.LimitRemaining = 0
-			return status, nil
-		}
-
-		// If requested is more than available, then return over the limit without updating the cache.
-		if entry.Hits > status.LimitRemaining {
-			retStatus := *status
-			retStatus.Status = pb.DescriptorStatus_OVER_LIMIT
-			return &retStatus, nil
-		}
-
-		status.LimitRemaining -= entry.Hits
-		return status, nil
+	switch entry.RateLimitConfig.Algorithm {
+	case pb.RateLimitConfig_TOKEN_BUCKET:
+		return tokenBucket(s.cache, entry)
 	}
-
-	if entry.RateLimit == nil {
-		return nil, errors.New("required field 'RateLimit' missing from 'RateLimitKeyRequest_Entry'")
-	}
-
-	// Add a new rate limit to the cache
-	expire := time.Now().Add(time.Duration(entry.RateLimit.Duration) * time.Millisecond)
-	status := &pb.DescriptorStatus{
-		Status:         pb.DescriptorStatus_OK,
-		CurrentLimit:   entry.RateLimit.Requests,
-		LimitRemaining: entry.RateLimit.Requests - entry.Hits,
-		ResetTime:      expire.Unix() / second,
-	}
-
-	// Kind of a weird corner case, but the client could be dumb
-	if entry.Hits > entry.RateLimit.Requests {
-		status.LimitRemaining = 0
-	}
-
-	s.cache.Add(string(entry.Key), status, expire)
-
-	return status, nil
+	return nil, errors.Errorf("invalid rate limit algorithm '%d'", entry.RateLimitConfig.Algorithm)
 }
 
 // TODO: Add a test for peer updates

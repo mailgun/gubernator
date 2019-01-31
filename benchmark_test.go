@@ -26,8 +26,8 @@ func BenchmarkServer_GetRateLimitByKey(b *testing.B) {
 		for n := 0; n < b.N; n++ {
 			_, err := client.GetRateLimitByKey(context.Background(), &pb.RateLimitKeyRequest_Entry{
 				Key: randomBytes(10),
-				RateLimit: &pb.RateLimitDuration{
-					Requests: 10,
+				RateLimitConfig: &pb.RateLimitConfig{
+					Limit:    10,
 					Duration: 5,
 				},
 				Hits: 1,
@@ -61,3 +61,4 @@ func BenchmarkServer_GetRateLimit(b *testing.B) {
 }
 
 // TODO: Benchmark with fanout to simulate thundering heard of simultaneous requests from many clients
+// TODO: Perhaps by pass GRPC so we can profile the entire chain

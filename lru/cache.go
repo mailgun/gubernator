@@ -47,7 +47,7 @@ type Key interface{}
 type cacheRecord struct {
 	key      Key
 	value    interface{}
-	expireAt *time.Time
+	expireAt int64
 }
 
 // New creates a new Cache.
@@ -62,11 +62,11 @@ func NewLRUCache(maxEntries int) *Cache {
 }
 
 // Adds a value to the cache with an expiration
-func (c *Cache) Add(key Key, value interface{}, expireAt time.Time) bool {
+func (c *Cache) Add(key Key, value interface{}, expireAt int64) bool {
 	return c.addRecord(&cacheRecord{
 		key:      key,
 		value:    value,
-		expireAt: &expireAt,
+		expireAt: expireAt,
 	})
 }
 
@@ -88,6 +88,11 @@ func (c *Cache) addRecord(record *cacheRecord) bool {
 	return false
 }
 
+// Return unix epoch in milliseconds
+func MillisecondNow() int64 {
+	return time.Now().UnixNano() / 1000000
+}
+
 // Get looks up a key's value from the cache.
 func (c *Cache) Get(key Key) (value interface{}, ok bool) {
 
@@ -95,7 +100,7 @@ func (c *Cache) Get(key Key) (value interface{}, ok bool) {
 		entry := ele.Value.(*cacheRecord)
 
 		// If the entry has expired, remove it from the cache
-		if entry.expireAt != nil && entry.expireAt.Before(time.Now().UTC()) {
+		if entry.expireAt < MillisecondNow() {
 			c.removeElement(ele)
 			c.stats.Miss++
 			return
@@ -151,11 +156,12 @@ func (c *Cache) Keys() (keys []interface{}) {
 	return
 }
 
-// Get the value without updating the expiration or last used or stats
-func (c *Cache) Peek(key interface{}) (value interface{}, ok bool) {
+// Update the expiration time for the key
+func (c *Cache) UpdateExpiration(key Key, expireAt int64) bool {
 	if ele, hit := c.cache[key]; hit {
 		entry := ele.Value.(*cacheRecord)
-		return entry.value, true
+		entry.expireAt = expireAt
+		return true
 	}
-	return nil, false
+	return false
 }

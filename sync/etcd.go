@@ -7,6 +7,7 @@ import (
 	"github.com/mailgun/gubernator"
 	"github.com/mailgun/holster"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"time"
 )
 
@@ -17,16 +18,20 @@ const (
 )
 
 type EtcdSync struct {
-	client *etcd.Client
-	wg     holster.WaitGroup
+	callBack gubernator.UpdateFunc
+	wg       holster.WaitGroup
+	ctx      context.Context
+	log      *logrus.Entry
+	client   *etcd.Client
 }
 
 func NewEtcdSync(client *etcd.Client) *EtcdSync {
 	return &EtcdSync{
+		log:    logrus.WithField("category", "etcd-sync"),
 		client: client,
 	}
-
 }
+
 func (e *EtcdSync) Start(name string) error {
 
 	// Register our instance with etcd
@@ -42,7 +47,56 @@ func (e *EtcdSync) Start(name string) error {
 }
 
 func (e *EtcdSync) watch() error {
-	// TODO: Copy watch code from vulcand, it's the most reliable implementation
+	var key = "/gubernator/peers"
+
+	// TODO: Get the most recent list of peers
+	afterIdx := 0
+
+	watcher := etcd.NewWatcher(e.client)
+	defer watcher.Close()
+
+	var watchChan etcd.WatchChan
+	ready := make(chan struct{})
+	go func() {
+		watchChan = watcher.Watch(etcd.WithRequireLeader(e.ctx), key,
+			etcd.WithRev(int64(afterIdx)), etcd.WithPrefix())
+		close(ready)
+	}()
+
+	select {
+	case <-ready:
+		e.log.Infof("begin watching: etcd revision %d", afterIdx)
+	case <-time.After(time.Second * 10):
+		return errors.New("timed out while waiting for watcher.Watch() to start")
+	}
+
+	for response := range watchChan {
+		if response.Canceled {
+			e.log.Infof("graceful watch shutdown")
+			return nil
+		}
+		if err := response.Err(); err != nil {
+			e.log.Errorf("watch error: %v", err)
+			return err
+		}
+
+		// TODO: When peers change, get a full peer listing? (might be too much overhead)
+		/*for _, event := range response.Events {
+			change, err := n.parseChange(event)
+			if err != nil {
+				log.Warningf("ignore '%s', error: %s", eventToString(event), err)
+				continue
+			}
+			if change != nil {
+				log.Infof("%v", change)
+				select {
+				case changes <- change:
+				case <-cancelC:
+					return nil
+				}
+			}
+		}*/
+	}
 	return nil
 }
 
@@ -58,15 +112,15 @@ func (e *EtcdSync) register(name string) error {
 
 		lease, err = e.client.Grant(ctx, leaseTTL)
 		if err != nil {
-			return errors.Wrapf(err, "while granting a new lease")
+			return errors.Wrapf(err, "during grant lease")
 		}
 
 		_, err = e.client.Put(ctx, key, "", etcd.WithLease(lease.ID))
 		if err != nil {
-			return errors.Wrap(err, "while registering server to ETCD")
+			return errors.Wrap(err, "during put")
 		}
 
-		if keepAlive, err = e.client.KeepAlive(ctx, lease.ID); err != nil {
+		if keepAlive, err = e.client.KeepAlive(e.ctx, lease.ID); err != nil {
 			return err
 		}
 		return nil
@@ -77,14 +131,15 @@ func (e *EtcdSync) register(name string) error {
 
 	// Attempt to register our instance with etcd
 	if err = register(); err != nil {
-		return err
+		return errors.Wrap(err, "during initial peer registration")
 	}
 
 	e.wg.Until(func(done chan struct{}) bool {
 		// If we have lost our keep alive, register again
 		if keepAlive == nil {
 			if err = register(); err != nil {
-				// TODO: Log
+				e.log.WithField("err", err).
+					Error("while attempting to re-register peer")
 				select {
 				case <-time.After(backOffTimeout):
 					return true
@@ -97,7 +152,12 @@ func (e *EtcdSync) register(name string) error {
 		select {
 		case _, ok := <-keepAlive:
 			if !ok {
-				// TODO: Log
+				// Don't re-register if we are in the middle of a shutdown
+				if e.ctx.Err() != nil {
+					return true
+				}
+
+				e.log.Warn("keep alive lost, attempting to re-register peer")
 				// re-register
 				keepAlive = nil
 				return true
@@ -105,8 +165,7 @@ func (e *EtcdSync) register(name string) error {
 
 			// Ensure we are getting keep alive's regularly
 			if lastKeepAlive.Sub(time.Now()) > time.Second*leaseTTL {
-				// TODO: Log
-				// Took too long between keep alive's, the lease has expired
+				e.log.Warn("to long between keep alive heartbeats, re-registering peer")
 				keepAlive = nil
 				return true
 			}
@@ -114,11 +173,13 @@ func (e *EtcdSync) register(name string) error {
 		case <-done:
 			ctx, cancel := context.WithTimeout(context.Background(), etcdTimeout)
 			if _, err := e.client.Delete(ctx, key); err != nil {
-				// TODO: Log
+				e.log.WithField("err", err).
+					Warn("during etcd delete")
 			}
 
 			if _, err := e.client.Revoke(ctx, lease.ID); err != nil {
-				// TODO: Log
+				e.log.WithField("err", err).
+					Warn("during lease revoke ")
 			}
 			cancel()
 			return false
@@ -131,8 +192,9 @@ func (e *EtcdSync) register(name string) error {
 
 func (e *EtcdSync) Stop() {
 	e.wg.Stop()
+	e.ctx.Done()
 }
 
-func (e *EtcdSync) RegisterOnUpdate(gubernator.UpdateFunc) {
-
+func (e *EtcdSync) RegisterOnUpdate(fn gubernator.UpdateFunc) {
+	e.callBack = fn
 }

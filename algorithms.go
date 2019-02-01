@@ -1,21 +1,14 @@
 package gubernator
 
 import (
-	"github.com/mailgun/gubernator/lru"
+	"github.com/mailgun/gubernator/cache"
 	"github.com/mailgun/gubernator/pb"
 	"github.com/pkg/errors"
 )
 
-// So algorithms can interface with the cache
-type LRUCache interface {
-	Add(key lru.Key, value interface{}, expireAt int64) bool
-	Get(key lru.Key) (value interface{}, ok bool)
-	UpdateExpiration(key lru.Key, expireAt int64) bool
-}
-
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket
-func tokenBucket(cache LRUCache, entry *pb.RateLimitKeyRequest_Entry) (*pb.DescriptorStatus, error) {
-	item, ok := cache.Get(string(entry.Key))
+func tokenBucket(c cache.Cache, entry *pb.RateLimitKeyRequest_Entry) (*pb.DescriptorStatus, error) {
+	item, ok := c.Get(string(entry.Key))
 	if ok {
 		// The following semantic allows for requests of more than the limit to be rejected, but subsequent
 		// requests within the same duration that are under the limit to succeed. IE: client attempts to
@@ -52,7 +45,7 @@ func tokenBucket(cache LRUCache, entry *pb.RateLimitKeyRequest_Entry) (*pb.Descr
 	}
 
 	// Add a new rate limit to the cache
-	expire := lru.MillisecondNow() + entry.RateLimitConfig.Duration
+	expire := cache.MillisecondNow() + entry.RateLimitConfig.Duration
 	status := &pb.DescriptorStatus{
 		Status:         pb.DescriptorStatus_OK,
 		CurrentLimit:   entry.RateLimitConfig.Limit,
@@ -65,23 +58,23 @@ func tokenBucket(cache LRUCache, entry *pb.RateLimitKeyRequest_Entry) (*pb.Descr
 		status.LimitRemaining = 0
 	}
 
-	cache.Add(string(entry.Key), status, expire)
+	c.Add(string(entry.Key), status, expire)
 	return status, nil
 }
 
 // Implements leaky bucket algorithm for rate limiting https://en.wikipedia.org/wiki/Leaky_bucket
-func leakyBucket(cache LRUCache, entry *pb.RateLimitKeyRequest_Entry) (*pb.DescriptorStatus, error) {
+func leakyBucket(c cache.Cache, entry *pb.RateLimitKeyRequest_Entry) (*pb.DescriptorStatus, error) {
 	type LeakyBucket struct {
 		CurrentLimit   int64
 		LimitRemaining int64
 		TimeStamp      int64
 	}
 
-	now := lru.MillisecondNow()
+	now := cache.MillisecondNow()
 	key := string(entry.Key)
 	rate := entry.RateLimitConfig.Duration / entry.RateLimitConfig.Limit
 
-	item, ok := cache.Get(key)
+	item, ok := c.Get(key)
 	if ok {
 		bucket, ok := item.(*LeakyBucket)
 		if !ok {
@@ -126,7 +119,7 @@ func leakyBucket(cache LRUCache, entry *pb.RateLimitKeyRequest_Entry) (*pb.Descr
 
 		bucket.LimitRemaining -= entry.Hits
 		status.LimitRemaining = bucket.LimitRemaining
-		cache.UpdateExpiration(key, now*entry.RateLimitConfig.Duration)
+		c.UpdateExpiration(key, now*entry.RateLimitConfig.Duration)
 		return status, nil
 	}
 
@@ -138,7 +131,7 @@ func leakyBucket(cache LRUCache, entry *pb.RateLimitKeyRequest_Entry) (*pb.Descr
 		bucket.LimitRemaining = 0
 	}
 
-	cache.Add(string(entry.Key), &bucket, now+entry.RateLimitConfig.Duration)
+	c.Add(string(entry.Key), &bucket, now+entry.RateLimitConfig.Duration)
 
 	return &pb.DescriptorStatus{
 		Status:         pb.DescriptorStatus_OK,

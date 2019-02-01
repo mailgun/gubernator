@@ -1,5 +1,7 @@
 package gubernator
 
+import "github.com/mailgun/gubernator/metrics"
+
 type UpdateFunc func(*PeerConfig)
 
 // Syncs configs and peer listings between peers
@@ -41,6 +43,9 @@ type ServerConfig struct {
 	// This is the peer picker algorithm the server will use decide which peer in the cluster
 	// will coordinate a rate limit
 	Picker PeerPicker
+
+	// Metrics collector
+	Metrics metrics.Collector
 }
 
 // An implementation of PeerSyncer suitable for testing local clusters

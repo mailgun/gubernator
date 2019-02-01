@@ -5,8 +5,9 @@ import (
 	"net"
 	"sync"
 
-	"github.com/mailgun/gubernator/lru"
+	"github.com/mailgun/gubernator/cache"
 	"github.com/mailgun/gubernator/pb"
+	"github.com/mailgun/holster"
 	"github.com/pkg/errors"
 	"github.com/valyala/bytebufferpool"
 	"google.golang.org/grpc"
@@ -19,7 +20,7 @@ const (
 type Server struct {
 	listener   net.Listener
 	grpc       *grpc.Server
-	cache      *lru.Cache
+	cache      *cache.LRUCache
 	cacheMutex sync.Mutex
 	peerMutex  sync.RWMutex
 	client     *PeerClient
@@ -33,23 +34,29 @@ func NewServer(conf ServerConfig) (*Server, error) {
 		return nil, errors.Wrapf(err, "failed to listen on %s", conf.ListenAddress)
 	}
 
-	server := grpc.NewServer(grpc.MaxRecvMsgSize(maxRequestSize))
+	server := grpc.NewServer(
+		grpc.MaxRecvMsgSize(maxRequestSize),
+		grpc.StatsHandler(conf.Metrics.GRPCStatsHandler()))
+
 	s := Server{
-		cache:    lru.NewLRUCache(conf.MaxCacheSize),
+		cache:    cache.NewLRUCache(conf.MaxCacheSize),
 		listener: listener,
 		grpc:     server,
 		conf:     conf,
 	}
-	// Register our server with grpc
+
+	// Register our server with GRPC
 	pb.RegisterRateLimitServiceServer(server, &s)
 	pb.RegisterConfigServerServer(server, &s)
 
-	// Register our config update callback
-	conf.PeerSyncer.OnUpdate(s.updateConfig)
+	// Register our peer update callback
+	conf.PeerSyncer.OnUpdate(s.updatePeers)
 
-	if conf.AdvertiseAddress == "" {
-		conf.AdvertiseAddress = s.Address()
-	}
+	// Register cache stats with out metrics collector
+	conf.Metrics.RegisterCacheStats(s.cache)
+
+	// Advertise address is our listen address if not specified
+	holster.SetDefault(&conf.AdvertiseAddress, s.Address())
 
 	return &s, nil
 }
@@ -59,19 +66,24 @@ func (s *Server) Run() error {
 	// TODO: Allow resizing the cache on the fly depending on the number of cache
 	// TODO: hits, so we don't use the MAX cache all the time
 
-	// TODO: Emit metrics <-- (THRAWN) Do this next
-	// Create a Metrics client which can be configured via `ServerConfig`
-
-	/*go func() {
-		for {
-			fmt.Printf("Size: %d\n", s.cache.Size())
-			time.Sleep(time.Second)
-		}
-	}()*/
+	// Start the metrics collector
+	if err := s.conf.Metrics.Start(); err != nil {
+		return errors.Wrap(err, "failed to start metrics collector")
+	}
 
 	if err := s.conf.PeerSyncer.Start(s.conf.AdvertiseAddress); err != nil {
 		return errors.Wrap(err, "failed to sync configs with other peers")
 	}
+
+	/*
+		// TODO: Look into http/grpc server implementation for /ping
+		httpMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if isgRPC(r) {
+			app.gRPCServer.ServeHTTP(w, r)
+		} else {
+			app.rMux.ServeHTTP(w, r)
+		}
+	*/
 
 	return s.grpc.Serve(s.listener)
 }
@@ -79,6 +91,7 @@ func (s *Server) Run() error {
 func (s *Server) Stop() {
 	s.grpc.Stop()
 	s.conf.PeerSyncer.Stop()
+	s.conf.Metrics.Stop()
 }
 
 // Return the address the server is listening too
@@ -86,11 +99,11 @@ func (s *Server) Address() string {
 	return s.listener.Addr().String()
 }
 
-// TODO: Determine what the server Quality of Service is and set context timeouts for each relayed request?
 func (s *Server) GetRateLimit(ctx context.Context, req *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
 	var results []*pb.DescriptorStatus
 
 	// TODO: Support getting multiple keys in an async manner (FanOut)
+	// TODO: Determine what the server Quality of Service is and set context timeouts for each async request?
 	for _, desc := range req.Descriptors {
 		// TODO: Get buffer out of pool
 		var key bytebufferpool.ByteBuffer
@@ -194,7 +207,7 @@ func (s *Server) applyAlgorithm(entry *pb.RateLimitKeyRequest_Entry) (*pb.Descri
 
 // TODO: Add a test for peer updates
 // Called by PeerSyncer when the cluster config changes
-func (s *Server) updateConfig(conf *PeerConfig) {
+func (s *Server) updatePeers(conf *PeerConfig) {
 	picker := s.conf.Picker.New()
 
 	for _, peer := range conf.Peers {

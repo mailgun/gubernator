@@ -16,10 +16,6 @@ service RateLimitService {
 
   // Client implementations can use this method if the decriptor key is already known
   rpc GetRateLimitByKey (RateLimitKeyRequest) returns (RateLimitResponse) {}
-
-  // TODO: Implement get peers
-
-  // TODO: Implement config API (In another file)
 }
 
 message RateLimitRequest {

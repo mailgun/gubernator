@@ -1,12 +1,5 @@
-package lru
-
-import (
-	"container/list"
-	"time"
-)
-
 /*
-Modifications Copyright 2017 Mailgun Technologies Inc
+Modifications Copyright 2018 Mailgun Technologies Inc
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,26 +16,23 @@ limitations under the License.
 This work is derived from github.com/golang/groupcache/lru
 */
 
-// Holds stats collected about the cache
-type LRUCacheStats struct {
-	Size int64
-	Miss int64
-	Hit  int64
-}
+package cache
 
-// Cache is an thread unsafe LRU cache that supports TTL expiration
-type Cache struct {
+import (
+	"container/list"
+	"time"
+)
+
+// Cache is an thread unsafe LRU cache that supports expiration
+type LRUCache struct {
 	// MaxEntries is the maximum number of cache entries before
 	// an item is evicted. Zero means no limit.
 	MaxEntries int
 
-	stats LRUCacheStats
+	stats Stats
 	ll    *list.List
 	cache map[interface{}]*list.Element
 }
-
-// A Key may be any value that is comparable. See http://golang.org/ref/spec#Comparison_operators
-type Key interface{}
 
 type cacheRecord struct {
 	key      Key
@@ -53,8 +43,8 @@ type cacheRecord struct {
 // New creates a new Cache.
 // If maxEntries is zero, the cache has no limit and it's assumed
 // that eviction is done by the caller.
-func NewLRUCache(maxEntries int) *Cache {
-	return &Cache{
+func NewLRUCache(maxEntries int) *LRUCache {
+	return &LRUCache{
 		MaxEntries: maxEntries,
 		ll:         list.New(),
 		cache:      make(map[interface{}]*list.Element),
@@ -62,7 +52,7 @@ func NewLRUCache(maxEntries int) *Cache {
 }
 
 // Adds a value to the cache with an expiration
-func (c *Cache) Add(key Key, value interface{}, expireAt int64) bool {
+func (c *LRUCache) Add(key Key, value interface{}, expireAt int64) bool {
 	return c.addRecord(&cacheRecord{
 		key:      key,
 		value:    value,
@@ -71,7 +61,7 @@ func (c *Cache) Add(key Key, value interface{}, expireAt int64) bool {
 }
 
 // Adds a value to the cache.
-func (c *Cache) addRecord(record *cacheRecord) bool {
+func (c *LRUCache) addRecord(record *cacheRecord) bool {
 	// If the key already exist, set the new value
 	if ee, ok := c.cache[record.key]; ok {
 		c.ll.MoveToFront(ee)
@@ -94,7 +84,7 @@ func MillisecondNow() int64 {
 }
 
 // Get looks up a key's value from the cache.
-func (c *Cache) Get(key Key) (value interface{}, ok bool) {
+func (c *LRUCache) Get(key Key) (value interface{}, ok bool) {
 
 	if ele, hit := c.cache[key]; hit {
 		entry := ele.Value.(*cacheRecord)
@@ -114,42 +104,42 @@ func (c *Cache) Get(key Key) (value interface{}, ok bool) {
 }
 
 // Remove removes the provided key from the cache.
-func (c *Cache) Remove(key Key) {
+func (c *LRUCache) Remove(key Key) {
 	if ele, hit := c.cache[key]; hit {
 		c.removeElement(ele)
 	}
 }
 
 // RemoveOldest removes the oldest item from the cache.
-func (c *Cache) removeOldest() {
+func (c *LRUCache) removeOldest() {
 	ele := c.ll.Back()
 	if ele != nil {
 		c.removeElement(ele)
 	}
 }
 
-func (c *Cache) removeElement(e *list.Element) {
+func (c *LRUCache) removeElement(e *list.Element) {
 	c.ll.Remove(e)
 	kv := e.Value.(*cacheRecord)
 	delete(c.cache, kv.key)
 }
 
 // Len returns the number of items in the cache.
-func (c *Cache) Size() int {
+func (c *LRUCache) Size() int {
 	return c.ll.Len()
 }
 
 // Returns stats about the current state of the cache
-func (c *Cache) Stats() LRUCacheStats {
+func (c *LRUCache) Stats() Stats {
 	defer func() {
-		c.stats = LRUCacheStats{}
+		c.stats = Stats{}
 	}()
 	c.stats.Size = int64(len(c.cache))
 	return c.stats
 }
 
 // Get a list of keys at this point in time
-func (c *Cache) Keys() (keys []interface{}) {
+func (c *LRUCache) Keys() (keys []interface{}) {
 	for key := range c.cache {
 		keys = append(keys, key)
 	}
@@ -157,7 +147,7 @@ func (c *Cache) Keys() (keys []interface{}) {
 }
 
 // Update the expiration time for the key
-func (c *Cache) UpdateExpiration(key Key, expireAt int64) bool {
+func (c *LRUCache) UpdateExpiration(key Key, expireAt int64) bool {
 	if ele, hit := c.cache[key]; hit {
 		entry := ele.Value.(*cacheRecord)
 		entry.expireAt = expireAt

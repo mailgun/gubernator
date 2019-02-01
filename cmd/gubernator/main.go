@@ -2,84 +2,40 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"math/rand"
-	"os"
-	"strings"
-	"time"
-
 	"github.com/mailgun/gubernator"
+	"github.com/mailgun/gubernator/metrics"
+	"github.com/mailgun/gubernator/sync"
+	"github.com/mailgun/service"
 )
 
-// Given a comma separated string, return a slice of string items.
-// Return the entire string as the first item if no comma is found.
-func StringToSlice(value string, modifiers ...func(s string) string) []string {
-	result := strings.Split(value, ",")
-	// Apply the modifiers
-	for _, modifier := range modifiers {
-		for idx, item := range result {
-			result[idx] = modifier(item)
-		}
-	}
-	return result
+type Config struct {
+	service.BasicConfig
 }
 
-func randomString(n int, prefix string) string {
-	const alphanum = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-	var bytes = make([]byte, n)
-	rand.Read(bytes)
-	for i, b := range bytes {
-		bytes[i] = alphanum[b%byte(len(alphanum))]
-	}
-	return prefix + string(bytes)
+type Service struct {
+	service.BasicService
+
+	srv  *gubernator.Server
+	conf Config
+}
+
+func (s *Service) Start(ctx context.Context) error {
+	var err error
+
+	s.srv, err = gubernator.NewServer(gubernator.ServerConfig{
+		Picker:     gubernator.NewConsistantHash(nil),
+		PeerSyncer: sync.NewEtcdSync(service.Etcd()),
+		Metrics:    metrics.NewStatsdMetrics(metrics.StatsdConfig{}),
+	})
+	return err
+}
+
+func (s *Service) Stop() error {
+	s.srv.Stop()
+	return nil
 }
 
 func main() {
-	switch os.Args[1] {
-	case "server":
-		server(os.Args[2])
-	case "client":
-		clientCLI(StringToSlice(os.Args[2]))
-	}
-}
-
-func clientCLI(peers []string) {
-	client, err := gubernator.NewClient("test", peers)
-	if err != nil {
-		fmt.Printf("error: %s\n", err)
-		os.Exit(1)
-	}
-
-	for {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
-		_, err := client.GetRateLimit(ctx, &gubernator.Request{
-			Descriptors: map[string]string{
-				"account": randomString(10, "ID-"),
-			},
-			Limit:    10,
-			Duration: time.Second * 5,
-			Hits:     1,
-		})
-
-		if err != nil {
-			fmt.Printf("error: %s\n", err)
-			os.Exit(1)
-		}
-		cancel()
-		//count++
-	}
-
-	//fmt.Printf("Code: %d\n", resp.GetOverallCode())
-}
-
-func server(address string) {
-	// Create a new server
-	server, err := gubernator.NewServer(address)
-	if err != nil {
-		fmt.Printf("server: %s\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("Listening: %s....\n", address)
-	server.Run()
+	var svc Service
+	service.Run(&svc.conf, &svc, service.WithName("gubernator"))
 }

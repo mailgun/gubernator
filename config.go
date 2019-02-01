@@ -6,7 +6,7 @@ type UpdateFunc func(*PeerConfig)
 
 // Syncs configs and peer listings between peers
 type PeerSyncer interface {
-	OnUpdate(UpdateFunc)
+	RegisterOnUpdate(UpdateFunc)
 	Start(string) error
 	Stop()
 }
@@ -60,7 +60,7 @@ func (sc *LocalPeerSyncer) Update(config PeerConfig) {
 	}
 }
 
-func (sc *LocalPeerSyncer) OnUpdate(cb UpdateFunc) {
+func (sc *LocalPeerSyncer) RegisterOnUpdate(cb UpdateFunc) {
 	sc.callbacks = append(sc.callbacks, cb)
 }
 

@@ -50,7 +50,7 @@ func NewServer(conf ServerConfig) (*Server, error) {
 	pb.RegisterConfigServiceServer(server, &s)
 
 	// Register our peer update callback
-	conf.PeerSyncer.OnUpdate(s.updatePeers)
+	conf.PeerSyncer.RegisterOnUpdate(s.updatePeers)
 
 	// Register cache stats with out metrics collector
 	conf.Metrics.RegisterCacheStats(s.cache)

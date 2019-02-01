@@ -47,7 +47,7 @@ func NewServer(conf ServerConfig) (*Server, error) {
 
 	// Register our server with GRPC
 	pb.RegisterRateLimitServiceServer(server, &s)
-	pb.RegisterConfigServerServer(server, &s)
+	pb.RegisterConfigServiceServer(server, &s)
 
 	// Register our peer update callback
 	conf.PeerSyncer.OnUpdate(s.updatePeers)
@@ -201,6 +201,8 @@ func (s *Server) applyAlgorithm(entry *pb.RateLimitKeyRequest_Entry) (*pb.Descri
 	switch entry.RateLimitConfig.Algorithm {
 	case pb.RateLimitConfig_TOKEN_BUCKET:
 		return tokenBucket(s.cache, entry)
+	case pb.RateLimitConfig_LEAKY_BUCKET:
+		return leakyBucket(s.cache, entry)
 	}
 	return nil, errors.Errorf("invalid rate limit algorithm '%d'", entry.RateLimitConfig.Algorithm)
 }

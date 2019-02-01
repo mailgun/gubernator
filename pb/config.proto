@@ -6,7 +6,7 @@ option cc_generic_services = true;
 
 package pb.gubernator;
 
-service ConfigServer {
+service ConfigService {
     // TODO: Add a test for this method
     // Given a rate limit descriptor return a descriptor status
     rpc GetPeers (GetPeersRequest) returns (GetPeersResponse) {}
@@ -16,7 +16,7 @@ service ConfigServer {
     // limit and can't define it in the request
 }
 
-message GetPeersRequest { }
+message GetPeersRequest {}
 
 message GetPeersResponse {
     repeated string peers = 1;

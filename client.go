@@ -22,7 +22,6 @@ const (
 )
 
 // A thin client over the GetRateLimit() GRPC call.
-// TODO: Will batch requests for performance, once peer.PeerClient supports it
 type Client struct {
 	client *PeerClient
 	domain string

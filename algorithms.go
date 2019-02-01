@@ -65,14 +65,13 @@ func tokenBucket(c cache.Cache, entry *pb.RateLimitKeyRequest_Entry) (*pb.Descri
 // Implements leaky bucket algorithm for rate limiting https://en.wikipedia.org/wiki/Leaky_bucket
 func leakyBucket(c cache.Cache, entry *pb.RateLimitKeyRequest_Entry) (*pb.DescriptorStatus, error) {
 	type LeakyBucket struct {
-		CurrentLimit   int64
-		LimitRemaining int64
-		TimeStamp      int64
+		RateLimitConfig pb.RateLimitConfig
+		LimitRemaining  int64
+		TimeStamp       int64
 	}
 
 	now := cache.MillisecondNow()
 	key := string(entry.Key)
-	rate := entry.RateLimitConfig.Duration / entry.RateLimitConfig.Limit
 
 	item, ok := c.Get(key)
 	if ok {
@@ -81,18 +80,20 @@ func leakyBucket(c cache.Cache, entry *pb.RateLimitKeyRequest_Entry) (*pb.Descri
 			return nil, errors.New("incorrect algorithm; don't change algorithms on subsequent requests")
 		}
 
+		rate := bucket.RateLimitConfig.Duration / entry.RateLimitConfig.Limit
+
 		// Calculate how much leaked out of the bucket since the last hit
 		elapsed := now - bucket.TimeStamp
-		leak := int64(elapsed * rate)
+		leak := int64(elapsed / rate)
 
 		bucket.LimitRemaining += leak
-		if bucket.LimitRemaining < 0 {
-			bucket.LimitRemaining = 0
+		if bucket.LimitRemaining > bucket.RateLimitConfig.Limit {
+			bucket.LimitRemaining = bucket.RateLimitConfig.Limit
 		}
 
 		bucket.TimeStamp = now
 		status := &pb.DescriptorStatus{
-			CurrentLimit:   bucket.CurrentLimit,
+			CurrentLimit:   bucket.RateLimitConfig.Limit,
 			LimitRemaining: bucket.LimitRemaining,
 			Status:         pb.DescriptorStatus_OK,
 		}
@@ -124,7 +125,11 @@ func leakyBucket(c cache.Cache, entry *pb.RateLimitKeyRequest_Entry) (*pb.Descri
 	}
 
 	// Create a new leaky bucket
-	bucket := LeakyBucket{}
+	bucket := LeakyBucket{
+		LimitRemaining:  entry.RateLimitConfig.Limit - entry.Hits,
+		RateLimitConfig: *entry.RateLimitConfig,
+		TimeStamp:       now,
+	}
 
 	// Kind of a weird corner case, but the client could be dumb
 	if entry.Hits > entry.RateLimitConfig.Limit {

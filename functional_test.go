@@ -20,7 +20,7 @@ var servers []*gubernator.Server
 func startCluster() error {
 	syncer := gubernator.LocalPeerSyncer{}
 
-	for i := 0; i < 6; i++ {
+	for i := 0; i < 5; i++ {
 		srv, err := gubernator.NewServer(gubernator.ServerConfig{
 			Picker:     gubernator.NewConsistantHash(nil),
 			PeerSyncer: &syncer,
@@ -144,13 +144,71 @@ func TestTokenBucket(t *testing.T) {
 	}
 }
 
-/*func TestLeakyBucket(t *testing.T) {
-	gubernator.LeakyBucketAlgo(nil, &pb.RateLimitKeyRequest_Entry{
-		Hits: 1,
-		RateLimitConfig: &pb.RateLimitConfig{
-			Limit:     10,
-			Duration:  1000,
-			Algorithm: pb.RateLimitConfig_LEAKY_BUCKET,
+// TODO: This test is very time (clock) sensitive, We could ignore the number remaining and increase the limit duration
+func TestLeakyBucket(t *testing.T) {
+	client, errs := gubernator.NewClient("test_leaky_bucket", peers)
+	require.Nil(t, errs)
+
+	tests := []struct {
+		Hits      int64
+		Remaining int64
+		Status    gubernator.Status
+		Sleep     time.Duration
+	}{
+		{
+			Hits:      5,
+			Remaining: 0,
+			Status:    gubernator.UnderLimit,
+			Sleep:     time.Duration(0),
 		},
-	})
-}*/
+		{
+			Hits:      1,
+			Remaining: 0,
+			Status:    gubernator.OverLimit,
+			Sleep:     time.Duration(time.Millisecond * 10),
+		},
+		{
+			Hits:      1,
+			Remaining: 0,
+			Status:    gubernator.UnderLimit,
+			Sleep:     time.Duration(time.Millisecond * 20),
+		},
+		{
+			Hits:      1,
+			Remaining: 1,
+			Status:    gubernator.UnderLimit,
+			Sleep:     time.Duration(0),
+		},
+	}
+
+	for _, test := range tests {
+		resp, err := client.GetRateLimit(context.Background(), &gubernator.Request{
+			Descriptors: map[string]string{
+				"account": "1234",
+			},
+			Algorithm: gubernator.LeakyBucket,
+			Duration:  time.Millisecond * 50,
+			Hits:      test.Hits,
+			Limit:     5,
+		})
+		require.Nil(t, err)
+
+		assert.Equal(t, test.Status, resp.Status)
+		assert.Equal(t, test.Remaining, resp.LimitRemaining)
+		assert.Equal(t, int64(5), resp.CurrentLimit)
+		assert.False(t, resp.ResetTime.IsZero())
+		time.Sleep(test.Sleep)
+	}
+}
+
+func TestServer_GetPeers(t *testing.T) {
+	client := gubernator.NewPeerClient(peers[0])
+
+	resp, err := client.GetPeers(context.Background())
+	require.Nil(t, err)
+
+	assert.Equal(t, 5, len(resp.Peers))
+	for _, peer := range resp.Peers {
+		assert.True(t, len(peer) != 0)
+	}
+}

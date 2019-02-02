@@ -2,27 +2,31 @@ package sync
 
 import (
 	"context"
-	"fmt"
+	"time"
+
 	etcd "github.com/coreos/etcd/clientv3"
 	"github.com/mailgun/gubernator"
 	"github.com/mailgun/holster"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"time"
 )
 
 const (
-	etcdTimeout    = time.Second * 30
+	etcdTimeout    = time.Second * 10
 	backOffTimeout = time.Second * 5
 	leaseTTL       = 30
+	rootKey        = "/gubernator/peers/"
 )
 
 type EtcdSync struct {
-	callBack gubernator.UpdateFunc
-	wg       holster.WaitGroup
-	ctx      context.Context
-	log      *logrus.Entry
-	client   *etcd.Client
+	callBack  gubernator.UpdateFunc
+	peers     map[string]struct{}
+	wg        holster.WaitGroup
+	ctx       context.Context
+	watchChan etcd.WatchChan
+	log       *logrus.Entry
+	client    *etcd.Client
+	watcher   etcd.Watcher
 }
 
 func NewEtcdSync(client *etcd.Client) *EtcdSync {
@@ -46,67 +50,113 @@ func (e *EtcdSync) Start(name string) error {
 	return nil
 }
 
-func (e *EtcdSync) watch() error {
-	var key = "/gubernator/peers"
+func (e *EtcdSync) watchPeers() error {
+	var revision int64
 
-	// TODO: Get the most recent list of peers
-	afterIdx := 0
+	// Update our list of peers
+	if err := e.collectPeers(&revision); err != nil {
+		return err
+	}
 
-	watcher := etcd.NewWatcher(e.client)
-	defer watcher.Close()
+	// Cancel any previous watches
+	if e.watcher != nil {
+		e.watcher.Close()
+	}
 
-	var watchChan etcd.WatchChan
+	e.watcher = etcd.NewWatcher(e.client)
+
 	ready := make(chan struct{})
 	go func() {
-		watchChan = watcher.Watch(etcd.WithRequireLeader(e.ctx), key,
-			etcd.WithRev(int64(afterIdx)), etcd.WithPrefix())
+		e.watchChan = e.watcher.Watch(etcd.WithRequireLeader(e.ctx), rootKey,
+			etcd.WithRev(revision), etcd.WithPrefix())
 		close(ready)
 	}()
 
 	select {
 	case <-ready:
-		e.log.Infof("begin watching: etcd revision %d", afterIdx)
-	case <-time.After(time.Second * 10):
+		e.log.Infof("watching for peer changes @ ETCD revision %d", revision)
+	case <-time.After(etcdTimeout):
 		return errors.New("timed out while waiting for watcher.Watch() to start")
 	}
+	return nil
 
-	for response := range watchChan {
-		if response.Canceled {
-			e.log.Infof("graceful watch shutdown")
-			return nil
-		}
-		if err := response.Err(); err != nil {
-			e.log.Errorf("watch error: %v", err)
-			return err
-		}
+}
 
-		// TODO: When peers change, get a full peer listing? (might be too much overhead)
-		/*for _, event := range response.Events {
-			change, err := n.parseChange(event)
-			if err != nil {
-				log.Warningf("ignore '%s', error: %s", eventToString(event), err)
-				continue
-			}
-			if change != nil {
-				log.Infof("%v", change)
+func (e *EtcdSync) collectPeers(revision *int64) error {
+	ctx, cancel := context.WithTimeout(e.ctx, etcdTimeout)
+	defer cancel()
+
+	resp, err := e.client.Get(ctx, rootKey, etcd.WithPrefix())
+	if err != nil {
+		return errors.Wrapf(err, "while fetching peer listing from '%s'", rootKey)
+	}
+
+	// Collect all the peers
+	for _, v := range resp.Kvs {
+		e.peers[string(v.Value)] = struct{}{}
+	}
+
+	e.callOnUpdate()
+	return nil
+}
+
+func (e *EtcdSync) watch() error {
+	// Initialize watcher
+	if err := e.watchPeers(); err != nil {
+		return errors.Wrap(err, "while attempting to start watch")
+	}
+
+	e.wg.Until(func(done chan struct{}) bool {
+		if e.watchChan == nil {
+			if err := e.watchPeers(); err != nil {
+				e.log.WithError(err).
+					Error("while attempting to restart watch")
 				select {
-				case changes <- change:
-				case <-cancelC:
-					return nil
+				case <-time.After(backOffTimeout):
+					return true
+				case <-done:
+					return false
 				}
 			}
-		}*/
-	}
+		}
+
+		for response := range e.watchChan {
+			if response.Canceled {
+				e.log.Infof("graceful watch shutdown")
+				return false
+			}
+
+			if err := response.Err(); err != nil {
+				e.log.Errorf("watch error: %v", err)
+				e.watchChan = nil
+				return true
+			}
+
+			for _, event := range response.Events {
+				switch event.Type {
+				case etcd.EventTypePut:
+					e.log.Debug("new peer [%s]", string(event.Kv.Value))
+					e.peers[string(event.Kv.Value)] = struct{}{}
+				case etcd.EventTypeDelete:
+					e.log.Debug("removed peer [%s]", string(event.Kv.Value))
+					delete(e.peers, string(event.Kv.Value))
+				}
+				e.callOnUpdate()
+			}
+		}
+		return true
+	})
 	return nil
 }
 
 func (e *EtcdSync) register(name string) error {
-	key := fmt.Sprintf("/gubernator/peers/%s", name)
+	instanceKey := rootKey + name
+
 	var keepAlive <-chan *etcd.LeaseKeepAliveResponse
 	var lease *etcd.LeaseGrantResponse
 
 	register := func() error {
-		ctx, cancel := context.WithTimeout(context.Background(), etcdTimeout)
+		ctx, cancel := context.WithTimeout(e.ctx, etcdTimeout)
 		defer cancel()
 		var err error
 
@@ -115,7 +165,7 @@ func (e *EtcdSync) register(name string) error {
 			return errors.Wrapf(err, "during grant lease")
 		}
 
-		_, err = e.client.Put(ctx, key, "", etcd.WithLease(lease.ID))
+		_, err = e.client.Put(ctx, instanceKey, name, etcd.WithLease(lease.ID))
 		if err != nil {
 			return errors.Wrap(err, "during put")
 		}
@@ -138,7 +188,7 @@ func (e *EtcdSync) register(name string) error {
 		// If we have lost our keep alive, register again
 		if keepAlive == nil {
 			if err = register(); err != nil {
-				e.log.WithField("err", err).
+				e.log.WithError(err).
 					Error("while attempting to re-register peer")
 				select {
 				case <-time.After(backOffTimeout):
@@ -172,13 +222,13 @@ func (e *EtcdSync) register(name string) error {
 			lastKeepAlive = time.Now()
 		case <-done:
 			ctx, cancel := context.WithTimeout(context.Background(), etcdTimeout)
-			if _, err := e.client.Delete(ctx, key); err != nil {
-				e.log.WithField("err", err).
+			if _, err := e.client.Delete(ctx, instanceKey); err != nil {
+				e.log.WithError(err).
 					Warn("during etcd delete")
 			}
 
 			if _, err := e.client.Revoke(ctx, lease.ID); err != nil {
-				e.log.WithField("err", err).
+				e.log.WithError(err).
 					Warn("during lease revoke ")
 			}
 			cancel()
@@ -191,10 +241,20 @@ func (e *EtcdSync) register(name string) error {
 }
 
 func (e *EtcdSync) Stop() {
-	e.wg.Stop()
 	e.ctx.Done()
+	e.wg.Stop()
 }
 
 func (e *EtcdSync) RegisterOnUpdate(fn gubernator.UpdateFunc) {
 	e.callBack = fn
+}
+
+func (e *EtcdSync) callOnUpdate() {
+	conf := gubernator.PeerConfig{}
+
+	for k := range e.peers {
+		conf.Peers = append(conf.Peers, k)
+	}
+
+	e.callBack(&conf)
 }

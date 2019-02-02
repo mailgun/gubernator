@@ -2,7 +2,7 @@ package cache
 
 // Interface accepts any cache which returns cache stats
 type CacheStats interface {
-	Stats() Stats
+	Stats(bool) Stats
 }
 
 // So algorithms can interface with the cache

@@ -130,10 +130,12 @@ func (c *LRUCache) Size() int {
 }
 
 // Returns stats about the current state of the cache
-func (c *LRUCache) Stats() Stats {
-	defer func() {
-		c.stats = Stats{}
-	}()
+func (c *LRUCache) Stats(clear bool) Stats {
+	if clear {
+		defer func() {
+			c.stats = Stats{}
+		}()
+	}
 	c.stats.Size = int64(len(c.cache))
 	return c.stats
 }

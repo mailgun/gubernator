@@ -97,7 +97,7 @@ func (sd *StatsdMetrics) Start() error {
 
 				// Emit stats about our cache
 				if sd.cacheStats != nil {
-					stats := sd.cacheStats.Stats()
+					stats := sd.cacheStats.Stats(true)
 					sd.client.Incr("cache.size", stats.Size)
 					sd.client.Incr("cache.hit", stats.Hit)
 					sd.client.Incr("cache.miss", stats.Miss)
@@ -117,14 +117,6 @@ func (sd *StatsdMetrics) Stop() {
 	if sd.done != nil {
 		close(sd.done)
 	}
-}
-
-func (sd *StatsdMetrics) RegisterCacheStats(c cache.CacheStats) {
-	sd.cacheStats = c
-}
-
-func (sd *StatsdMetrics) TagRPC(ctx context.Context, tagInfo *stats.RPCTagInfo) context.Context {
-	return ContextWithStats(ctx, &RequestStats{Method: tagInfo.FullMethodName})
 }
 
 func (sd *StatsdMetrics) HandleRPC(ctx context.Context, s stats.RPCStats) {
@@ -150,8 +142,14 @@ func (sd *StatsdMetrics) HandleRPC(ctx context.Context, s stats.RPCStats) {
 	}
 }
 
-func (sd *StatsdMetrics) GRPCStatsHandler() stats.Handler { return sd }
-func (sd *StatsdMetrics) TagConn(ctx context.Context, tagInfo *stats.ConnTagInfo) context.Context {
+func (sd *StatsdMetrics) GRPCStatsHandler() stats.Handler                   { return sd }
+func (sd *StatsdMetrics) HandleConn(ctx context.Context, s stats.ConnStats) {}
+func (sd *StatsdMetrics) RegisterCacheStats(c cache.CacheStats)             { sd.cacheStats = c }
+
+func (sd *StatsdMetrics) TagConn(ctx context.Context, _ *stats.ConnTagInfo) context.Context {
 	return ctx
 }
-func (sd *StatsdMetrics) HandleConn(ctx context.Context, s stats.ConnStats) {}
+
+func (sd *StatsdMetrics) TagRPC(ctx context.Context, tagInfo *stats.RPCTagInfo) context.Context {
+	return ContextWithStats(ctx, &RequestStats{Method: tagInfo.FullMethodName})
+}

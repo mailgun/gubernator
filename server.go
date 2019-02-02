@@ -75,16 +75,6 @@ func (s *Server) Run() error {
 		return errors.Wrap(err, "failed to sync configs with other peers")
 	}
 
-	/*
-		// TODO: Look into http/grpc server implementation for /ping
-		httpMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if isgRPC(r) {
-			app.gRPCServer.ServeHTTP(w, r)
-		} else {
-			app.rMux.ServeHTTP(w, r)
-		}
-	*/
-
 	return s.grpc.Serve(s.listener)
 }
 
@@ -237,8 +227,13 @@ func (s *Server) updatePeers(conf *PeerConfig) {
 
 func generateKey(b *bytebufferpool.ByteBuffer, domain string, descriptor *pb.Descriptor) error {
 
-	// TODO: Check provided Domain
-	// TODO: Check provided at least one entry
+	if domain == "" {
+		return errors.New("must provide a 'domain'; cannot be empty")
+	}
+
+	if len(descriptor.Values) == 0 {
+		return errors.New("must provide at least one descriptor value; cannot be empty")
+	}
 
 	b.Reset()
 	b.WriteString(domain)

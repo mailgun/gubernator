@@ -1,6 +1,9 @@
 package gubernator
 
-import "github.com/mailgun/gubernator/metrics"
+import (
+	"github.com/mailgun/gubernator/cache"
+	"github.com/mailgun/gubernator/metrics"
+)
 
 type UpdateFunc func(*PeerConfig)
 
@@ -27,14 +30,8 @@ type ServerConfig struct {
 	// If unset, defaults to `ListenAddress`.
 	AdvertiseAddress string
 
-	// Max size of the internal cache, The actual size of the cache could change during normal
-	// operation, but the cache will never exceed this number of rate limits in the cache.
-	//
-	// Cache Memory Usage
-	// The size of the struct stored in the cache is 40 bytes, not including any additional metadata
-	// that might be attached. The key which is formatted `domain_<key_value>_<key_value>` will also
-	// effect the cache size.
-	MaxCacheSize int
+	// The cache implementation
+	Cache cache.Cache
 
 	// This is the implementation of peer syncer this server will use to keep all the peer
 	// configurations in sync across the cluster.

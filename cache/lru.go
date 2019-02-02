@@ -20,18 +20,34 @@ package cache
 
 import (
 	"container/list"
+	"github.com/mailgun/holster"
+	"sync"
 	"time"
 )
 
+type LRUCacheConfig struct {
+	// Max size of the internal cache, The actual size of the cache could change during normal
+	// operation, but the cache will never exceed this number of rate limits in the cache.
+	// Default: 50,000
+	//
+	// Cache Memory Usage
+	// The size of the struct stored in the cache is 40 bytes, not including any additional metadata
+	// that might be attached. The key which is formatted `domain_<key_value>_<key_value>` will also
+	// effect the cache size.
+	MaxCacheSize int
+
+	// The initial cache size. If not provided defaults to 30% of the max cache size.
+	InitialCacheSize int
+}
+
 // Cache is an thread unsafe LRU cache that supports expiration
 type LRUCache struct {
-	// MaxEntries is the maximum number of cache entries before
-	// an item is evicted. Zero means no limit.
-	MaxEntries int
-
-	stats Stats
-	ll    *list.List
-	cache map[interface{}]*list.Element
+	cache     map[interface{}]*list.Element
+	wg        holster.WaitGroup
+	mutex     sync.Mutex
+	ll        *list.List
+	stats     Stats
+	cacheSize int
 }
 
 type cacheRecord struct {
@@ -41,14 +57,51 @@ type cacheRecord struct {
 }
 
 // New creates a new Cache.
-// If maxEntries is zero, the cache has no limit and it's assumed
-// that eviction is done by the caller.
-func NewLRUCache(maxEntries int) *LRUCache {
+func NewLRUCache(conf LRUCacheConfig) *LRUCache {
+	holster.SetDefault(&conf.MaxCacheSize, 50000)
+	// If not provided init cache with 30 percent of the max cache size
+	holster.SetDefault(&conf.InitialCacheSize, int(float32(conf.MaxCacheSize)*0.30))
+
 	return &LRUCache{
-		MaxEntries: maxEntries,
-		ll:         list.New(),
-		cache:      make(map[interface{}]*list.Element),
+		cacheSize: conf.InitialCacheSize,
+		ll:        list.New(),
+		cache:     make(map[interface{}]*list.Element),
 	}
+}
+
+func (c *LRUCache) Start() error {
+	// TODO: Allow resizing the cache on the fly depending on the number of cache
+	// TODO: hits, so we don't use the MAX cache all the time
+
+	tick := time.NewTicker(time.Second * 5)
+	c.wg.Until(func(done chan struct{}) bool {
+		select {
+		case <-tick.C:
+			c.mutex.Lock()
+			// TODO: Perhaps use number of new records in the cache to determine needed size
+			//stats := s.conf.cache.Stats(false)
+			//stats.
+			c.mutex.Unlock()
+			return true
+		case <-done:
+			tick.Stop()
+			return false
+		}
+		return true
+	})
+	return nil
+}
+
+func (c *LRUCache) Stop() {
+	c.wg.Stop()
+}
+
+func (c *LRUCache) Lock() {
+	c.mutex.Lock()
+}
+
+func (c *LRUCache) Unlock() {
+	c.mutex.Unlock()
 }
 
 // Adds a value to the cache with an expiration
@@ -72,7 +125,7 @@ func (c *LRUCache) addRecord(record *cacheRecord) bool {
 
 	ele := c.ll.PushFront(record)
 	c.cache[record.key] = ele
-	if c.MaxEntries != 0 && c.ll.Len() > c.MaxEntries {
+	if c.cacheSize != 0 && c.ll.Len() > c.cacheSize {
 		c.removeOldest()
 	}
 	return false

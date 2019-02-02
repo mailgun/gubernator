@@ -2,15 +2,13 @@ package gubernator
 
 import (
 	"context"
-	"net"
-	"sync"
-
-	"github.com/mailgun/gubernator/cache"
 	"github.com/mailgun/gubernator/pb"
 	"github.com/mailgun/holster"
 	"github.com/pkg/errors"
 	"github.com/valyala/bytebufferpool"
 	"google.golang.org/grpc"
+	"net"
+	"sync"
 )
 
 const (
@@ -18,13 +16,12 @@ const (
 )
 
 type Server struct {
-	listener   net.Listener
-	grpc       *grpc.Server
-	cache      *cache.LRUCache
-	cacheMutex sync.Mutex
-	peerMutex  sync.RWMutex
-	client     *PeerClient
-	conf       ServerConfig
+	wg        holster.WaitGroup
+	conf      ServerConfig
+	listener  net.Listener
+	server    *grpc.Server
+	peerMutex sync.RWMutex
+	client    *PeerClient
 }
 
 // New creates a server instance.
@@ -39,9 +36,8 @@ func NewServer(conf ServerConfig) (*Server, error) {
 		grpc.StatsHandler(conf.Metrics.GRPCStatsHandler()))
 
 	s := Server{
-		cache:    cache.NewLRUCache(conf.MaxCacheSize),
 		listener: listener,
-		grpc:     server,
+		server:   server,
 		conf:     conf,
 	}
 
@@ -53,7 +49,7 @@ func NewServer(conf ServerConfig) (*Server, error) {
 	conf.PeerSyncer.RegisterOnUpdate(s.updatePeers)
 
 	// Register cache stats with out metrics collector
-	conf.Metrics.RegisterCacheStats(s.cache)
+	conf.Metrics.RegisterCacheStats(s.conf.Cache)
 
 	// Advertise address is our listen address if not specified
 	holster.SetDefault(&conf.AdvertiseAddress, s.Address())
@@ -63,8 +59,11 @@ func NewServer(conf ServerConfig) (*Server, error) {
 
 // Runs the gRPC server; blocks until server stops
 func (s *Server) Run() error {
-	// TODO: Allow resizing the cache on the fly depending on the number of cache
-	// TODO: hits, so we don't use the MAX cache all the time
+
+	// Start the cache
+	if err := s.conf.Cache.Start(); err != nil {
+		return errors.Wrap(err, "failed to start cache")
+	}
 
 	// Start the metrics collector
 	if err := s.conf.Metrics.Start(); err != nil {
@@ -75,11 +74,11 @@ func (s *Server) Run() error {
 		return errors.Wrap(err, "failed to sync configs with other peers")
 	}
 
-	return s.grpc.Serve(s.listener)
+	return s.server.Serve(s.listener)
 }
 
 func (s *Server) Stop() {
-	s.grpc.Stop()
+	s.server.Stop()
 	s.conf.PeerSyncer.Stop()
 	s.conf.Metrics.Stop()
 }
@@ -185,14 +184,14 @@ func (s *Server) applyAlgorithm(entry *pb.RateLimitKeyRequest_Entry) (*pb.Descri
 		return nil, errors.New("required field 'RateLimitConfig' missing from 'RateLimitKeyRequest_Entry'")
 	}
 
-	s.cacheMutex.Lock()
-	defer s.cacheMutex.Unlock()
+	s.conf.Cache.Lock()
+	defer s.conf.Cache.Unlock()
 
 	switch entry.RateLimitConfig.Algorithm {
 	case pb.RateLimitConfig_TOKEN_BUCKET:
-		return tokenBucket(s.cache, entry)
+		return tokenBucket(s.conf.Cache, entry)
 	case pb.RateLimitConfig_LEAKY_BUCKET:
-		return leakyBucket(s.cache, entry)
+		return leakyBucket(s.conf.Cache, entry)
 	}
 	return nil, errors.Errorf("invalid rate limit algorithm '%d'", entry.RateLimitConfig.Algorithm)
 }

@@ -88,7 +88,7 @@ func (sd *StatsdMetrics) Start() error {
 			case <-tick.C:
 				// Emit stats about GRPC method calls
 				for k, v := range methods {
-					method := k[strings.LastIndex(k, "|"):]
+					method := k[strings.LastIndex(k, "/"):]
 					sd.client.PrecisionTiming(fmt.Sprintf("api.%s.total", method), v.Duration)
 					sd.client.Incr(fmt.Sprintf("api.%s.total", method), v.Called)
 					sd.client.Incr(fmt.Sprintf("api.%s.failed", method), v.Failed)

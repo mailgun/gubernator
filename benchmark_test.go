@@ -59,6 +59,21 @@ func BenchmarkServer_GetRateLimit(b *testing.B) {
 		}
 	})
 }
+func BenchmarkServer_NoOp(b *testing.B) {
+	client := gubernator.NewPeerClient(peers[0])
+
+	//dur := time.Nanosecond * 117728
+	//total := time.Second / dur
+	//fmt.Printf("Total: %d\n", total)
+
+	b.Run("NoOp", func(b *testing.B) {
+		for n := 0; n < b.N; n++ {
+			_, err := client.NoOp(context.Background(), &pb.NoOpRequest{})
+			if err != nil {
+				b.Errorf("client.NoOp() err: %s", err)
+			}
+		}
+	})
+}
 
 // TODO: Benchmark with fanout to simulate thundering heard of simultaneous requests from many clients
-// TODO: Perhaps by pass GRPC so we can profile the entire chain

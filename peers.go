@@ -69,6 +69,21 @@ func (c *PeerClient) GetPeers(ctx context.Context) (*pb.GetPeersResponse, error)
 	return resp, err
 }
 
+// This method is used purely for benchmarking
+func (c *PeerClient) NoOp(ctx context.Context, req *pb.NoOpRequest) (*pb.NoOpResponse, error) {
+	if c.conn == nil {
+		if err := c.dialPeer(); err != nil {
+			return nil, err
+		}
+	}
+	client := pb.NewConfigServiceClient(c.conn)
+	resp, err := client.NoOp(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return resp, err
+}
+
 func (c *PeerClient) GetRateLimitByKey(ctx context.Context, r *pb.RateLimitKeyRequest_Entry) (*pb.DescriptorStatus, error) {
 	if c.conn == nil {
 		if err := c.dialPeer(); err != nil {

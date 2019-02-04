@@ -175,6 +175,11 @@ func (s *Server) GetPeers(ctx context.Context, in *pb.GetPeersRequest) (*pb.GetP
 	}, nil
 }
 
+// Used for GRPC Benchmarking
+func (s *Server) NoOp(ctx context.Context, in *pb.NoOpRequest) (*pb.NoOpResponse, error) {
+	return &pb.NoOpResponse{}, nil
+}
+
 func (s *Server) applyAlgorithm(entry *pb.RateLimitKeyRequest_Entry) (*pb.DescriptorStatus, error) {
 	if entry.Hits == 0 {
 		entry.Hits = 1

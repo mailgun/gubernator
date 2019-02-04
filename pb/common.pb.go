@@ -13,6 +13,8 @@ It has these top-level messages:
 	RateLimitConfig
 	GetPeersRequest
 	GetPeersResponse
+	NoOpRequest
+	NoOpResponse
 	RateLimitRequest
 	RateLimitResponse
 	RateLimitKeyRequest

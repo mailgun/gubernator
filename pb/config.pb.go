@@ -41,9 +41,27 @@ func (m *GetPeersResponse) GetPeers() []string {
 	return nil
 }
 
+type NoOpRequest struct {
+}
+
+func (m *NoOpRequest) Reset()                    { *m = NoOpRequest{} }
+func (m *NoOpRequest) String() string            { return proto.CompactTextString(m) }
+func (*NoOpRequest) ProtoMessage()               {}
+func (*NoOpRequest) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{2} }
+
+type NoOpResponse struct {
+}
+
+func (m *NoOpResponse) Reset()                    { *m = NoOpResponse{} }
+func (m *NoOpResponse) String() string            { return proto.CompactTextString(m) }
+func (*NoOpResponse) ProtoMessage()               {}
+func (*NoOpResponse) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{3} }
+
 func init() {
 	proto.RegisterType((*GetPeersRequest)(nil), "pb.gubernator.GetPeersRequest")
 	proto.RegisterType((*GetPeersResponse)(nil), "pb.gubernator.GetPeersResponse")
+	proto.RegisterType((*NoOpRequest)(nil), "pb.gubernator.NoOpRequest")
+	proto.RegisterType((*NoOpResponse)(nil), "pb.gubernator.NoOpResponse")
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -60,6 +78,8 @@ type ConfigServiceClient interface {
 	// TODO: Add a test for this method
 	// Given a rate limit descriptor return a descriptor status
 	GetPeers(ctx context.Context, in *GetPeersRequest, opts ...grpc.CallOption) (*GetPeersResponse, error)
+	// This method is for benchmark testing only
+	NoOp(ctx context.Context, in *NoOpRequest, opts ...grpc.CallOption) (*NoOpResponse, error)
 }
 
 type configServiceClient struct {
@@ -79,12 +99,23 @@ func (c *configServiceClient) GetPeers(ctx context.Context, in *GetPeersRequest,
 	return out, nil
 }
 
+func (c *configServiceClient) NoOp(ctx context.Context, in *NoOpRequest, opts ...grpc.CallOption) (*NoOpResponse, error) {
+	out := new(NoOpResponse)
+	err := grpc.Invoke(ctx, "/pb.gubernator.ConfigService/NoOp", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // Server API for ConfigService service
 
 type ConfigServiceServer interface {
 	// TODO: Add a test for this method
 	// Given a rate limit descriptor return a descriptor status
 	GetPeers(context.Context, *GetPeersRequest) (*GetPeersResponse, error)
+	// This method is for benchmark testing only
+	NoOp(context.Context, *NoOpRequest) (*NoOpResponse, error)
 }
 
 func RegisterConfigServiceServer(s *grpc.Server, srv ConfigServiceServer) {
@@ -109,6 +140,24 @@ func _ConfigService_GetPeers_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ConfigService_NoOp_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(NoOpRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConfigServiceServer).NoOp(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pb.gubernator.ConfigService/NoOp",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConfigServiceServer).NoOp(ctx, req.(*NoOpRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _ConfigService_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "pb.gubernator.ConfigService",
 	HandlerType: (*ConfigServiceServer)(nil),
@@ -116,6 +165,10 @@ var _ConfigService_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetPeers",
 			Handler:    _ConfigService_GetPeers_Handler,
+		},
+		{
+			MethodName: "NoOp",
+			Handler:    _ConfigService_NoOp_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -125,15 +178,17 @@ var _ConfigService_serviceDesc = grpc.ServiceDesc{
 func init() { proto.RegisterFile("config.proto", fileDescriptor1) }
 
 var fileDescriptor1 = []byte{
-	// 151 bytes of a gzipped FileDescriptorProto
+	// 188 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xe2, 0x49, 0xce, 0xcf, 0x4b,
 	0xcb, 0x4c, 0xd7, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0xe2, 0x2d, 0x48, 0xd2, 0x4b, 0x2f, 0x4d,
 	0x4a, 0x2d, 0xca, 0x4b, 0x2c, 0xc9, 0x2f, 0x52, 0x12, 0xe4, 0xe2, 0x77, 0x4f, 0x2d, 0x09, 0x48,
 	0x4d, 0x2d, 0x2a, 0x0e, 0x4a, 0x2d, 0x2c, 0x4d, 0x2d, 0x2e, 0x51, 0xd2, 0xe0, 0x12, 0x40, 0x08,
 	0x15, 0x17, 0xe4, 0xe7, 0x15, 0xa7, 0x0a, 0x89, 0x70, 0xb1, 0x16, 0x80, 0x04, 0x24, 0x18, 0x15,
-	0x98, 0x35, 0x38, 0x83, 0x20, 0x1c, 0xa3, 0x38, 0x2e, 0x5e, 0x67, 0xb0, 0xd9, 0xc1, 0xa9, 0x45,
-	0x65, 0x99, 0xc9, 0xa9, 0x42, 0xbe, 0x5c, 0x1c, 0x30, 0xad, 0x42, 0x72, 0x7a, 0x28, 0x36, 0xe9,
-	0xa1, 0x59, 0x23, 0x25, 0x8f, 0x53, 0x1e, 0x62, 0xa7, 0x12, 0x83, 0x13, 0x7b, 0x14, 0x53, 0x41,
-	0x52, 0x03, 0x23, 0x63, 0x12, 0x1b, 0xd8, 0xed, 0xc6, 0x80, 0x00, 0x00, 0x00, 0xff, 0xff, 0xb7,
-	0x17, 0x98, 0xb1, 0xcb, 0x00, 0x00, 0x00,
+	0x98, 0x35, 0x38, 0x83, 0x20, 0x1c, 0x25, 0x5e, 0x2e, 0x6e, 0xbf, 0x7c, 0xff, 0x02, 0x98, 0x46,
+	0x3e, 0x2e, 0x1e, 0x08, 0x17, 0xa2, 0xc9, 0x68, 0x21, 0x23, 0x17, 0xaf, 0x33, 0xd8, 0xee, 0xe0,
+	0xd4, 0xa2, 0xb2, 0xcc, 0xe4, 0x54, 0x21, 0x5f, 0x2e, 0x0e, 0x98, 0xd1, 0x42, 0x72, 0x7a, 0x28,
+	0x2e, 0xd1, 0x43, 0x73, 0x86, 0x94, 0x3c, 0x4e, 0x79, 0x88, 0xf1, 0x4a, 0x0c, 0x42, 0x8e, 0x5c,
+	0x2c, 0x20, 0x0b, 0x85, 0xa4, 0xd0, 0x94, 0x22, 0x39, 0x4a, 0x4a, 0x1a, 0xab, 0x1c, 0xcc, 0x08,
+	0x27, 0xf6, 0x28, 0xa6, 0x82, 0xa4, 0x06, 0x46, 0xc6, 0x24, 0x36, 0x70, 0xf0, 0x18, 0x03, 0x02,
+	0x00, 0x00, 0xff, 0xff, 0x2a, 0xdf, 0xff, 0x58, 0x2e, 0x01, 0x00, 0x00,
 }

@@ -78,7 +78,7 @@ func (c *LRUCache) Start() error {
 		select {
 		case <-tick.C:
 			c.mutex.Lock()
-			// TODO: Perhaps use number of new records in the cache to determine needed size
+			// TODO: Perhaps use number of cache misses, as a percent of max cache size to determine needed size
 			//stats := s.conf.cache.Stats(false)
 			//stats.
 			c.mutex.Unlock()

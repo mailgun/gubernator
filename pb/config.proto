@@ -14,6 +14,9 @@ service ConfigService {
     // Maybe add methods to get and set rate limits configs
     // This would be useful for clients that do control the the rate
     // limit and can't define it in the request
+
+    // This method is for benchmark testing only
+    rpc NoOp (NoOpRequest) returns (NoOpResponse) {}
 }
 
 message GetPeersRequest {}
@@ -21,3 +24,6 @@ message GetPeersRequest {}
 message GetPeersResponse {
     repeated string peers = 1;
 }
+
+message NoOpRequest {}
+message NoOpResponse {}

@@ -9,23 +9,24 @@ import (
 	"time"
 )
 
-func randomBytes(n int) []byte {
+func randomString(n int) string {
 	const alphanum = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 	var bytes = make([]byte, n)
 	rand.Read(bytes)
 	for i, b := range bytes {
 		bytes[i] = alphanum[b%byte(len(alphanum))]
 	}
-	return bytes
+	return string(bytes)
 }
 
 func BenchmarkServer_GetRateLimitByKey(b *testing.B) {
-	client := gubernator.NewPeerClient(peers[0])
+	client := gubernator.NewPeerClient(gubernator.RandomPeer(peers))
 
-	b.Run("GetRateLimitByKey", func(b *testing.B) {
+	b.Run("GetPeerRateLimits", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
-			_, err := client.GetRateLimitByKey(context.Background(), &pb.RateLimitKeyRequest_Entry{
-				Key: randomBytes(10),
+			_, err := client.GetPeerRateLimits(context.Background(), &pb.RateLimitRequest{
+				Namespace: "get_peer_rate_limits_benchmark",
+				UniqueKey: randomString(10),
 				RateLimitConfig: &pb.RateLimitConfig{
 					Limit:    10,
 					Duration: 5,
@@ -40,7 +41,7 @@ func BenchmarkServer_GetRateLimitByKey(b *testing.B) {
 }
 
 func BenchmarkServer_GetRateLimit(b *testing.B) {
-	client, err := gubernator.NewClient("domain", peers)
+	client, err := gubernator.NewClient(gubernator.RandomPeer(peers))
 	if err != nil {
 		b.Errorf("NewClient err: %s", err)
 	}
@@ -48,10 +49,11 @@ func BenchmarkServer_GetRateLimit(b *testing.B) {
 	b.Run("GetRateLimit", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
 			_, err := client.GetRateLimit(context.Background(), &gubernator.Request{
-				Descriptors: map[string]string{"key": string(randomBytes(10))},
-				Limit:       10,
-				Duration:    time.Second * 5,
-				Hits:        1,
+				Namespace: "get_rate_limit_benchmark",
+				UniqueKey: randomString(10),
+				Limit:     10,
+				Duration:  time.Second * 5,
+				Hits:      1,
 			})
 			if err != nil {
 				b.Errorf("client.RateLimit() err: %s", err)
@@ -60,7 +62,10 @@ func BenchmarkServer_GetRateLimit(b *testing.B) {
 	})
 }
 func BenchmarkServer_NoOp(b *testing.B) {
-	client := gubernator.NewPeerClient(peers[0])
+	client, err := gubernator.NewClient(gubernator.RandomPeer(peers))
+	if err != nil {
+		b.Errorf("NewClient err: %s", err)
+	}
 
 	//dur := time.Nanosecond * 117728
 	//total := time.Second / dur
@@ -68,8 +73,7 @@ func BenchmarkServer_NoOp(b *testing.B) {
 
 	b.Run("Ping", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
-			_, err := client.Ping(context.Background(), &pb.NoOpRequest{})
-			if err != nil {
+			if err := client.Ping(context.Background()); err != nil {
 				b.Errorf("client.Ping() err: %s", err)
 			}
 		}

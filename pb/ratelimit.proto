@@ -1,5 +1,3 @@
-// NOTE: Inspired by https://github.com/lyft/ratelimit/blob/master/proto/ratelimit/ratelimit.proto
-
 syntax = "proto3";
 
 option go_package = "pb";
@@ -8,79 +6,78 @@ option cc_generic_services = true;
 
 package pb.gubernator;
 
-import "common.proto";
-
 service RateLimitService {
-  // Given a rate limit descriptor return a descriptor status
-  rpc GetRateLimit (RateLimitRequest) returns (RateLimitResponse) {}
+  // Given a list of rate limits return the rates and statuses of each request.
+  rpc GetRateLimits (RateLimitRequestList) returns (RateLimitResponseList) {}
 
-  // Client implementations can use this method if the decriptor key is already known
-  rpc GetRateLimitByKey (RateLimitKeyRequest) returns (RateLimitResponse) {}
+  // This method is for round trip benchmarking and can be used by
+  // the client to determine connectivity to the server
+  rpc Ping (PingRequest) returns (PingResponse) {}
+}
+
+// Must specify at least one RateLimitRequest.
+message RateLimitRequestList {
+  repeated RateLimitRequest rate_limits = 1;
+}
+
+// Responses are in the same order as they appeared in the RateLimitsRequest
+message RateLimitResponseList {
+  repeated RateLimitResponse rate_limits = 1;
 }
 
 message RateLimitRequest {
-  // The domain scopes the request to avoid collisions with other services or applications.
-  string domain = 1;
-  // Rate limit requests must specify at least one descriptor
-  repeated Descriptor descriptors = 2;
-}
+  // The namespace scopes the unique_key to avoid collisions with other services or applications.
+  string namespace = 1;
 
-message RateLimitResponse {
-  // A list of DescriptorStatus messages which matches the length of the descriptor list passed
-  // in the RateLimitRequest. This can be used by the caller to determine which individual
-  // descriptors failed and/or what the currently configured limits are for all of them.
-  repeated DescriptorStatus statuses = 2;
-}
-
-// This is used by Gubernator clients who already have the domain and descriptors and created a hash key
-message RateLimitKeyRequest {
-  message Entry {
-    // The key identifies the specific rate limit the request is for
-    bytes key = 1;
-    // Rate limit requests can optionally specify the number of hits a request adds to the matched limit. If the
-    // value is not set in the message, a request increases the matched limit by 1.
-    int64 hits = 2;
-    // This is the rate limit the requested for this descriptor. If the rate limit doesn't currently exist for
-    // this descriptor it will be created and enforced for subsequent requests
-    RateLimitConfig rate_limit_config = 3;
-  }
-
-  // Requests must specify at least one KeyRequestEntry, but can specify multiple descriptors
-  // to be individually evaluated
-  repeated Entry entries = 1;
-}
-
-// Describes a rate limit
-message Descriptor {
-  // A map of key value pairs that make up the descriptor
-  map<string, string> values = 1;
+  // Uniquely identifies this rate limit within a namespace.
+  string unique_key = 2;
 
   // Rate limit requests optionally specify the number of hits a request adds to the matched limit. If the
   // value is not set, a request increases the matched limit by 1.
-  int64 hits = 2;
+  int64 hits = 3;
 
-  // This is the rate limit the requested for this descriptor. If the rate limit doesn't currently exist for
-  // this descriptor it will be created and enforced for subsequent requests
-  RateLimitConfig rate_limit_config = 3;
+  // This is the rate limit configuration provided by the client. The configuration may change on
+  // subsequent requests, however when this occurs any previous rate limit counts are reset.
+  RateLimitConfig rate_limit_config = 4;
 }
 
-// The return status of a descriptor submitted via RateLimitRequest
-message DescriptorStatus {
-  enum Status {
-    UNKNOWN = 0;
-    OK = 1;
-    OVER_LIMIT = 2;
+// Defines a rate limit duration and requests per duration
+message RateLimitConfig {
+  enum Algorithm {
+    TOKEN_BUCKET = 0;
+    LEAKY_BUCKET = 1;
   }
 
-  // The status of this descriptor.
+  // The number of requests that can occur for the duration of the rate limit
+  int64 limit = 1;
+
+  // The duration of the rate limit in milliseconds
+  // Second = 1000 Milliseconds
+  // Minute = 60000 Milliseconds
+  // Hour = 3600000 Milliseconds
+  int64 duration = 2;
+
+  // The algorithm used to calculate the rate limit
+  Algorithm algorithm = 3;
+}
+
+message RateLimitResponse {
+  enum Status {
+    UNDER_LIMIT = 0;
+    OVER_LIMIT = 1;
+  }
+
+  // The status of the rate limit.
   Status status = 1;
-  // The current limit for the requested rate limit.
+  // The currently configured request limit (Identical to RateLimitRequest.rate_limit_config.limit).
   int64 current_limit = 2;
-  // If Code is not OVER_LIMIT, This is the limit remaining
+  // This is the number of requests remaining before the limit is hit.
   int64 limit_remaining = 3;
-  // This is the time when the rate limit span will be reset as a unix timestamp.
+  // This is the time when the rate limit span will be reset, provided as a unix timestamp in milliseconds.
   int64 reset_time = 4;
   // This is additional metadata that a client might find useful. (IE: Additional headers, corrdinator ownership, etc..)
   map<string, string> metadata = 5;
 }
 
+message PingRequest {}
+message PingResponse {}

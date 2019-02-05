@@ -61,12 +61,12 @@ func (ch *ConsistantHash) GetPeer(host string) *PeerClient {
 }
 
 // Given a key, return the peer that key is assigned too
-func (ch *ConsistantHash) Get(key []byte, peerInfo *PeerClient) error {
+func (ch *ConsistantHash) Get(key string, peerInfo *PeerClient) error {
 	if ch.Size() == 0 {
 		return errors.New("unable to pick a peer; pool is empty")
 	}
 
-	hash := int(ch.hashFunc(key))
+	hash := int(ch.hashFunc([]byte(key)))
 
 	// Binary search for appropriate peer
 	idx := sort.Search(len(ch.peerKeys), func(i int) bool { return ch.peerKeys[i] >= hash })

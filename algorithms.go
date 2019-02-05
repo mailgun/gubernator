@@ -7,8 +7,8 @@ import (
 )
 
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket
-func tokenBucket(c cache.Cache, entry *pb.RateLimitKeyRequest_Entry) (*pb.DescriptorStatus, error) {
-	item, ok := c.Get(string(entry.Key))
+func tokenBucket(c cache.Cache, req *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
+	item, ok := c.Get(req)
 	if ok {
 		// The following semantic allows for requests of more than the limit to be rejected, but subsequent
 		// requests within the same duration that are under the limit to succeed. IE: client attempts to
@@ -16,54 +16,55 @@ func tokenBucket(c cache.Cache, entry *pb.RateLimitKeyRequest_Entry) (*pb.Descri
 		// don't store OVER_LIMIT in the cache the client can retry within the same rate limit duration with
 		// 100 emails and the request will succeed.
 
-		status, ok := item.(*pb.DescriptorStatus)
+		status, ok := item.(*pb.RateLimitResponse)
 		if !ok {
+			// TODO: remove the item from the cache and re-call this function
 			return nil, errors.New("incorrect algorithm; don't change algorithms on subsequent requests")
 		}
 
 		// If we are already at the limit
 		if status.LimitRemaining == 0 {
-			status.Status = pb.DescriptorStatus_OVER_LIMIT
+			status.Status = pb.RateLimitResponse_OVER_LIMIT
 			return status, nil
 		}
 
 		// If requested hits takes the remainder
-		if status.LimitRemaining == entry.Hits {
+		if status.LimitRemaining == req.Hits {
 			status.LimitRemaining = 0
 			return status, nil
 		}
 
 		// If requested is more than available, then return over the limit without updating the cache.
-		if entry.Hits > status.LimitRemaining {
+		if req.Hits > status.LimitRemaining {
 			retStatus := *status
-			retStatus.Status = pb.DescriptorStatus_OVER_LIMIT
+			retStatus.Status = pb.RateLimitResponse_OVER_LIMIT
 			return &retStatus, nil
 		}
 
-		status.LimitRemaining -= entry.Hits
+		status.LimitRemaining -= req.Hits
 		return status, nil
 	}
 
 	// Add a new rate limit to the cache
-	expire := cache.MillisecondNow() + entry.RateLimitConfig.Duration
-	status := &pb.DescriptorStatus{
-		Status:         pb.DescriptorStatus_OK,
-		CurrentLimit:   entry.RateLimitConfig.Limit,
-		LimitRemaining: entry.RateLimitConfig.Limit - entry.Hits,
+	expire := cache.MillisecondNow() + req.RateLimitConfig.Duration
+	status := &pb.RateLimitResponse{
+		Status:         pb.RateLimitResponse_UNDER_LIMIT,
+		CurrentLimit:   req.RateLimitConfig.Limit,
+		LimitRemaining: req.RateLimitConfig.Limit - req.Hits,
 		ResetTime:      expire,
 	}
 
 	// Kind of a weird corner case, but the client could be dumb
-	if entry.Hits > entry.RateLimitConfig.Limit {
+	if req.Hits > req.RateLimitConfig.Limit {
 		status.LimitRemaining = 0
 	}
 
-	c.Add(string(entry.Key), status, expire)
+	c.Add(req, status, expire)
 	return status, nil
 }
 
 // Implements leaky bucket algorithm for rate limiting https://en.wikipedia.org/wiki/Leaky_bucket
-func leakyBucket(c cache.Cache, entry *pb.RateLimitKeyRequest_Entry) (*pb.DescriptorStatus, error) {
+func leakyBucket(c cache.Cache, req *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
 	type LeakyBucket struct {
 		RateLimitConfig pb.RateLimitConfig
 		LimitRemaining  int64
@@ -71,16 +72,16 @@ func leakyBucket(c cache.Cache, entry *pb.RateLimitKeyRequest_Entry) (*pb.Descri
 	}
 
 	now := cache.MillisecondNow()
-	key := string(entry.Key)
 
-	item, ok := c.Get(key)
+	item, ok := c.Get(req)
 	if ok {
 		bucket, ok := item.(*LeakyBucket)
 		if !ok {
+			// TODO: remove the item from the cache and re-call this function
 			return nil, errors.New("incorrect algorithm; don't change algorithms on subsequent requests")
 		}
 
-		rate := bucket.RateLimitConfig.Duration / entry.RateLimitConfig.Limit
+		rate := bucket.RateLimitConfig.Duration / req.RateLimitConfig.Limit
 
 		// Calculate how much leaked out of the bucket since the last hit
 		elapsed := now - bucket.TimeStamp
@@ -92,56 +93,56 @@ func leakyBucket(c cache.Cache, entry *pb.RateLimitKeyRequest_Entry) (*pb.Descri
 		}
 
 		bucket.TimeStamp = now
-		status := &pb.DescriptorStatus{
+		status := &pb.RateLimitResponse{
 			CurrentLimit:   bucket.RateLimitConfig.Limit,
 			LimitRemaining: bucket.LimitRemaining,
-			Status:         pb.DescriptorStatus_OK,
+			Status:         pb.RateLimitResponse_UNDER_LIMIT,
 		}
 
 		// If we are already at the limit
 		if bucket.LimitRemaining == 0 {
-			status.Status = pb.DescriptorStatus_OVER_LIMIT
+			status.Status = pb.RateLimitResponse_OVER_LIMIT
 			status.ResetTime = now + rate
 			return status, nil
 		}
 
 		// If requested hits takes the remainder
-		if bucket.LimitRemaining == entry.Hits {
+		if bucket.LimitRemaining == req.Hits {
 			bucket.LimitRemaining = 0
 			status.LimitRemaining = 0
 			return status, nil
 		}
 
 		// If requested is more than available, then return over the limit without updating the bucket.
-		if entry.Hits > bucket.LimitRemaining {
-			status.Status = pb.DescriptorStatus_OVER_LIMIT
+		if req.Hits > bucket.LimitRemaining {
+			status.Status = pb.RateLimitResponse_OVER_LIMIT
 			return status, nil
 		}
 
-		bucket.LimitRemaining -= entry.Hits
+		bucket.LimitRemaining -= req.Hits
 		status.LimitRemaining = bucket.LimitRemaining
-		c.UpdateExpiration(key, now*entry.RateLimitConfig.Duration)
+		c.UpdateExpiration(req, now*req.RateLimitConfig.Duration)
 		return status, nil
 	}
 
 	// Create a new leaky bucket
 	bucket := LeakyBucket{
-		LimitRemaining:  entry.RateLimitConfig.Limit - entry.Hits,
-		RateLimitConfig: *entry.RateLimitConfig,
+		LimitRemaining:  req.RateLimitConfig.Limit - req.Hits,
+		RateLimitConfig: *req.RateLimitConfig,
 		TimeStamp:       now,
 	}
 
 	// Kind of a weird corner case, but the client could be dumb
-	if entry.Hits > entry.RateLimitConfig.Limit {
+	if req.Hits > req.RateLimitConfig.Limit {
 		bucket.LimitRemaining = 0
 	}
 
-	c.Add(string(entry.Key), &bucket, now+entry.RateLimitConfig.Duration)
+	c.Add(req, &bucket, now+req.RateLimitConfig.Duration)
 
-	return &pb.DescriptorStatus{
-		Status:         pb.DescriptorStatus_OK,
-		CurrentLimit:   entry.RateLimitConfig.Limit,
-		LimitRemaining: entry.RateLimitConfig.Limit - entry.Hits,
+	return &pb.RateLimitResponse{
+		Status:         pb.RateLimitResponse_UNDER_LIMIT,
+		CurrentLimit:   req.RateLimitConfig.Limit,
+		LimitRemaining: req.RateLimitConfig.Limit - req.Hits,
 		ResetTime:      0,
 	}, nil
 }

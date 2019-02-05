@@ -60,7 +60,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestOverTheLimit(t *testing.T) {
-	client, errs := gubernator.NewClient("test_over_limit", peers)
+	client, errs := gubernator.NewClient(gubernator.RandomPeer(peers))
 	require.Nil(t, errs)
 
 	tests := []struct {
@@ -83,9 +83,8 @@ func TestOverTheLimit(t *testing.T) {
 
 	for _, test := range tests {
 		resp, err := client.GetRateLimit(context.Background(), &gubernator.Request{
-			Descriptors: map[string]string{
-				"account": "1234",
-			},
+			Namespace: "test_over_limit",
+			UniqueKey: "account:1234",
 			Algorithm: gubernator.TokenBucket,
 			Duration:  time.Second * 1,
 			Limit:     2,
@@ -101,7 +100,7 @@ func TestOverTheLimit(t *testing.T) {
 }
 
 func TestTokenBucket(t *testing.T) {
-	client, errs := gubernator.NewClient("test_token_bucket", peers)
+	client, errs := gubernator.NewClient(gubernator.RandomPeer(peers))
 	require.Nil(t, errs)
 
 	tests := []struct {
@@ -128,9 +127,8 @@ func TestTokenBucket(t *testing.T) {
 
 	for _, test := range tests {
 		resp, err := client.GetRateLimit(context.Background(), &gubernator.Request{
-			Descriptors: map[string]string{
-				"account": "1234",
-			},
+			Namespace: "test_token_bucket",
+			UniqueKey: "account:1234",
 			Algorithm: gubernator.TokenBucket,
 			Duration:  time.Millisecond * 5,
 			Limit:     2,
@@ -148,7 +146,7 @@ func TestTokenBucket(t *testing.T) {
 
 // TODO: This test is very time (clock) sensitive, We could ignore the number remaining and increase the limit duration
 func TestLeakyBucket(t *testing.T) {
-	client, errs := gubernator.NewClient("test_leaky_bucket", peers)
+	client, errs := gubernator.NewClient(gubernator.RandomPeer(peers))
 	require.Nil(t, errs)
 
 	tests := []struct {
@@ -185,9 +183,8 @@ func TestLeakyBucket(t *testing.T) {
 
 	for _, test := range tests {
 		resp, err := client.GetRateLimit(context.Background(), &gubernator.Request{
-			Descriptors: map[string]string{
-				"account": "1234",
-			},
+			Namespace: "test_leaky_bucket",
+			UniqueKey: "account:1234",
 			Algorithm: gubernator.LeakyBucket,
 			Duration:  time.Millisecond * 50,
 			Hits:      test.Hits,
@@ -200,17 +197,5 @@ func TestLeakyBucket(t *testing.T) {
 		assert.Equal(t, int64(5), resp.CurrentLimit)
 		assert.False(t, resp.ResetTime.IsZero())
 		time.Sleep(test.Sleep)
-	}
-}
-
-func TestServer_GetPeers(t *testing.T) {
-	client := gubernator.NewPeerClient(peers[0])
-
-	resp, err := client.GetPeers(context.Background())
-	require.Nil(t, err)
-
-	assert.Equal(t, 5, len(resp.Peers))
-	for _, peer := range resp.Peers {
-		assert.True(t, len(peer) != 0)
 	}
 }

@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+option go_package = "pb";
+
+option cc_generic_services = true;
+
+package pb.gubernator;
+
+import "ratelimit.proto";
+
+service PeersService {
+    // Used by peers to relay batches of requests to an authoritative peer
+    rpc GetPeerRateLimits (PeerRateLimitRequest) returns (PeerRateLimitResponse) {}
+}
+
+// NOTE: For use by gubernator peers only
+message PeerRateLimitRequest {
+    // Must specify at least one RateLimitRequest. The peer that recives this request MUST be authoritative for
+    // each rate_limit[x].unique_key provided, as the peer will not forward the request to any other peers
+    repeated RateLimitRequest rate_limits = 1;
+}
+
+message PeerRateLimitResponse {
+    // Responses are in the same order as they appeared in the PeerRateLimitRequest
+    repeated RateLimitResponse rate_limits = 1;
+}
+

@@ -2,15 +2,15 @@ package gubernator
 
 import (
 	"context"
+	"net"
+	"sync"
+	"time"
+
 	"github.com/mailgun/gubernator/pb"
 	"github.com/mailgun/holster"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/valyala/bytebufferpool"
 	"google.golang.org/grpc"
-	"net"
-	"sync"
-	"time"
 )
 
 const (
@@ -47,7 +47,7 @@ func NewServer(conf ServerConfig) (*Server, error) {
 
 	// Register our server with GRPC
 	pb.RegisterRateLimitServiceServer(server, &s)
-	pb.RegisterConfigServiceServer(server, &s)
+	pb.RegisterPeersServiceServer(server, &s)
 
 	// Register our peer update callback
 	s.conf.PeerSyncer.RegisterOnUpdate(s.updatePeers)
@@ -63,8 +63,6 @@ func NewServer(conf ServerConfig) (*Server, error) {
 
 // Runs the gRPC server; returns when the server starts
 func (s *Server) Start() error {
-	s.log.Info("Start Server")
-
 	// Start the cache
 	if err := s.conf.Cache.Start(); err != nil {
 		return errors.Wrap(err, "failed to start cache")
@@ -87,22 +85,25 @@ func (s *Server) Start() error {
 
 	// Ensure the server is running before we return
 	go func() {
-		client := NewPeerClient(s.listener.Addr().String())
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-		defer cancel()
-		_, err := client.Ping(ctx, &pb.NoOpRequest{})
-		errs <- err
+		errs <- retry(2, time.Millisecond*500, func() error {
+			conn, err := grpc.Dial(s.listener.Addr().String(), grpc.WithInsecure())
+			if err != nil {
+				return err
+			}
+			client := pb.NewRateLimitServiceClient(conn)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*500)
+			defer cancel()
+			_, err = client.Ping(ctx, &pb.PingRequest{})
+			return err
+		})
 	}()
 
 	return <-errs
 }
 
 func (s *Server) Stop() {
-	s.log.Info("Stop Server")
 	s.server.Stop()
-	s.log.Info("Stop PeerSync")
 	s.conf.PeerSyncer.Stop()
-	s.log.Info("Stop Metrics")
 	s.conf.Metrics.Stop()
 }
 
@@ -111,99 +112,78 @@ func (s *Server) Address() string {
 	return s.listener.Addr().String()
 }
 
-func (s *Server) GetRateLimit(ctx context.Context, req *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
-	var results []*pb.DescriptorStatus
+func (s *Server) GetRateLimits(ctx context.Context, reqs *pb.RateLimitRequestList) (*pb.RateLimitResponseList, error) {
+	var result pb.RateLimitResponseList
 
 	// TODO: Support getting multiple keys in an async manner (FanOut)
 	// TODO: Determine what the server Quality of Service is and set context timeouts for each async request?
-	for _, desc := range req.Descriptors {
-		// TODO: Get buffer out of pool
-		var key bytebufferpool.ByteBuffer
-
-		if err := generateKey(&key, req.Domain, desc); err != nil {
-			return nil, err
+	for i, req := range reqs.RateLimits {
+		if req.RateLimitConfig == nil {
+			return nil, errors.Errorf("required field 'RateLimitConfig' missing from 'RateLimit[%d]'", i)
 		}
 
-		if desc.RateLimitConfig == nil {
-			return nil, errors.New("required field 'RateLimitConfig' missing from 'Descriptor'")
+		if req.Namespace == "" {
+			return nil, errors.New("must provide a 'namespace'; cannot be empty")
 		}
+
+		if len(req.UniqueKey) == 0 {
+			return nil, errors.New("must provide a unique_key; cannot be empty")
+		}
+
+		globalKey := req.Namespace + "_" + req.UniqueKey
 
 		s.peerMutex.RLock()
 		var peer PeerClient
-		if err := s.conf.Picker.Get(key.B, &peer); err != nil {
+		if err := s.conf.Picker.Get(globalKey, &peer); err != nil {
 			s.peerMutex.RUnlock()
-			return nil, errors.Wrapf(err, "while finding peer that owns key '%s'", string(key.B))
+			return nil, errors.Wrapf(err, "while finding peer that owns key '%s'", globalKey)
 		}
 		s.peerMutex.RUnlock()
 
-		var resp *pb.DescriptorStatus
+		var resp *pb.RateLimitResponse
 		var err error
 
 		// If our server instance is the owner of this rate limit
 		if peer.isOwner {
 			// Apply our rate limit algorithm to the request
-			resp, err = s.applyAlgorithm(&pb.RateLimitKeyRequest_Entry{
-				RateLimitConfig: desc.RateLimitConfig,
-				Hits:            desc.Hits,
-				Key:             key.B,
-			})
+			resp, err = s.applyAlgorithm(req)
 			if err != nil {
-				return nil, errors.Wrapf(err, "while fetching key '%s' from peer", string(key.B))
+				return nil, errors.Wrapf(err, "while fetching key '%s' from peer", globalKey)
 			}
 		} else {
 			// Make an RPC call to the peer that owns this rate limit
-			resp, err = peer.GetRateLimitByKey(ctx, &pb.RateLimitKeyRequest_Entry{
-				RateLimitConfig: desc.RateLimitConfig,
-				Hits:            desc.Hits,
-				Key:             key.B,
-			})
+			resp, err = peer.GetPeerRateLimits(ctx, req)
 			if err != nil {
-				return nil, errors.Wrapf(err, "while fetching key '%s' from peer", string(key.B))
+				return nil, errors.Wrapf(err, "while fetching key '%s' from peer", globalKey)
 			}
 
 			// Inform the client of the owner key of the key
 			resp.Metadata = map[string]string{"owner": peer.host}
 		}
-		results = append(results, resp)
+		result.RateLimits = append(result.RateLimits, resp)
 	}
-
-	return &pb.RateLimitResponse{
-		Statuses: results,
-	}, nil
+	return &result, nil
 }
 
-func (s *Server) GetRateLimitByKey(ctx context.Context, req *pb.RateLimitKeyRequest) (*pb.RateLimitResponse, error) {
-	var results []*pb.DescriptorStatus
-	for _, entry := range req.Entries {
+func (s *Server) GetPeerRateLimits(ctx context.Context, req *pb.PeerRateLimitRequest) (*pb.PeerRateLimitResponse, error) {
+	var resp pb.PeerRateLimitResponse
+
+	for _, entry := range req.RateLimits {
 		status, err := s.applyAlgorithm(entry)
 		if err != nil {
 			return nil, err
 		}
-		results = append(results, status)
+		resp.RateLimits = append(resp.RateLimits, status)
 	}
-	return &pb.RateLimitResponse{Statuses: results}, nil
+	return &resp, nil
 }
 
-func (s *Server) GetPeers(ctx context.Context, in *pb.GetPeersRequest) (*pb.GetPeersResponse, error) {
-	s.peerMutex.RLock()
-	defer s.peerMutex.RUnlock()
-
-	var results []string
-	for _, peer := range s.conf.Picker.Peers() {
-		results = append(results, peer.host)
-	}
-
-	return &pb.GetPeersResponse{
-		Peers: results,
-	}, nil
+// Used for GRPC Benchmarking and liveliness checks
+func (s *Server) Ping(ctx context.Context, in *pb.PingRequest) (*pb.PingResponse, error) {
+	return &pb.PingResponse{}, nil
 }
 
-// Used for GRPC Benchmarking
-func (s *Server) NoOp(ctx context.Context, in *pb.NoOpRequest) (*pb.NoOpResponse, error) {
-	return &pb.NoOpResponse{}, nil
-}
-
-func (s *Server) applyAlgorithm(entry *pb.RateLimitKeyRequest_Entry) (*pb.DescriptorStatus, error) {
+func (s *Server) applyAlgorithm(entry *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
 	if entry.Hits == 0 {
 		entry.Hits = 1
 	}
@@ -252,24 +232,13 @@ func (s *Server) updatePeers(conf *PeerConfig) {
 	s.peerMutex.Unlock()
 }
 
-func generateKey(b *bytebufferpool.ByteBuffer, domain string, descriptor *pb.Descriptor) error {
-
-	if domain == "" {
-		return errors.New("must provide a 'domain'; cannot be empty")
+func retry(attempts int, d time.Duration, callback func() error) (err error) {
+	for i := 0; i < attempts; i++ {
+		err = callback()
+		if err == nil {
+			return nil
+		}
+		time.Sleep(d)
 	}
-
-	if len(descriptor.Values) == 0 {
-		return errors.New("must provide at least one descriptor value; cannot be empty")
-	}
-
-	b.Reset()
-	b.WriteString(domain)
-	b.WriteByte('_')
-
-	for key, value := range descriptor.Values {
-		b.WriteString(key)
-		b.WriteByte('_')
-		b.WriteString(value)
-	}
-	return nil
+	return err
 }

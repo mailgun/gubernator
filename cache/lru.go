@@ -20,6 +20,7 @@ package cache
 
 import (
 	"container/list"
+	"github.com/mailgun/gubernator/pb"
 	"sync"
 	"time"
 
@@ -106,9 +107,9 @@ func (c *LRUCache) Unlock() {
 }
 
 // Adds a value to the cache with an expiration
-func (c *LRUCache) Add(key Key, value interface{}, expireAt int64) bool {
+func (c *LRUCache) Add(req *pb.RateLimitRequest, value interface{}, expireAt int64) bool {
 	return c.addRecord(&cacheRecord{
-		key:      key,
+		key:      req.Namespace + "_" + req.UniqueKey,
 		value:    value,
 		expireAt: expireAt,
 	})
@@ -138,9 +139,9 @@ func MillisecondNow() int64 {
 }
 
 // Get looks up a key's value from the cache.
-func (c *LRUCache) Get(key Key) (value interface{}, ok bool) {
+func (c *LRUCache) Get(req *pb.RateLimitRequest) (value interface{}, ok bool) {
 
-	if ele, hit := c.cache[key]; hit {
+	if ele, hit := c.cache[req.Namespace+"_"+req.UniqueKey]; hit {
 		entry := ele.Value.(*cacheRecord)
 
 		// If the entry has expired, remove it from the cache
@@ -194,17 +195,9 @@ func (c *LRUCache) Stats(clear bool) Stats {
 	return c.stats
 }
 
-// Get a list of keys at this point in time
-func (c *LRUCache) Keys() (keys []interface{}) {
-	for key := range c.cache {
-		keys = append(keys, key)
-	}
-	return
-}
-
 // Update the expiration time for the key
-func (c *LRUCache) UpdateExpiration(key Key, expireAt int64) bool {
-	if ele, hit := c.cache[key]; hit {
+func (c *LRUCache) UpdateExpiration(req *pb.RateLimitRequest, expireAt int64) bool {
+	if ele, hit := c.cache[req.Namespace+"_"+req.UniqueKey]; hit {
 		entry := ele.Value.(*cacheRecord)
 		entry.expireAt = expireAt
 		return true

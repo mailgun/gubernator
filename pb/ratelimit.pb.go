@@ -17,231 +17,246 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
-type DescriptorStatus_Status int32
+type RateLimitConfig_Algorithm int32
 
 const (
-	DescriptorStatus_UNKNOWN    DescriptorStatus_Status = 0
-	DescriptorStatus_OK         DescriptorStatus_Status = 1
-	DescriptorStatus_OVER_LIMIT DescriptorStatus_Status = 2
+	RateLimitConfig_TOKEN_BUCKET RateLimitConfig_Algorithm = 0
+	RateLimitConfig_LEAKY_BUCKET RateLimitConfig_Algorithm = 1
 )
 
-var DescriptorStatus_Status_name = map[int32]string{
-	0: "UNKNOWN",
-	1: "OK",
-	2: "OVER_LIMIT",
+var RateLimitConfig_Algorithm_name = map[int32]string{
+	0: "TOKEN_BUCKET",
+	1: "LEAKY_BUCKET",
 }
-var DescriptorStatus_Status_value = map[string]int32{
-	"UNKNOWN":    0,
-	"OK":         1,
-	"OVER_LIMIT": 2,
+var RateLimitConfig_Algorithm_value = map[string]int32{
+	"TOKEN_BUCKET": 0,
+	"LEAKY_BUCKET": 1,
 }
 
-func (x DescriptorStatus_Status) String() string {
-	return proto.EnumName(DescriptorStatus_Status_name, int32(x))
+func (x RateLimitConfig_Algorithm) String() string {
+	return proto.EnumName(RateLimitConfig_Algorithm_name, int32(x))
 }
-func (DescriptorStatus_Status) EnumDescriptor() ([]byte, []int) { return fileDescriptor2, []int{4, 0} }
+func (RateLimitConfig_Algorithm) EnumDescriptor() ([]byte, []int) { return fileDescriptor1, []int{3, 0} }
+
+type RateLimitResponse_Status int32
+
+const (
+	RateLimitResponse_UNDER_LIMIT RateLimitResponse_Status = 0
+	RateLimitResponse_OVER_LIMIT  RateLimitResponse_Status = 1
+)
+
+var RateLimitResponse_Status_name = map[int32]string{
+	0: "UNDER_LIMIT",
+	1: "OVER_LIMIT",
+}
+var RateLimitResponse_Status_value = map[string]int32{
+	"UNDER_LIMIT": 0,
+	"OVER_LIMIT":  1,
+}
+
+func (x RateLimitResponse_Status) String() string {
+	return proto.EnumName(RateLimitResponse_Status_name, int32(x))
+}
+func (RateLimitResponse_Status) EnumDescriptor() ([]byte, []int) { return fileDescriptor1, []int{4, 0} }
+
+// Must specify at least one RateLimitRequest.
+type RateLimitRequestList struct {
+	RateLimits []*RateLimitRequest `protobuf:"bytes,1,rep,name=rate_limits,json=rateLimits" json:"rate_limits,omitempty"`
+}
+
+func (m *RateLimitRequestList) Reset()                    { *m = RateLimitRequestList{} }
+func (m *RateLimitRequestList) String() string            { return proto.CompactTextString(m) }
+func (*RateLimitRequestList) ProtoMessage()               {}
+func (*RateLimitRequestList) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{0} }
+
+func (m *RateLimitRequestList) GetRateLimits() []*RateLimitRequest {
+	if m != nil {
+		return m.RateLimits
+	}
+	return nil
+}
+
+// Responses are in the same order as they appeared in the RateLimitsRequest
+type RateLimitResponseList struct {
+	RateLimits []*RateLimitResponse `protobuf:"bytes,1,rep,name=rate_limits,json=rateLimits" json:"rate_limits,omitempty"`
+}
+
+func (m *RateLimitResponseList) Reset()                    { *m = RateLimitResponseList{} }
+func (m *RateLimitResponseList) String() string            { return proto.CompactTextString(m) }
+func (*RateLimitResponseList) ProtoMessage()               {}
+func (*RateLimitResponseList) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{1} }
+
+func (m *RateLimitResponseList) GetRateLimits() []*RateLimitResponse {
+	if m != nil {
+		return m.RateLimits
+	}
+	return nil
+}
 
 type RateLimitRequest struct {
-	// The domain scopes the request to avoid collisions with other services or applications.
-	Domain string `protobuf:"bytes,1,opt,name=domain" json:"domain,omitempty"`
-	// Rate limit requests must specify at least one descriptor
-	Descriptors []*Descriptor `protobuf:"bytes,2,rep,name=descriptors" json:"descriptors,omitempty"`
+	// The namespace scopes the unique_key to avoid collisions with other services or applications.
+	Namespace string `protobuf:"bytes,1,opt,name=namespace" json:"namespace,omitempty"`
+	// Uniquely identifies this rate limit within a namespace.
+	UniqueKey string `protobuf:"bytes,2,opt,name=unique_key,json=uniqueKey" json:"unique_key,omitempty"`
+	// Rate limit requests optionally specify the number of hits a request adds to the matched limit. If the
+	// value is not set, a request increases the matched limit by 1.
+	Hits int64 `protobuf:"varint,3,opt,name=hits" json:"hits,omitempty"`
+	// This is the rate limit configuration provided by the client. The configuration may change on
+	// subsequent requests, however when this occurs any previous rate limit counts are reset.
+	RateLimitConfig *RateLimitConfig `protobuf:"bytes,4,opt,name=rate_limit_config,json=rateLimitConfig" json:"rate_limit_config,omitempty"`
 }
 
 func (m *RateLimitRequest) Reset()                    { *m = RateLimitRequest{} }
 func (m *RateLimitRequest) String() string            { return proto.CompactTextString(m) }
 func (*RateLimitRequest) ProtoMessage()               {}
-func (*RateLimitRequest) Descriptor() ([]byte, []int) { return fileDescriptor2, []int{0} }
+func (*RateLimitRequest) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{2} }
 
-func (m *RateLimitRequest) GetDomain() string {
+func (m *RateLimitRequest) GetNamespace() string {
 	if m != nil {
-		return m.Domain
+		return m.Namespace
 	}
 	return ""
 }
 
-func (m *RateLimitRequest) GetDescriptors() []*Descriptor {
+func (m *RateLimitRequest) GetUniqueKey() string {
 	if m != nil {
-		return m.Descriptors
+		return m.UniqueKey
+	}
+	return ""
+}
+
+func (m *RateLimitRequest) GetHits() int64 {
+	if m != nil {
+		return m.Hits
+	}
+	return 0
+}
+
+func (m *RateLimitRequest) GetRateLimitConfig() *RateLimitConfig {
+	if m != nil {
+		return m.RateLimitConfig
 	}
 	return nil
+}
+
+// Defines a rate limit duration and requests per duration
+type RateLimitConfig struct {
+	// The number of requests that can occur for the duration of the rate limit
+	Limit int64 `protobuf:"varint,1,opt,name=limit" json:"limit,omitempty"`
+	// The duration of the rate limit in milliseconds
+	// Second = 1000 Milliseconds
+	// Minute = 60000 Milliseconds
+	// Hour = 3600000 Milliseconds
+	Duration int64 `protobuf:"varint,2,opt,name=duration" json:"duration,omitempty"`
+	// The algorithm used to calculate the rate limit
+	Algorithm RateLimitConfig_Algorithm `protobuf:"varint,3,opt,name=algorithm,enum=pb.gubernator.RateLimitConfig_Algorithm" json:"algorithm,omitempty"`
+}
+
+func (m *RateLimitConfig) Reset()                    { *m = RateLimitConfig{} }
+func (m *RateLimitConfig) String() string            { return proto.CompactTextString(m) }
+func (*RateLimitConfig) ProtoMessage()               {}
+func (*RateLimitConfig) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{3} }
+
+func (m *RateLimitConfig) GetLimit() int64 {
+	if m != nil {
+		return m.Limit
+	}
+	return 0
+}
+
+func (m *RateLimitConfig) GetDuration() int64 {
+	if m != nil {
+		return m.Duration
+	}
+	return 0
+}
+
+func (m *RateLimitConfig) GetAlgorithm() RateLimitConfig_Algorithm {
+	if m != nil {
+		return m.Algorithm
+	}
+	return RateLimitConfig_TOKEN_BUCKET
 }
 
 type RateLimitResponse struct {
-	// A list of DescriptorStatus messages which matches the length of the descriptor list passed
-	// in the RateLimitRequest. This can be used by the caller to determine which individual
-	// descriptors failed and/or what the currently configured limits are for all of them.
-	Statuses []*DescriptorStatus `protobuf:"bytes,2,rep,name=statuses" json:"statuses,omitempty"`
-}
-
-func (m *RateLimitResponse) Reset()                    { *m = RateLimitResponse{} }
-func (m *RateLimitResponse) String() string            { return proto.CompactTextString(m) }
-func (*RateLimitResponse) ProtoMessage()               {}
-func (*RateLimitResponse) Descriptor() ([]byte, []int) { return fileDescriptor2, []int{1} }
-
-func (m *RateLimitResponse) GetStatuses() []*DescriptorStatus {
-	if m != nil {
-		return m.Statuses
-	}
-	return nil
-}
-
-// This is used by Gubernator clients who already have the domain and descriptors and created a hash key
-type RateLimitKeyRequest struct {
-	// Requests must specify at least one KeyRequestEntry, but can specify multiple descriptors
-	// to be individually evaluated
-	Entries []*RateLimitKeyRequest_Entry `protobuf:"bytes,1,rep,name=entries" json:"entries,omitempty"`
-}
-
-func (m *RateLimitKeyRequest) Reset()                    { *m = RateLimitKeyRequest{} }
-func (m *RateLimitKeyRequest) String() string            { return proto.CompactTextString(m) }
-func (*RateLimitKeyRequest) ProtoMessage()               {}
-func (*RateLimitKeyRequest) Descriptor() ([]byte, []int) { return fileDescriptor2, []int{2} }
-
-func (m *RateLimitKeyRequest) GetEntries() []*RateLimitKeyRequest_Entry {
-	if m != nil {
-		return m.Entries
-	}
-	return nil
-}
-
-type RateLimitKeyRequest_Entry struct {
-	// The key identifies the specific rate limit the request is for
-	Key []byte `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	// Rate limit requests can optionally specify the number of hits a request adds to the matched limit. If the
-	// value is not set in the message, a request increases the matched limit by 1.
-	Hits int64 `protobuf:"varint,2,opt,name=hits" json:"hits,omitempty"`
-	// This is the rate limit the requested for this descriptor. If the rate limit doesn't currently exist for
-	// this descriptor it will be created and enforced for subsequent requests
-	RateLimitConfig *RateLimitConfig `protobuf:"bytes,3,opt,name=rate_limit_config,json=rateLimitConfig" json:"rate_limit_config,omitempty"`
-}
-
-func (m *RateLimitKeyRequest_Entry) Reset()                    { *m = RateLimitKeyRequest_Entry{} }
-func (m *RateLimitKeyRequest_Entry) String() string            { return proto.CompactTextString(m) }
-func (*RateLimitKeyRequest_Entry) ProtoMessage()               {}
-func (*RateLimitKeyRequest_Entry) Descriptor() ([]byte, []int) { return fileDescriptor2, []int{2, 0} }
-
-func (m *RateLimitKeyRequest_Entry) GetKey() []byte {
-	if m != nil {
-		return m.Key
-	}
-	return nil
-}
-
-func (m *RateLimitKeyRequest_Entry) GetHits() int64 {
-	if m != nil {
-		return m.Hits
-	}
-	return 0
-}
-
-func (m *RateLimitKeyRequest_Entry) GetRateLimitConfig() *RateLimitConfig {
-	if m != nil {
-		return m.RateLimitConfig
-	}
-	return nil
-}
-
-// Describes a rate limit
-type Descriptor struct {
-	// A map of key value pairs that make up the descriptor
-	Values map[string]string `protobuf:"bytes,1,rep,name=values" json:"values,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Rate limit requests optionally specify the number of hits a request adds to the matched limit. If the
-	// value is not set, a request increases the matched limit by 1.
-	Hits int64 `protobuf:"varint,2,opt,name=hits" json:"hits,omitempty"`
-	// This is the rate limit the requested for this descriptor. If the rate limit doesn't currently exist for
-	// this descriptor it will be created and enforced for subsequent requests
-	RateLimitConfig *RateLimitConfig `protobuf:"bytes,3,opt,name=rate_limit_config,json=rateLimitConfig" json:"rate_limit_config,omitempty"`
-}
-
-func (m *Descriptor) Reset()                    { *m = Descriptor{} }
-func (m *Descriptor) String() string            { return proto.CompactTextString(m) }
-func (*Descriptor) ProtoMessage()               {}
-func (*Descriptor) Descriptor() ([]byte, []int) { return fileDescriptor2, []int{3} }
-
-func (m *Descriptor) GetValues() map[string]string {
-	if m != nil {
-		return m.Values
-	}
-	return nil
-}
-
-func (m *Descriptor) GetHits() int64 {
-	if m != nil {
-		return m.Hits
-	}
-	return 0
-}
-
-func (m *Descriptor) GetRateLimitConfig() *RateLimitConfig {
-	if m != nil {
-		return m.RateLimitConfig
-	}
-	return nil
-}
-
-// The return status of a descriptor submitted via RateLimitRequest
-type DescriptorStatus struct {
-	// The status of this descriptor.
-	Status DescriptorStatus_Status `protobuf:"varint,1,opt,name=status,enum=pb.gubernator.DescriptorStatus_Status" json:"status,omitempty"`
-	// The current limit for the requested rate limit.
+	// The status of the rate limit.
+	Status RateLimitResponse_Status `protobuf:"varint,1,opt,name=status,enum=pb.gubernator.RateLimitResponse_Status" json:"status,omitempty"`
+	// The currently configured request limit (Identical to RateLimitRequest.rate_limit_config.limit).
 	CurrentLimit int64 `protobuf:"varint,2,opt,name=current_limit,json=currentLimit" json:"current_limit,omitempty"`
-	// If Code is not OVER_LIMIT, This is the limit remaining
+	// This is the number of requests remaining before the limit is hit.
 	LimitRemaining int64 `protobuf:"varint,3,opt,name=limit_remaining,json=limitRemaining" json:"limit_remaining,omitempty"`
-	// This is the time when the rate limit span will be reset as a unix timestamp.
+	// This is the time when the rate limit span will be reset, provided as a unix timestamp in milliseconds.
 	ResetTime int64 `protobuf:"varint,4,opt,name=reset_time,json=resetTime" json:"reset_time,omitempty"`
 	// This is additional metadata that a client might find useful. (IE: Additional headers, corrdinator ownership, etc..)
 	Metadata map[string]string `protobuf:"bytes,5,rep,name=metadata" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 }
 
-func (m *DescriptorStatus) Reset()                    { *m = DescriptorStatus{} }
-func (m *DescriptorStatus) String() string            { return proto.CompactTextString(m) }
-func (*DescriptorStatus) ProtoMessage()               {}
-func (*DescriptorStatus) Descriptor() ([]byte, []int) { return fileDescriptor2, []int{4} }
+func (m *RateLimitResponse) Reset()                    { *m = RateLimitResponse{} }
+func (m *RateLimitResponse) String() string            { return proto.CompactTextString(m) }
+func (*RateLimitResponse) ProtoMessage()               {}
+func (*RateLimitResponse) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{4} }
 
-func (m *DescriptorStatus) GetStatus() DescriptorStatus_Status {
+func (m *RateLimitResponse) GetStatus() RateLimitResponse_Status {
 	if m != nil {
 		return m.Status
 	}
-	return DescriptorStatus_UNKNOWN
+	return RateLimitResponse_UNDER_LIMIT
 }
 
-func (m *DescriptorStatus) GetCurrentLimit() int64 {
+func (m *RateLimitResponse) GetCurrentLimit() int64 {
 	if m != nil {
 		return m.CurrentLimit
 	}
 	return 0
 }
 
-func (m *DescriptorStatus) GetLimitRemaining() int64 {
+func (m *RateLimitResponse) GetLimitRemaining() int64 {
 	if m != nil {
 		return m.LimitRemaining
 	}
 	return 0
 }
 
-func (m *DescriptorStatus) GetResetTime() int64 {
+func (m *RateLimitResponse) GetResetTime() int64 {
 	if m != nil {
 		return m.ResetTime
 	}
 	return 0
 }
 
-func (m *DescriptorStatus) GetMetadata() map[string]string {
+func (m *RateLimitResponse) GetMetadata() map[string]string {
 	if m != nil {
 		return m.Metadata
 	}
 	return nil
 }
 
+type PingRequest struct {
+}
+
+func (m *PingRequest) Reset()                    { *m = PingRequest{} }
+func (m *PingRequest) String() string            { return proto.CompactTextString(m) }
+func (*PingRequest) ProtoMessage()               {}
+func (*PingRequest) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{5} }
+
+type PingResponse struct {
+}
+
+func (m *PingResponse) Reset()                    { *m = PingResponse{} }
+func (m *PingResponse) String() string            { return proto.CompactTextString(m) }
+func (*PingResponse) ProtoMessage()               {}
+func (*PingResponse) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{6} }
+
 func init() {
+	proto.RegisterType((*RateLimitRequestList)(nil), "pb.gubernator.RateLimitRequestList")
+	proto.RegisterType((*RateLimitResponseList)(nil), "pb.gubernator.RateLimitResponseList")
 	proto.RegisterType((*RateLimitRequest)(nil), "pb.gubernator.RateLimitRequest")
+	proto.RegisterType((*RateLimitConfig)(nil), "pb.gubernator.RateLimitConfig")
 	proto.RegisterType((*RateLimitResponse)(nil), "pb.gubernator.RateLimitResponse")
-	proto.RegisterType((*RateLimitKeyRequest)(nil), "pb.gubernator.RateLimitKeyRequest")
-	proto.RegisterType((*RateLimitKeyRequest_Entry)(nil), "pb.gubernator.RateLimitKeyRequest.Entry")
-	proto.RegisterType((*Descriptor)(nil), "pb.gubernator.Descriptor")
-	proto.RegisterType((*DescriptorStatus)(nil), "pb.gubernator.DescriptorStatus")
-	proto.RegisterEnum("pb.gubernator.DescriptorStatus_Status", DescriptorStatus_Status_name, DescriptorStatus_Status_value)
+	proto.RegisterType((*PingRequest)(nil), "pb.gubernator.PingRequest")
+	proto.RegisterType((*PingResponse)(nil), "pb.gubernator.PingResponse")
+	proto.RegisterEnum("pb.gubernator.RateLimitConfig_Algorithm", RateLimitConfig_Algorithm_name, RateLimitConfig_Algorithm_value)
+	proto.RegisterEnum("pb.gubernator.RateLimitResponse_Status", RateLimitResponse_Status_name, RateLimitResponse_Status_value)
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -255,10 +270,11 @@ const _ = grpc.SupportPackageIsVersion4
 // Client API for RateLimitService service
 
 type RateLimitServiceClient interface {
-	// Given a rate limit descriptor return a descriptor status
-	GetRateLimit(ctx context.Context, in *RateLimitRequest, opts ...grpc.CallOption) (*RateLimitResponse, error)
-	// Client implementations can use this method if the decriptor key is already known
-	GetRateLimitByKey(ctx context.Context, in *RateLimitKeyRequest, opts ...grpc.CallOption) (*RateLimitResponse, error)
+	// Given a list of rate limits return the rates and statuses of each request.
+	GetRateLimits(ctx context.Context, in *RateLimitRequestList, opts ...grpc.CallOption) (*RateLimitResponseList, error)
+	// This method is for round trip benchmarking and can be used by
+	// the client to determine connectivity to the server
+	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error)
 }
 
 type rateLimitServiceClient struct {
@@ -269,18 +285,18 @@ func NewRateLimitServiceClient(cc *grpc.ClientConn) RateLimitServiceClient {
 	return &rateLimitServiceClient{cc}
 }
 
-func (c *rateLimitServiceClient) GetRateLimit(ctx context.Context, in *RateLimitRequest, opts ...grpc.CallOption) (*RateLimitResponse, error) {
-	out := new(RateLimitResponse)
-	err := grpc.Invoke(ctx, "/pb.gubernator.RateLimitService/GetRateLimit", in, out, c.cc, opts...)
+func (c *rateLimitServiceClient) GetRateLimits(ctx context.Context, in *RateLimitRequestList, opts ...grpc.CallOption) (*RateLimitResponseList, error) {
+	out := new(RateLimitResponseList)
+	err := grpc.Invoke(ctx, "/pb.gubernator.RateLimitService/GetRateLimits", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *rateLimitServiceClient) GetRateLimitByKey(ctx context.Context, in *RateLimitKeyRequest, opts ...grpc.CallOption) (*RateLimitResponse, error) {
-	out := new(RateLimitResponse)
-	err := grpc.Invoke(ctx, "/pb.gubernator.RateLimitService/GetRateLimitByKey", in, out, c.cc, opts...)
+func (c *rateLimitServiceClient) Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error) {
+	out := new(PingResponse)
+	err := grpc.Invoke(ctx, "/pb.gubernator.RateLimitService/Ping", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -290,48 +306,49 @@ func (c *rateLimitServiceClient) GetRateLimitByKey(ctx context.Context, in *Rate
 // Server API for RateLimitService service
 
 type RateLimitServiceServer interface {
-	// Given a rate limit descriptor return a descriptor status
-	GetRateLimit(context.Context, *RateLimitRequest) (*RateLimitResponse, error)
-	// Client implementations can use this method if the decriptor key is already known
-	GetRateLimitByKey(context.Context, *RateLimitKeyRequest) (*RateLimitResponse, error)
+	// Given a list of rate limits return the rates and statuses of each request.
+	GetRateLimits(context.Context, *RateLimitRequestList) (*RateLimitResponseList, error)
+	// This method is for round trip benchmarking and can be used by
+	// the client to determine connectivity to the server
+	Ping(context.Context, *PingRequest) (*PingResponse, error)
 }
 
 func RegisterRateLimitServiceServer(s *grpc.Server, srv RateLimitServiceServer) {
 	s.RegisterService(&_RateLimitService_serviceDesc, srv)
 }
 
-func _RateLimitService_GetRateLimit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RateLimitRequest)
+func _RateLimitService_GetRateLimits_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RateLimitRequestList)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RateLimitServiceServer).GetRateLimit(ctx, in)
+		return srv.(RateLimitServiceServer).GetRateLimits(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/pb.gubernator.RateLimitService/GetRateLimit",
+		FullMethod: "/pb.gubernator.RateLimitService/GetRateLimits",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RateLimitServiceServer).GetRateLimit(ctx, req.(*RateLimitRequest))
+		return srv.(RateLimitServiceServer).GetRateLimits(ctx, req.(*RateLimitRequestList))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _RateLimitService_GetRateLimitByKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RateLimitKeyRequest)
+func _RateLimitService_Ping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PingRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RateLimitServiceServer).GetRateLimitByKey(ctx, in)
+		return srv.(RateLimitServiceServer).Ping(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/pb.gubernator.RateLimitService/GetRateLimitByKey",
+		FullMethod: "/pb.gubernator.RateLimitService/Ping",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RateLimitServiceServer).GetRateLimitByKey(ctx, req.(*RateLimitKeyRequest))
+		return srv.(RateLimitServiceServer).Ping(ctx, req.(*PingRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -341,55 +358,56 @@ var _RateLimitService_serviceDesc = grpc.ServiceDesc{
 	HandlerType: (*RateLimitServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "GetRateLimit",
-			Handler:    _RateLimitService_GetRateLimit_Handler,
+			MethodName: "GetRateLimits",
+			Handler:    _RateLimitService_GetRateLimits_Handler,
 		},
 		{
-			MethodName: "GetRateLimitByKey",
-			Handler:    _RateLimitService_GetRateLimitByKey_Handler,
+			MethodName: "Ping",
+			Handler:    _RateLimitService_Ping_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "ratelimit.proto",
 }
 
-func init() { proto.RegisterFile("ratelimit.proto", fileDescriptor2) }
+func init() { proto.RegisterFile("ratelimit.proto", fileDescriptor1) }
 
-var fileDescriptor2 = []byte{
-	// 548 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x54, 0xcd, 0x6e, 0xd3, 0x40,
-	0x10, 0xee, 0x3a, 0x8d, 0xd3, 0x4c, 0x7e, 0xea, 0x2c, 0x08, 0x99, 0x48, 0xd0, 0xc8, 0x08, 0xc8,
-	0xa5, 0x3e, 0x84, 0x0b, 0x10, 0xc1, 0x21, 0x50, 0xa1, 0x90, 0x36, 0x41, 0x9b, 0x52, 0x24, 0x38,
-	0x44, 0x4e, 0x32, 0x84, 0x15, 0xb1, 0x1d, 0xd6, 0x9b, 0x4a, 0xbe, 0xf1, 0x70, 0x3c, 0x02, 0xcf,
-	0xc0, 0x23, 0x70, 0x46, 0xd9, 0x75, 0x8c, 0x5b, 0x61, 0x05, 0x0e, 0xdc, 0xbc, 0xb3, 0xdf, 0x7c,
-	0x3b, 0xdf, 0x37, 0x33, 0x86, 0x43, 0xe1, 0x49, 0x5c, 0x72, 0x9f, 0x4b, 0x77, 0x25, 0x42, 0x19,
-	0xd2, 0xda, 0x6a, 0xea, 0x2e, 0xd6, 0x53, 0x14, 0x81, 0x27, 0x43, 0xd1, 0xac, 0xce, 0x42, 0xdf,
-	0x0f, 0x03, 0x7d, 0xe9, 0x2c, 0xc0, 0x62, 0x9e, 0xc4, 0xd3, 0x0d, 0x9e, 0xe1, 0x97, 0x35, 0x46,
-	0x92, 0xde, 0x02, 0x73, 0x1e, 0xfa, 0x1e, 0x0f, 0x6c, 0xd2, 0x22, 0xed, 0x32, 0x4b, 0x4e, 0xb4,
-	0x0b, 0x95, 0x39, 0x46, 0x33, 0xc1, 0x57, 0x32, 0x14, 0x91, 0x6d, 0xb4, 0x0a, 0xed, 0x4a, 0xe7,
-	0xb6, 0x7b, 0x85, 0xde, 0x7d, 0x99, 0x22, 0x58, 0x16, 0xed, 0xbc, 0x81, 0x46, 0xe6, 0xa1, 0x68,
-	0x15, 0x06, 0x11, 0xd2, 0x2e, 0x1c, 0x44, 0xd2, 0x93, 0xeb, 0x08, 0xb7, 0x74, 0x47, 0xb9, 0x74,
-	0x63, 0x05, 0x64, 0x69, 0x82, 0xf3, 0x9d, 0xc0, 0x8d, 0x94, 0x72, 0x80, 0xf1, 0xb6, 0xfc, 0x1e,
-	0x94, 0x30, 0x90, 0x82, 0x63, 0x64, 0x13, 0xc5, 0xd9, 0xbe, 0xc6, 0xf9, 0x87, 0x24, 0xf7, 0x24,
-	0x90, 0x22, 0x66, 0xdb, 0xc4, 0x66, 0x0c, 0x45, 0x15, 0xa1, 0x16, 0x14, 0x3e, 0x63, 0xac, 0x8c,
-	0xa8, 0xb2, 0xcd, 0x27, 0xa5, 0xb0, 0xff, 0x89, 0xcb, 0x4d, 0xbd, 0xa4, 0x5d, 0x60, 0xea, 0x9b,
-	0xbe, 0x86, 0xc6, 0xc6, 0xf5, 0x89, 0xb2, 0x7d, 0x32, 0x0b, 0x83, 0x8f, 0x7c, 0x61, 0x17, 0x5a,
-	0xa4, 0x5d, 0xe9, 0xdc, 0xcd, 0x7b, 0xfc, 0x85, 0x42, 0x31, 0xd5, 0xae, 0x4c, 0xc0, 0xf9, 0x41,
-	0x00, 0x7e, 0xab, 0xa6, 0xcf, 0xc0, 0xbc, 0xf4, 0x96, 0xeb, 0x54, 0xcc, 0xfd, 0x5c, 0x83, 0xdc,
-	0x0b, 0x85, 0xd3, 0x4a, 0x92, 0xa4, 0xff, 0x5d, 0x6d, 0xf3, 0x09, 0x54, 0x32, 0xcf, 0x66, 0xed,
-	0x2a, 0x6b, 0xbb, 0x6e, 0x42, 0x51, 0x95, 0xa2, 0x2a, 0x28, 0x33, 0x7d, 0x78, 0x6a, 0x3c, 0x26,
-	0xce, 0x4f, 0x03, 0xac, 0xeb, 0xed, 0xa5, 0xcf, 0xc1, 0xd4, 0x0d, 0x56, 0x1c, 0xf5, 0xce, 0x83,
-	0x1d, 0xf3, 0xe0, 0x26, 0x63, 0x91, 0x64, 0xd1, 0x7b, 0x50, 0x9b, 0xad, 0x85, 0xc0, 0x40, 0x6a,
-	0x79, 0x89, 0xf0, 0x6a, 0x12, 0x54, 0xa5, 0xd3, 0x87, 0x70, 0xa8, 0xb5, 0x0b, 0xdc, 0x0c, 0x36,
-	0x0f, 0xb4, 0xfc, 0x02, 0xab, 0x2f, 0xf5, 0x78, 0x26, 0x51, 0x7a, 0x07, 0x40, 0x60, 0x84, 0x72,
-	0x22, 0xb9, 0x8f, 0xf6, 0xbe, 0xc2, 0x94, 0x55, 0xe4, 0x9c, 0xfb, 0x48, 0xfb, 0x70, 0xe0, 0xa3,
-	0xf4, 0xe6, 0x9e, 0xf4, 0xec, 0xa2, 0xea, 0xce, 0xf1, 0xae, 0x72, 0xcf, 0x12, 0xbc, 0xee, 0x52,
-	0x9a, 0xde, 0xec, 0x42, 0xed, 0xca, 0xd5, 0x3f, 0x39, 0x79, 0x0c, 0x66, 0x62, 0x5f, 0x05, 0x4a,
-	0x6f, 0x87, 0x83, 0xe1, 0xe8, 0xdd, 0xd0, 0xda, 0xa3, 0x26, 0x18, 0xa3, 0x81, 0x45, 0x68, 0x1d,
-	0x60, 0x74, 0x71, 0xc2, 0x26, 0xa7, 0xfd, 0xb3, 0xfe, 0xb9, 0x65, 0x74, 0xbe, 0x91, 0xcc, 0xd2,
-	0x8f, 0x51, 0x5c, 0xf2, 0x19, 0xd2, 0x31, 0x54, 0x5f, 0xa1, 0x4c, 0xc3, 0xf4, 0x28, 0x6f, 0x12,
-	0x92, 0x8d, 0x69, 0xb6, 0xf2, 0x01, 0x7a, 0xbb, 0x9d, 0x3d, 0xfa, 0x01, 0x1a, 0x59, 0xd2, 0x5e,
-	0x3c, 0xc0, 0x98, 0x3a, 0xbb, 0xd7, 0xf1, 0x6f, 0xc8, 0x7b, 0xa5, 0xf7, 0xc6, 0x6a, 0xfa, 0x95,
-	0x90, 0xa9, 0xa9, 0x7e, 0x65, 0x8f, 0x7e, 0x05, 0x00, 0x00, 0xff, 0xff, 0x84, 0x27, 0x52, 0x77,
-	0xfa, 0x04, 0x00, 0x00,
+var fileDescriptor1 = []byte{
+	// 568 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x54, 0x4d, 0x6f, 0x13, 0x31,
+	0x10, 0xad, 0xb3, 0x6d, 0x69, 0x26, 0x9f, 0xb5, 0x8a, 0x14, 0x85, 0xaf, 0x68, 0x8b, 0xd4, 0x70,
+	0x59, 0xa4, 0x70, 0x41, 0x70, 0x80, 0xb4, 0x04, 0xd4, 0x26, 0x6d, 0x91, 0x9b, 0x22, 0xa8, 0x90,
+	0x56, 0x4e, 0x3a, 0xa4, 0x16, 0xd9, 0xdd, 0xd4, 0xeb, 0xad, 0x94, 0x1b, 0xff, 0x88, 0x03, 0x57,
+	0xfe, 0x16, 0x77, 0x64, 0x7b, 0xf3, 0x49, 0x4b, 0x6e, 0x9e, 0x37, 0xf3, 0x66, 0x9f, 0xe7, 0x8d,
+	0x17, 0x4a, 0x92, 0x2b, 0x1c, 0x8a, 0x40, 0x28, 0x6f, 0x24, 0x23, 0x15, 0xd1, 0xc2, 0xa8, 0xe7,
+	0x0d, 0x92, 0x1e, 0xca, 0x90, 0xab, 0x48, 0xba, 0x9f, 0x61, 0x87, 0x71, 0x85, 0x1d, 0x5d, 0xc1,
+	0xf0, 0x3a, 0xc1, 0x58, 0x75, 0x44, 0xac, 0xe8, 0x5b, 0xc8, 0x69, 0xa6, 0x6f, 0xa8, 0x71, 0x85,
+	0xd4, 0x9c, 0x7a, 0xae, 0xf1, 0xc4, 0x5b, 0x20, 0x7b, 0xcb, 0x4c, 0x06, 0x72, 0x82, 0xc4, 0xee,
+	0x05, 0xdc, 0x9f, 0xcb, 0xc7, 0xa3, 0x28, 0x8c, 0xd1, 0xb4, 0x6e, 0xde, 0xd6, 0xba, 0x76, 0x77,
+	0x6b, 0x4b, 0x5d, 0xe8, 0xfd, 0x93, 0x40, 0x79, 0xf9, 0xe3, 0xf4, 0x21, 0x64, 0x43, 0x1e, 0x60,
+	0x3c, 0xe2, 0x7d, 0xac, 0x90, 0x1a, 0xa9, 0x67, 0xd9, 0x0c, 0xa0, 0x8f, 0x00, 0x92, 0x50, 0x5c,
+	0x27, 0xe8, 0x7f, 0xc7, 0x71, 0x25, 0x63, 0xd3, 0x16, 0x69, 0xe3, 0x98, 0x52, 0x58, 0xbf, 0xd2,
+	0x6a, 0x9c, 0x1a, 0xa9, 0x3b, 0xcc, 0x9c, 0xe9, 0x11, 0x6c, 0xcf, 0x84, 0xfa, 0xfd, 0x28, 0xfc,
+	0x26, 0x06, 0x95, 0xf5, 0x1a, 0xa9, 0xe7, 0x1a, 0x8f, 0xef, 0x92, 0x7b, 0x60, 0xaa, 0x58, 0x49,
+	0x2e, 0x02, 0xee, 0x6f, 0x02, 0xa5, 0xa5, 0x22, 0xba, 0x03, 0x1b, 0xa6, 0xb5, 0x11, 0xeb, 0x30,
+	0x1b, 0xd0, 0x2a, 0x6c, 0x5d, 0x26, 0x92, 0x2b, 0x11, 0x85, 0x46, 0xa6, 0xc3, 0xa6, 0x31, 0x7d,
+	0x0f, 0x59, 0x3e, 0x1c, 0x44, 0x52, 0xa8, 0xab, 0xc0, 0x48, 0x2d, 0x36, 0xea, 0xff, 0x57, 0xe2,
+	0x35, 0x27, 0xf5, 0x6c, 0x46, 0x75, 0x9f, 0x43, 0x76, 0x8a, 0xd3, 0x32, 0xe4, 0xbb, 0xa7, 0xed,
+	0xd6, 0x89, 0xbf, 0x7f, 0x7e, 0xd0, 0x6e, 0x75, 0xcb, 0x6b, 0x1a, 0xe9, 0xb4, 0x9a, 0xed, 0x2f,
+	0x13, 0x84, 0xb8, 0x7f, 0x32, 0xb0, 0xfd, 0x8f, 0x25, 0xf4, 0x0d, 0x6c, 0xc6, 0x8a, 0xab, 0x24,
+	0x36, 0x37, 0x28, 0x36, 0xf6, 0x56, 0x99, 0xe8, 0x9d, 0x99, 0x72, 0x96, 0xd2, 0xe8, 0x2e, 0x14,
+	0xfa, 0x89, 0x94, 0x18, 0x2a, 0x3b, 0xe4, 0xf4, 0xc2, 0xf9, 0x14, 0x34, 0x5c, 0xba, 0x07, 0x25,
+	0xeb, 0x80, 0xc4, 0x80, 0x8b, 0x50, 0x84, 0x83, 0xd4, 0xa5, 0xe2, 0xd0, 0xf6, 0x4e, 0x51, 0x6d,
+	0xb1, 0xc4, 0x18, 0x95, 0xaf, 0x44, 0x80, 0xc6, 0x28, 0x87, 0x65, 0x0d, 0xd2, 0x15, 0x01, 0xd2,
+	0x23, 0xd8, 0x0a, 0x50, 0xf1, 0x4b, 0xae, 0x78, 0x65, 0xc3, 0x2c, 0x9d, 0xb7, 0x52, 0xef, 0x71,
+	0x4a, 0x68, 0x85, 0x4a, 0x8e, 0xd9, 0x94, 0x5f, 0x7d, 0x0d, 0x85, 0x85, 0x14, 0x2d, 0x83, 0xa3,
+	0xf7, 0xca, 0xae, 0x9d, 0x3e, 0x6a, 0x77, 0x6f, 0xf8, 0x30, 0xc1, 0x74, 0xd7, 0x6c, 0xf0, 0x2a,
+	0xf3, 0x92, 0xb8, 0xcf, 0x60, 0xd3, 0xce, 0x81, 0x96, 0x20, 0x77, 0x7e, 0xf2, 0xae, 0xc5, 0xfc,
+	0xce, 0xe1, 0xf1, 0xa1, 0x9e, 0x7c, 0x11, 0xe0, 0xf4, 0xd3, 0x34, 0x26, 0x6e, 0x01, 0x72, 0x1f,
+	0x45, 0x38, 0x48, 0x57, 0xdc, 0x2d, 0x42, 0xde, 0x86, 0x56, 0x5e, 0xe3, 0xd7, 0xfc, 0x3b, 0x38,
+	0x43, 0x79, 0x23, 0xfa, 0x48, 0xbf, 0x42, 0xe1, 0x03, 0xaa, 0x29, 0x1c, 0xd3, 0xdd, 0x15, 0xcf,
+	0x56, 0xbf, 0xca, 0xea, 0xd3, 0x55, 0xb3, 0xd0, 0x55, 0xee, 0x1a, 0x6d, 0xc2, 0xba, 0x96, 0x40,
+	0xab, 0x4b, 0xf5, 0x73, 0x32, 0xab, 0x0f, 0x6e, 0xcd, 0xd9, 0x36, 0xee, 0xda, 0xfe, 0xbd, 0x8b,
+	0xcc, 0xa8, 0xf7, 0x83, 0x90, 0xde, 0xa6, 0xf9, 0x25, 0xbd, 0xf8, 0x1b, 0x00, 0x00, 0xff, 0xff,
+	0xa2, 0x91, 0x46, 0xfc, 0xa5, 0x04, 0x00, 0x00,
 }

@@ -20,9 +20,10 @@ type StatsdClient interface {
 
 type NullClient struct{}
 
-func (n *NullClient) PrecisionTiming(string, time.Duration, ...statsd.Tag) {}
-func (n *NullClient) Incr(string, int64, ...statsd.Tag)                    {}
-func (n *NullClient) Close() error                                         { return nil }
+func (n *NullClient) PrecisionTiming(string, time.Duration) {}
+func (n *NullClient) Incr(string, int64, ...statsd.Tag)     {}
+func (n *NullClient) Inc(string, int64)                     {}
+func (n *NullClient) Close() error                          { return nil }
 
 type StatsdMetrics struct {
 	reqChan    chan *RequestStats

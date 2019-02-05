@@ -23,6 +23,7 @@ type EtcdSync struct {
 	peers     map[string]struct{}
 	wg        holster.WaitGroup
 	ctx       context.Context
+	cancelCtx context.CancelFunc
 	watchChan etcd.WatchChan
 	log       *logrus.Entry
 	client    *etcd.Client
@@ -30,9 +31,13 @@ type EtcdSync struct {
 }
 
 func NewEtcdSync(client *etcd.Client) *EtcdSync {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &EtcdSync{
-		log:    logrus.WithField("category", "etcd-sync"),
-		client: client,
+		log:       logrus.WithField("category", "etcd-sync"),
+		peers:     make(map[string]struct{}),
+		cancelCtx: cancel,
+		client:    client,
+		ctx:       ctx,
 	}
 }
 
@@ -79,7 +84,6 @@ func (e *EtcdSync) watchPeers() error {
 		return errors.New("timed out while waiting for watcher.Watch() to start")
 	}
 	return nil
-
 }
 
 func (e *EtcdSync) collectPeers(revision *int64) error {
@@ -107,19 +111,6 @@ func (e *EtcdSync) watch() error {
 	}
 
 	e.wg.Until(func(done chan struct{}) bool {
-		if e.watchChan == nil {
-			if err := e.watchPeers(); err != nil {
-				e.log.WithError(err).
-					Error("while attempting to restart watch")
-				select {
-				case <-time.After(backOffTimeout):
-					return true
-				case <-done:
-					return false
-				}
-			}
-		}
-
 		for response := range e.watchChan {
 			if response.Canceled {
 				e.log.Infof("graceful watch shutdown")
@@ -128,8 +119,7 @@ func (e *EtcdSync) watch() error {
 
 			if err := response.Err(); err != nil {
 				e.log.Errorf("watch error: %v", err)
-				e.watchChan = nil
-				return true
+				goto restart
 			}
 
 			for _, event := range response.Events {
@@ -144,6 +134,28 @@ func (e *EtcdSync) watch() error {
 				e.callOnUpdate()
 			}
 		}
+
+	restart:
+		// Are we in the middle of a shutdown?
+		select {
+		case <-done:
+			return false
+		case <-e.ctx.Done():
+			return false
+		default:
+		}
+
+		if err := e.watchPeers(); err != nil {
+			e.log.WithError(err).
+				Error("while attempting to restart watch")
+			select {
+			case <-time.After(backOffTimeout):
+				return true
+			case <-done:
+				return false
+			}
+		}
+
 		return true
 	})
 	return nil
@@ -151,6 +163,7 @@ func (e *EtcdSync) watch() error {
 
 func (e *EtcdSync) register(name string) error {
 	instanceKey := rootKey + name
+	e.log.Infof("Registering peer '%s' with etcd", name)
 
 	var keepAlive <-chan *etcd.LeaseKeepAliveResponse
 	var lease *etcd.LeaseGrantResponse
@@ -241,7 +254,7 @@ func (e *EtcdSync) register(name string) error {
 }
 
 func (e *EtcdSync) Stop() {
-	e.ctx.Done()
+	e.cancelCtx()
 	e.wg.Stop()
 }
 

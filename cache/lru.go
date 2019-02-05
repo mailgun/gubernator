@@ -20,9 +20,10 @@ package cache
 
 import (
 	"container/list"
-	"github.com/mailgun/holster"
 	"sync"
 	"time"
+
+	"github.com/mailgun/holster"
 )
 
 type LRUCacheConfig struct {

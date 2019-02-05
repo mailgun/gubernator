@@ -5,10 +5,12 @@ import (
 	"github.com/mailgun/gubernator/pb"
 	"github.com/mailgun/holster"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/valyala/bytebufferpool"
 	"google.golang.org/grpc"
 	"net"
 	"sync"
+	"time"
 )
 
 const (
@@ -22,6 +24,7 @@ type Server struct {
 	server    *grpc.Server
 	peerMutex sync.RWMutex
 	client    *PeerClient
+	log       *logrus.Entry
 }
 
 // New creates a server instance.
@@ -36,6 +39,7 @@ func NewServer(conf ServerConfig) (*Server, error) {
 		grpc.StatsHandler(conf.Metrics.GRPCStatsHandler()))
 
 	s := Server{
+		log:      logrus.WithField("category", "server"),
 		listener: listener,
 		server:   server,
 		conf:     conf,
@@ -46,19 +50,20 @@ func NewServer(conf ServerConfig) (*Server, error) {
 	pb.RegisterConfigServiceServer(server, &s)
 
 	// Register our peer update callback
-	conf.PeerSyncer.RegisterOnUpdate(s.updatePeers)
+	s.conf.PeerSyncer.RegisterOnUpdate(s.updatePeers)
 
 	// Register cache stats with out metrics collector
-	conf.Metrics.RegisterCacheStats(s.conf.Cache)
+	s.conf.Metrics.RegisterCacheStats(s.conf.Cache)
 
 	// Advertise address is our listen address if not specified
-	holster.SetDefault(&conf.AdvertiseAddress, s.Address())
+	holster.SetDefault(&s.conf.AdvertiseAddress, s.Address())
 
 	return &s, nil
 }
 
-// Runs the gRPC server; blocks until server stops
-func (s *Server) Run() error {
+// Runs the gRPC server; returns when the server starts
+func (s *Server) Start() error {
+	s.log.Info("Start Server")
 
 	// Start the cache
 	if err := s.conf.Cache.Start(); err != nil {
@@ -74,12 +79,30 @@ func (s *Server) Run() error {
 		return errors.Wrap(err, "failed to sync configs with other peers")
 	}
 
-	return s.server.Serve(s.listener)
+	// Start the GRPC server
+	errs := make(chan error)
+	go func() {
+		errs <- s.server.Serve(s.listener)
+	}()
+
+	// Ensure the server is running before we return
+	go func() {
+		client := NewPeerClient(s.listener.Addr().String())
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+		defer cancel()
+		_, err := client.Ping(ctx, &pb.NoOpRequest{})
+		errs <- err
+	}()
+
+	return <-errs
 }
 
 func (s *Server) Stop() {
+	s.log.Info("Stop Server")
 	s.server.Stop()
+	s.log.Info("Stop PeerSync")
 	s.conf.PeerSyncer.Stop()
+	s.log.Info("Stop Metrics")
 	s.conf.Metrics.Stop()
 }
 
@@ -201,9 +224,9 @@ func (s *Server) applyAlgorithm(entry *pb.RateLimitKeyRequest_Entry) (*pb.Descri
 	return nil, errors.Errorf("invalid rate limit algorithm '%d'", entry.RateLimitConfig.Algorithm)
 }
 
-// TODO: Add a test for peer updates
 // Called by PeerSyncer when the cluster config changes
 func (s *Server) updatePeers(conf *PeerConfig) {
+	s.log.WithField("peers", conf.Peers).Debug("Peers updated")
 	picker := s.conf.Picker.New()
 
 	for _, peer := range conf.Peers {

@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"github.com/mailgun/gubernator/cache"
 
 	"github.com/mailgun/gubernator"
+	"github.com/mailgun/gubernator/cache"
 	"github.com/mailgun/gubernator/metrics"
 	"github.com/mailgun/gubernator/sync"
 	"github.com/mailgun/service"
@@ -12,6 +12,8 @@ import (
 
 type Config struct {
 	service.BasicConfig
+
+	LRUCache cache.LRUCacheConfig
 }
 
 type Service struct {
@@ -24,14 +26,17 @@ type Service struct {
 func (s *Service) Start(ctx context.Context) error {
 	var err error
 
-	// TODO: Get config from radar
 	s.srv, err = gubernator.NewServer(gubernator.ServerConfig{
+		Metrics:    metrics.NewStatsdMetrics(service.Metrics()),
 		Picker:     gubernator.NewConsistantHash(nil),
+		Cache:      cache.NewLRUCache(s.conf.LRUCache),
 		PeerSyncer: sync.NewEtcdSync(service.Etcd()),
-		Cache:      cache.NewLRUCache(cache.LRUCacheConfig{}),
-		Metrics:    metrics.NewStatsdMetrics(metrics.StatsdConfig{}),
 	})
-	return err
+	if err != nil {
+		return err
+	}
+
+	return s.srv.Start()
 }
 
 func (s *Service) Stop() error {

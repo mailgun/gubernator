@@ -3,13 +3,13 @@ package gubernator_test
 import (
 	"context"
 	"fmt"
-	"github.com/mailgun/gubernator/cache"
-	"github.com/mailgun/gubernator/metrics"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/mailgun/gubernator"
+	"github.com/mailgun/gubernator/cache"
+	"github.com/mailgun/gubernator/metrics"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,7 +23,7 @@ func startCluster() error {
 
 	for i := 0; i < 5; i++ {
 		srv, err := gubernator.NewServer(gubernator.ServerConfig{
-			Metrics:    metrics.NewStatsdMetrics(metrics.StatsdConfig{}),
+			Metrics:    metrics.NewStatsdMetrics(&metrics.NullClient{}),
 			Cache:      cache.NewLRUCache(cache.LRUCacheConfig{}),
 			Picker:     gubernator.NewConsistantHash(nil),
 			PeerSyncer: &syncer,
@@ -32,7 +32,7 @@ func startCluster() error {
 			return errors.Wrap(err, "NewServer()")
 		}
 		peers = append(peers, srv.Address())
-		go srv.Run()
+		go srv.Start()
 		servers = append(servers, srv)
 	}
 

@@ -69,8 +69,8 @@ func (c *PeerClient) GetPeers(ctx context.Context) (*pb.GetPeersResponse, error)
 	return resp, err
 }
 
-// This method is used purely for benchmarking
-func (c *PeerClient) NoOp(ctx context.Context, req *pb.NoOpRequest) (*pb.NoOpResponse, error) {
+// This method is used for benchmarking and ensuring the service is responding to requests
+func (c *PeerClient) Ping(ctx context.Context, req *pb.NoOpRequest) (*pb.NoOpResponse, error) {
 	if c.conn == nil {
 		if err := c.dialPeer(); err != nil {
 			return nil, err

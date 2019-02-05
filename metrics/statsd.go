@@ -3,20 +3,18 @@ package metrics
 import (
 	"context"
 	"fmt"
-	"github.com/mailgun/gubernator/cache"
 	"strings"
 	"time"
 
-	"github.com/mailgun/holster"
-	"github.com/mailgun/holster/clock"
+	"github.com/mailgun/gubernator/cache"
 	"github.com/sirupsen/logrus"
 	"github.com/smira/go-statsd"
 	"google.golang.org/grpc/stats"
 )
 
 type StatsdClient interface {
-	PrecisionTiming(string, time.Duration, ...statsd.Tag)
-	Incr(string, int64, ...statsd.Tag)
+	PrecisionTiming(string, time.Duration)
+	Inc(string, int64)
 	Close() error
 }
 
@@ -26,40 +24,18 @@ func (n *NullClient) PrecisionTiming(string, time.Duration, ...statsd.Tag) {}
 func (n *NullClient) Incr(string, int64, ...statsd.Tag)                    {}
 func (n *NullClient) Close() error                                         { return nil }
 
-type StatsdConfig struct {
-	// The name of this server instance to be reported to statsd
-	Name string
-	// The stats flush interval
-	FlushInterval clock.DurationJSON
-	// The statsd service endpoint as `host:port`
-	Endpoint string
-}
-
 type StatsdMetrics struct {
 	reqChan    chan *RequestStats
 	cacheStats cache.CacheStats
 	done       chan struct{}
-	conf       StatsdConfig
 	client     StatsdClient
 	log        *logrus.Entry
 }
 
-func NewStatsdMetrics(conf StatsdConfig) *StatsdMetrics {
+func NewStatsdMetrics(client StatsdClient) *StatsdMetrics {
 	sd := StatsdMetrics{
-		client: &NullClient{},
-		conf:   conf,
+		client: client,
 		log:    logrus.WithField("category", "metrics"),
-	}
-
-	if conf.Endpoint != "" {
-		prefix := fmt.Sprintf("gubernator.%v.", strings.Replace(conf.Name, ".", "_", -1))
-		holster.SetDefault(&conf.FlushInterval.Duration, time.Second)
-
-		sd.client = statsd.NewClient(conf.Endpoint,
-			statsd.FlushInterval(conf.FlushInterval.Duration),
-			statsd.MetricPrefix(prefix),
-			statsd.Logger(sd.log))
-		return nil
 	}
 	return &sd
 }
@@ -90,17 +66,17 @@ func (sd *StatsdMetrics) Start() error {
 				for k, v := range methods {
 					method := k[strings.LastIndex(k, "/"):]
 					sd.client.PrecisionTiming(fmt.Sprintf("api.%s.total", method), v.Duration)
-					sd.client.Incr(fmt.Sprintf("api.%s.total", method), v.Called)
-					sd.client.Incr(fmt.Sprintf("api.%s.failed", method), v.Failed)
+					sd.client.Inc(fmt.Sprintf("api.%s.total", method), v.Called)
+					sd.client.Inc(fmt.Sprintf("api.%s.failed", method), v.Failed)
 					methods[k] = RequestStats{}
 				}
 
 				// Emit stats about our cache
 				if sd.cacheStats != nil {
 					stats := sd.cacheStats.Stats(true)
-					sd.client.Incr("cache.size", stats.Size)
-					sd.client.Incr("cache.hit", stats.Hit)
-					sd.client.Incr("cache.miss", stats.Miss)
+					sd.client.Inc("cache.size", stats.Size)
+					sd.client.Inc("cache.hit", stats.Hit)
+					sd.client.Inc("cache.miss", stats.Miss)
 				}
 			case <-sd.done:
 				tick.Stop()

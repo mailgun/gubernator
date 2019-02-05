@@ -101,7 +101,7 @@ func (c *configServiceClient) GetPeers(ctx context.Context, in *GetPeersRequest,
 
 func (c *configServiceClient) NoOp(ctx context.Context, in *NoOpRequest, opts ...grpc.CallOption) (*NoOpResponse, error) {
 	out := new(NoOpResponse)
-	err := grpc.Invoke(ctx, "/pb.gubernator.ConfigService/NoOp", in, out, c.cc, opts...)
+	err := grpc.Invoke(ctx, "/pb.gubernator.ConfigService/Ping", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func _ConfigService_NoOp_Handler(srv interface{}, ctx context.Context, dec func(
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/pb.gubernator.ConfigService/NoOp",
+		FullMethod: "/pb.gubernator.ConfigService/Ping",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConfigServiceServer).NoOp(ctx, req.(*NoOpRequest))
@@ -167,7 +167,7 @@ var _ConfigService_serviceDesc = grpc.ServiceDesc{
 			Handler:    _ConfigService_GetPeers_Handler,
 		},
 		{
-			MethodName: "NoOp",
+			MethodName: "Ping",
 			Handler:    _ConfigService_NoOp_Handler,
 		},
 	},

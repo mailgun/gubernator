@@ -3,7 +3,6 @@ package gubernator
 import (
 	"github.com/mailgun/gubernator/cache"
 	"github.com/mailgun/gubernator/pb"
-	"github.com/pkg/errors"
 )
 
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket
@@ -18,8 +17,9 @@ func tokenBucket(c cache.Cache, req *pb.RateLimitRequest) (*pb.RateLimitResponse
 
 		status, ok := item.(*pb.RateLimitResponse)
 		if !ok {
-			// TODO: remove the item from the cache and re-call this function
-			return nil, errors.New("incorrect algorithm; don't change algorithms on subsequent requests")
+			// Client switched algorithms; perhaps due to a migration?
+			c.Remove(req)
+			return tokenBucket(c, req)
 		}
 
 		// If we are already at the limit
@@ -77,8 +77,9 @@ func leakyBucket(c cache.Cache, req *pb.RateLimitRequest) (*pb.RateLimitResponse
 	if ok {
 		bucket, ok := item.(*LeakyBucket)
 		if !ok {
-			// TODO: remove the item from the cache and re-call this function
-			return nil, errors.New("incorrect algorithm; don't change algorithms on subsequent requests")
+			// Client switched algorithms; perhaps due to a migration?
+			c.Remove(req)
+			return tokenBucket(c, req)
 		}
 
 		rate := bucket.RateLimitConfig.Duration / req.RateLimitConfig.Limit

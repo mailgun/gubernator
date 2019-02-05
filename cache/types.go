@@ -13,6 +13,7 @@ type Cache interface {
 	Add(req *pb.RateLimitRequest, value interface{}, expireAt int64) bool
 	UpdateExpiration(req *pb.RateLimitRequest, expireAt int64) bool
 	Get(req *pb.RateLimitRequest) (value interface{}, ok bool)
+	Remove(req *pb.RateLimitRequest)
 
 	// Controls init and shutdown of the cache
 	Start() error

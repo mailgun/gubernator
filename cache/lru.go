@@ -21,6 +21,7 @@ package cache
 import (
 	"container/list"
 	"github.com/mailgun/gubernator/pb"
+	"github.com/sirupsen/logrus"
 	"sync"
 	"time"
 
@@ -46,6 +47,8 @@ type LRUCacheConfig struct {
 type LRUCache struct {
 	cache     map[interface{}]*list.Element
 	wg        holster.WaitGroup
+	conf      LRUCacheConfig
+	log       *logrus.Entry
 	mutex     sync.Mutex
 	ll        *list.List
 	stats     Stats
@@ -65,25 +68,90 @@ func NewLRUCache(conf LRUCacheConfig) *LRUCache {
 	holster.SetDefault(&conf.InitialCacheSize, int(float32(conf.MaxCacheSize)*0.30))
 
 	return &LRUCache{
-		cacheSize: conf.InitialCacheSize,
-		ll:        list.New(),
+		log:       logrus.WithField("category", "lru-cache"),
 		cache:     make(map[interface{}]*list.Element),
+		cacheSize: conf.InitialCacheSize,
+		conf:      conf,
+		ll:        list.New(),
+	}
+}
+
+// Inspect old entries at the bottom of the cache and decided if we
+// should expand the size of the cache.
+func (c *LRUCache) inspectAndResize() {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	// If we have NOT reached the size of our cache
+	if c.cacheSize != c.Size() {
+		return
+	}
+
+	// Inspect the bottom 20% of the cache for expired items
+	inspectSize := int(float32(c.cacheSize) * 0.20)
+	ele := c.ll.Back()
+	if ele == nil {
+		// Not sure how this would happened
+		return
+	}
+
+	var prev *list.Element
+	var count, expired = 0, 0
+	for {
+		if count == inspectSize {
+			break
+		}
+
+		count++
+		entry := ele.Value.(*cacheRecord)
+		// Remove the entry if expired
+		if entry.expireAt < MillisecondNow() {
+			prev = ele.Prev()
+			c.removeElement(ele)
+			ele = prev
+			expired++
+			continue
+		}
+		ele = ele.Prev()
+	}
+
+	c.log.Debugf("Inspected cache [Size: %d, Expired: %d, Inspected: %d]", c.cacheSize, expired, inspectSize)
+
+	// If all the elements expired, we can shrink the cache size
+	if expired == inspectSize {
+		// Increase the cache size by 30%
+		newSize := c.cacheSize - int(float32(c.cacheSize)*0.30)
+		// Don't shrink beyond the initial cache size
+		if newSize < c.conf.InitialCacheSize {
+			c.cacheSize = c.conf.InitialCacheSize
+			return
+		}
+		c.log.Debugf("Shrinking cache from '%d' to '%d'", c.cacheSize, newSize)
+		c.cacheSize = newSize
+		return
+	}
+
+	// If less than 50% of the inspected elements expired
+	if expired < int(float32(inspectSize)*0.50) {
+		// Increase the cache size by 30%
+		newSize := c.cacheSize + int(float32(c.cacheSize)*0.30)
+		// Until we reach max size
+		if newSize > c.conf.MaxCacheSize {
+			c.cacheSize = c.conf.MaxCacheSize
+			return
+		}
+		c.log.Debugf("Growing cache from '%d' to '%d'", c.cacheSize, newSize)
+		c.cacheSize = newSize
+		return
 	}
 }
 
 func (c *LRUCache) Start() error {
-	// TODO: Allow resizing the cache on the fly depending on the number of cache
-	// TODO: hits, so we don't use the MAX cache all the time
-
 	tick := time.NewTicker(time.Second * 5)
 	c.wg.Until(func(done chan struct{}) bool {
 		select {
 		case <-tick.C:
-			c.mutex.Lock()
-			// TODO: Perhaps use number of cache misses, as a percent of max cache size to determine needed size
-			//stats := s.conf.cache.Stats(false)
-			//stats.
-			c.mutex.Unlock()
+			c.inspectAndResize()
 			return true
 		case <-done:
 			tick.Stop()
@@ -159,8 +227,8 @@ func (c *LRUCache) Get(req *pb.RateLimitRequest) (value interface{}, ok bool) {
 }
 
 // Remove removes the provided key from the cache.
-func (c *LRUCache) Remove(key Key) {
-	if ele, hit := c.cache[key]; hit {
+func (c *LRUCache) Remove(req *pb.RateLimitRequest) {
+	if ele, hit := c.cache[req.Namespace+"_"+req.UniqueKey]; hit {
 		c.removeElement(ele)
 	}
 }

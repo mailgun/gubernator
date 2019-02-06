@@ -61,9 +61,9 @@ func (ch *ConsistantHash) GetPeer(host string) *PeerClient {
 }
 
 // Given a key, return the peer that key is assigned too
-func (ch *ConsistantHash) Get(key string, peerInfo *PeerClient) error {
+func (ch *ConsistantHash) Get(key string) (*PeerClient, error) {
 	if ch.Size() == 0 {
-		return errors.New("unable to pick a peer; pool is empty")
+		return nil, errors.New("unable to pick a peer; pool is empty")
 	}
 
 	hash := int(ch.hashFunc([]byte(key)))
@@ -76,7 +76,5 @@ func (ch *ConsistantHash) Get(key string, peerInfo *PeerClient) error {
 		idx = 0
 	}
 
-	item := ch.peerMap[ch.peerKeys[idx]]
-	*peerInfo = *item
-	return nil
+	return ch.peerMap[ch.peerKeys[idx]], nil
 }

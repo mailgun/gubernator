@@ -2,6 +2,7 @@ package gubernator
 
 import (
 	"context"
+	"fmt"
 	"github.com/mailgun/gubernator/pb"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -10,7 +11,7 @@ import (
 type PeerPicker interface {
 	GetPeer(host string) *PeerClient
 	Peers() []*PeerClient
-	Get(string, *PeerClient) error
+	Get(string) (*PeerClient, error)
 	New() PeerPicker
 	Add(*PeerClient)
 	Size() int
@@ -58,6 +59,7 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *pb.RateLimitReque
 // Dial to a peer and initialize the GRPC client
 func (c *PeerClient) dialPeer() error {
 	// TODO: Allow TLS connections
+	fmt.Printf("Dial: %s\n", c.host)
 
 	var err error
 	c.conn, err = grpc.Dial(c.host, grpc.WithInsecure())

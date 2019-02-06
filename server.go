@@ -133,15 +133,14 @@ func (s *Server) GetRateLimits(ctx context.Context, reqs *pb.RateLimitRequestLis
 		globalKey := req.Namespace + "_" + req.UniqueKey
 
 		s.peerMutex.RLock()
-		var peer PeerClient
-		if err := s.conf.Picker.Get(globalKey, &peer); err != nil {
+		peer, err := s.conf.Picker.Get(globalKey)
+		if err != nil {
 			s.peerMutex.RUnlock()
 			return nil, errors.Wrapf(err, "while finding peer that owns key '%s'", globalKey)
 		}
 		s.peerMutex.RUnlock()
 
 		var resp *pb.RateLimitResponse
-		var err error
 
 		// If our server instance is the owner of this rate limit
 		if peer.isOwner {

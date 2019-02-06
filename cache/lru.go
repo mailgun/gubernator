@@ -254,6 +254,8 @@ func (c *LRUCache) Size() int {
 
 // Returns stats about the current state of the cache
 func (c *LRUCache) Stats(clear bool) Stats {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	if clear {
 		defer func() {
 			c.stats = Stats{}

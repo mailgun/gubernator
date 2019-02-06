@@ -73,7 +73,7 @@ func (e *EtcdSync) watchPeers() error {
 	ready := make(chan struct{})
 	go func() {
 		e.watchChan = e.watcher.Watch(etcd.WithRequireLeader(e.ctx), rootKey,
-			etcd.WithRev(revision), etcd.WithPrefix())
+			etcd.WithRev(revision), etcd.WithPrefix(), etcd.WithPrevKV())
 		close(ready)
 	}()
 
@@ -125,11 +125,15 @@ func (e *EtcdSync) watch() error {
 			for _, event := range response.Events {
 				switch event.Type {
 				case etcd.EventTypePut:
-					e.log.Debug("new peer [%s]", string(event.Kv.Value))
-					e.peers[string(event.Kv.Value)] = struct{}{}
+					if event.Kv != nil {
+						e.log.Debugf("new peer [%s]", string(event.Kv.Value))
+						e.peers[string(event.Kv.Value)] = struct{}{}
+					}
 				case etcd.EventTypeDelete:
-					e.log.Debug("removed peer [%s]", string(event.Kv.Value))
-					delete(e.peers, string(event.Kv.Value))
+					if event.PrevKv != nil {
+						e.log.Debugf("removed peer [%s]", string(event.PrevKv.Value))
+						delete(e.peers, string(event.PrevKv.Value))
+					}
 				}
 				e.callOnUpdate()
 			}

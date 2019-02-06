@@ -6,6 +6,7 @@ require (
 	github.com/Unix4ever/statsd v0.0.0-20160120230120-a8219f1fb9d8 // indirect
 	github.com/cactus/go-statsd-client/statsd v0.0.0-20190125104250-82b7a1700102 // indirect
 	github.com/coreos/etcd v3.3.11+incompatible
+	github.com/davecgh/go-spew v1.1.1
 	github.com/eapache/go-resiliency v1.1.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20180814174437-776d5712da21 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
@@ -19,7 +20,7 @@ require (
 	github.com/mailgun/holster v2.3.2+incompatible
 	github.com/mailgun/iptools v0.0.0-20170310010557-ba8d5743f678 // indirect
 	github.com/mailgun/logrus-hooks v1.2.1 // indirect
-	github.com/mailgun/service v1.3.1 // indirect
+	github.com/mailgun/service v1.3.1
 	github.com/mailru/easyjson v0.0.0-20180823135443-60711f1a8329 // indirect
 	github.com/mattn/go-colorable v0.1.0 // indirect
 	github.com/mattn/go-isatty v0.0.4 // indirect

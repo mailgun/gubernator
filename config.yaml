@@ -1,5 +1,5 @@
 # mailgun/service config
-base_api_port: 9020
+base_api_port: 9020 # Port the HTTP handler for `/_ping` will respond on
 public_api_host: api.ninomail.com
 protected_api_host: localhost
 protected_api_url: http://localhost:9001
@@ -20,7 +20,19 @@ statsd:
   host: 127.0.0.1
   port: 8125
 
-# Gubernator config
+# The address GRPC requests will listen on
+ListenAddress: localhost:9040
+# Should be the same as ListenAddress unless you are running behind
+# a NAT or running in a docker container without host networking
+AdvertiseAddress: localhost:9040
+
 LRUCache:
+  # Max size of the cache; The cache size will never grow beyond
+  # this size.
   MaxCacheSize: 100
+  # The initial size of the cache; The cache may grow or shrink
+  # depending on the number of rate limits the server is handling
+  # currently. However the cache will never shrink lower than the
+  # initial size.
   InitialCacheSize: 50
+

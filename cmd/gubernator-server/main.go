@@ -15,7 +15,9 @@ var Version = "dev-build"
 type Config struct {
 	service.BasicConfig
 
-	LRUCache cache.LRUCacheConfig
+	LRUCache         cache.LRUCacheConfig
+	ListenAddress    string
+	AdvertiseAddress string
 }
 
 type Service struct {
@@ -29,10 +31,12 @@ func (s *Service) Start(ctx context.Context) error {
 	var err error
 
 	s.srv, err = gubernator.NewServer(gubernator.ServerConfig{
-		Metrics:    metrics.NewStatsdMetrics(service.Metrics()),
-		Picker:     gubernator.NewConsistantHash(nil),
-		Cache:      cache.NewLRUCache(s.conf.LRUCache),
-		PeerSyncer: sync.NewEtcdSync(service.Etcd()),
+		Metrics:          metrics.NewStatsdMetrics(service.Metrics()),
+		Picker:           gubernator.NewConsistantHash(nil),
+		Cache:            cache.NewLRUCache(s.conf.LRUCache),
+		PeerSyncer:       sync.NewEtcdSync(service.Etcd()),
+		AdvertiseAddress: s.conf.AdvertiseAddress,
+		ListenAddress:    s.conf.ListenAddress,
 	})
 	if err != nil {
 		return err

@@ -20,7 +20,7 @@ require (
 	github.com/mailgun/holster v2.3.2+incompatible
 	github.com/mailgun/iptools v0.0.0-20170310010557-ba8d5743f678 // indirect
 	github.com/mailgun/logrus-hooks v1.2.1 // indirect
-	github.com/mailgun/service v1.3.1
+	github.com/mailgun/service v1.3.2-0.20190206210623-7e20717c1d65
 	github.com/mailru/easyjson v0.0.0-20180823135443-60711f1a8329 // indirect
 	github.com/mattn/go-colorable v0.1.0 // indirect
 	github.com/mattn/go-isatty v0.0.4 // indirect
@@ -33,7 +33,7 @@ require (
 	github.com/sirupsen/logrus v1.3.0
 	github.com/smira/go-statsd v1.2.1
 	github.com/stretchr/testify v1.3.0
-	github.com/valyala/bytebufferpool v1.0.0
+	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/x-cray/logrus-prefixed-formatter v0.5.2 // indirect
 	golang.org/x/net v0.0.0-20190119204137-ed066c81e75e
 	google.golang.org/grpc v1.18.0

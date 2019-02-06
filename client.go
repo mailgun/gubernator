@@ -131,3 +131,14 @@ func RandomPeer(peers []string) string {
 	})
 	return peers[0]
 }
+
+// Return a random alpha string of 'n' length
+func RandomString(n int) string {
+	const alphanum = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	var bytes = make([]byte, n)
+	rand.Read(bytes)
+	for i, b := range bytes {
+		bytes[i] = alphanum[b%byte(len(alphanum))]
+	}
+	return string(bytes)
+}

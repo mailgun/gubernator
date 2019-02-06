@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 
 	"github.com/mailgun/gubernator"
 	"github.com/mailgun/gubernator/cache"
@@ -52,5 +53,8 @@ func (s *Service) Stop() error {
 
 func main() {
 	var svc Service
-	service.Run(&svc.conf, &svc, service.WithName("gubernator"))
+	service.Run(&svc.conf, &svc,
+		service.WithName("gubernator"),
+		service.WithInstanceID(os.Getenv("GUBER_ID")),
+	)
 }

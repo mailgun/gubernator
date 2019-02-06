@@ -13,5 +13,3 @@ response:
     remaining: 80
     reset_timestamp: 1487332510
 
-
-// If algo conflicts with previous algo, then clear old algo from cache and start over

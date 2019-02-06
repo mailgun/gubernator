@@ -10,5 +10,5 @@ proto:
 
 docker:
 	docker build --build-arg VERSION=$(VERSION) -t mailgun/gubernator:$(VERSION) .
-	docker tag thrawn01/channel-stats:$(VERSION) thrawn01/gubernator:latest
+	docker tag thrawn01/gubernator:$(VERSION) thrawn01/gubernator:latest
 

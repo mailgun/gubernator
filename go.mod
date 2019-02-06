@@ -21,6 +21,9 @@ require (
 	github.com/mailgun/logrus-hooks v1.2.1 // indirect
 	github.com/mailgun/service v1.3.1 // indirect
 	github.com/mailru/easyjson v0.0.0-20180823135443-60711f1a8329 // indirect
+	github.com/mattn/go-colorable v0.1.0 // indirect
+	github.com/mattn/go-isatty v0.0.4 // indirect
+	github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b // indirect
 	github.com/peterbourgon/g2s v0.0.0-20170223122336-d4e7ad98afea // indirect
 	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
 	github.com/pkg/errors v0.8.1
@@ -30,6 +33,7 @@ require (
 	github.com/smira/go-statsd v1.2.1
 	github.com/stretchr/testify v1.3.0
 	github.com/valyala/bytebufferpool v1.0.0
+	github.com/x-cray/logrus-prefixed-formatter v0.5.2 // indirect
 	golang.org/x/net v0.0.0-20190119204137-ed066c81e75e
 	google.golang.org/grpc v1.18.0
 	gopkg.in/ahmetb/go-linq.v3 v3.0.0 // indirect

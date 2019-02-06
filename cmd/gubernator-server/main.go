@@ -10,6 +10,8 @@ import (
 	"github.com/mailgun/service"
 )
 
+var Version = "dev-build"
+
 type Config struct {
 	service.BasicConfig
 

@@ -73,10 +73,6 @@ func (s *Server) Start() error {
 		return errors.Wrap(err, "failed to start metrics collector")
 	}
 
-	if err := s.conf.PeerSyncer.Start(s.conf.AdvertiseAddress); err != nil {
-		return errors.Wrap(err, "failed to sync configs with other peers")
-	}
-
 	// Start the GRPC server
 	errs := make(chan error)
 	go func() {
@@ -98,7 +94,18 @@ func (s *Server) Start() error {
 		})
 	}()
 
-	return <-errs
+	// Wait until the server starts or errors
+	err := <-errs
+	if err != nil {
+		return err
+	}
+
+	// Now that our service is up, register our server
+	if err := s.conf.PeerSyncer.Start(s.conf.AdvertiseAddress); err != nil {
+		return errors.Wrap(err, "failed to sync configs with other peers")
+	}
+
+	return nil
 }
 
 func (s *Server) Stop() {
@@ -209,7 +216,12 @@ func (s *Server) updatePeers(conf *PeerConfig) {
 	picker := s.conf.Picker.New()
 
 	for _, peer := range conf.Peers {
-		peerInfo := NewPeerClient(peer)
+		peerInfo, err := NewPeerClient(peer)
+		if err != nil {
+			// TODO: Notify someone that we are unhealthy
+			s.log.Errorf("Unable to connect to peer '%s'; skip add to consistent hash", peer)
+			continue
+		}
 
 		if info := s.conf.Picker.GetPeer(peer); info != nil {
 			peerInfo = info

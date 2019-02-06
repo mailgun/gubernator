@@ -2,10 +2,10 @@ package gubernator
 
 import (
 	"context"
-	"fmt"
 	"github.com/mailgun/gubernator/pb"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"sync"
 )
 
 type PeerPicker interface {
@@ -22,12 +22,14 @@ type PeerClient struct {
 	conn    *grpc.ClientConn
 	host    string
 	isOwner bool // true if this peer refers to this server instance
+	mutex   sync.Mutex
 }
 
-func NewPeerClient(host string) *PeerClient {
-	return &PeerClient{
+func NewPeerClient(host string) (*PeerClient, error) {
+	c := &PeerClient{
 		host: host,
 	}
+	return c, c.dialPeer()
 }
 
 // TODO: Eventually this will take multiple requests made concurrently and batch them into a single request
@@ -35,12 +37,6 @@ func NewPeerClient(host string) *PeerClient {
 // TODO: When implementing batching, allow upstream context cancels to abort processing for an request,  not the entire
 // TODO: batch request
 func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
-	if c.conn == nil {
-		if err := c.dialPeer(); err != nil {
-			return nil, err
-		}
-	}
-
 	resp, err := c.client.GetPeerRateLimits(ctx, &pb.PeerRateLimitRequest{
 		RateLimits: []*pb.RateLimitRequest{r},
 	})
@@ -58,9 +54,6 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *pb.RateLimitReque
 
 // Dial to a peer and initialize the GRPC client
 func (c *PeerClient) dialPeer() error {
-	// TODO: Allow TLS connections
-	fmt.Printf("Dial: %s\n", c.host)
-
 	var err error
 	c.conn, err = grpc.Dial(c.host, grpc.WithInsecure())
 	if err != nil {

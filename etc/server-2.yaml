@@ -23,5 +23,5 @@ statsd:
 # Gubernator config
 ListenAddress: localhost:9041
 LRUCache:
-  MaxCacheSize: 5000
-  InitialCacheSize: 100
+  MaxCacheSize: 1000
+  InitialCacheSize: 50

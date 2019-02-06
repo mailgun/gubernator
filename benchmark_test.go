@@ -9,7 +9,10 @@ import (
 )
 
 func BenchmarkServer_GetRateLimitByKey(b *testing.B) {
-	client := gubernator.NewPeerClient(gubernator.RandomPeer(peers))
+	client, err := gubernator.NewPeerClient(gubernator.RandomPeer(peers))
+	if err != nil {
+		b.Errorf("NewPeerClient err: %s", err)
+	}
 
 	b.Run("GetPeerRateLimits", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/mailgun/gubernator"
+	"github.com/mailgun/holster"
 )
 
 func checkErr(err error) {
@@ -29,24 +30,31 @@ func main() {
 	// Generate a selection of rate limits with random limits
 	var rateLimits []*gubernator.Request
 
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 2000; i++ {
 		rateLimits = append(rateLimits, &gubernator.Request{
 			Namespace: fmt.Sprintf("ID-%d", i),
 			UniqueKey: gubernator.RandomString(10),
 			Hits:      1,
-			Limit:     randInt(10, 300),
-			Duration:  time.Duration(randInt(500, 6000)),
+			Limit:     randInt(1, 10),
+			Duration:  time.Duration(randInt(int(time.Millisecond*500), int(time.Second*6))),
 			Algorithm: gubernator.TokenBucket,
 		})
 	}
 
-	for _, rateLimit := range rateLimits {
-		// Now hit our cluster with the rate limits
-		resp, err := client.GetRateLimit(context.Background(), rateLimit)
-		checkErr(err)
+	fan := holster.NewFanOut(10)
+	for {
+		for _, rateLimit := range rateLimits {
+			fan.Run(func(obj interface{}) error {
+				r := obj.(*gubernator.Request)
+				// Now hit our cluster with the rate limits
+				resp, err := client.GetRateLimit(context.Background(), r)
+				checkErr(err)
 
-		if resp.Status == gubernator.OverLimit {
-			spew.Dump(resp)
+				if resp.Status == gubernator.OverLimit {
+					spew.Dump(resp)
+				}
+				return nil
+			}, rateLimit)
 		}
 	}
 }

@@ -115,10 +115,11 @@ func (c *LRUCache) inspectAndResize() {
 		ele = ele.Prev()
 	}
 
-	c.log.Debugf("Inspected cache [Size: %d, Expired: %d, Inspected: %d]", c.cacheSize, expired, inspectSize)
+	c.log.Debugf("Inspected cache [Size: %d, Cap: %d, Expired: %d, Inspected: %d]", c.Size(), c.cacheSize, expired, inspectSize)
 
 	// If all the elements expired, we can shrink the cache size
 	if expired == inspectSize {
+		// TODO: Will never be called, since this code doesn't execute unless the cache is at capacity
 		// Increase the cache size by 30%
 		newSize := c.cacheSize - int(float32(c.cacheSize)*0.30)
 		// Don't shrink beyond the initial cache size

@@ -43,7 +43,7 @@ func NewStatsdMetrics(client StatsdClient) *StatsdMetrics {
 
 func (sd *StatsdMetrics) Start() error {
 	sd.reqChan = make(chan *RequestStats, 10000)
-	methods := make(map[string]RequestStats)
+	methods := make(map[string]*RequestStats)
 
 	tick := time.NewTicker(time.Second)
 	sd.wg.Until(func(done chan struct{}) bool {
@@ -60,7 +60,7 @@ func (sd *StatsdMetrics) Start() error {
 				return true
 			}
 			stat.Called = 1
-			methods[stat.Method] = *stat
+			methods[stat.Method] = stat
 		case <-tick.C:
 			// Emit stats about GRPC method calls
 			for k, v := range methods {
@@ -70,12 +70,12 @@ func (sd *StatsdMetrics) Start() error {
 				sd.client.Inc(fmt.Sprintf("api.%s.failed", method), v.Failed)
 			}
 			// Clear the current method stats
-			methods = make(map[string]RequestStats, len(methods))
+			methods = make(map[string]*RequestStats, len(methods))
 
 			// Emit stats about our cache
 			if sd.cacheStats != nil {
 				stats := sd.cacheStats.Stats(true)
-				sd.client.Inc("cache.size", stats.Size)
+				sd.client.Gauge("cache.size", stats.Size)
 				sd.client.Inc("cache.hit", stats.Hit)
 				sd.client.Inc("cache.miss", stats.Miss)
 			}

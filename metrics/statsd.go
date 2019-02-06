@@ -14,16 +14,16 @@ import (
 )
 
 type StatsdClient interface {
-	PrecisionTiming(string, time.Duration)
+	Gauge(string, int64)
 	Inc(string, int64)
 	Close() error
 }
 
 type NullClient struct{}
 
-func (n *NullClient) PrecisionTiming(string, time.Duration) {}
-func (n *NullClient) Inc(string, int64)                     {}
-func (n *NullClient) Close() error                          { return nil }
+func (n *NullClient) Gauge(string, int64) {}
+func (n *NullClient) Inc(string, int64)   {}
+func (n *NullClient) Close() error        { return nil }
 
 type StatsdMetrics struct {
 	reqChan    chan *RequestStats
@@ -59,16 +59,18 @@ func (sd *StatsdMetrics) Start() error {
 				}
 				return true
 			}
+			stat.Called = 1
 			methods[stat.Method] = *stat
 		case <-tick.C:
 			// Emit stats about GRPC method calls
 			for k, v := range methods {
-				method := k[strings.LastIndex(k, "/"):]
-				sd.client.PrecisionTiming(fmt.Sprintf("api.%s.total", method), v.Duration)
+				method := k[strings.LastIndex(k, "/")+1:]
+				sd.client.Gauge(fmt.Sprintf("api.%s.duration", method), int64(v.Duration))
 				sd.client.Inc(fmt.Sprintf("api.%s.total", method), v.Called)
 				sd.client.Inc(fmt.Sprintf("api.%s.failed", method), v.Failed)
-				methods[k] = RequestStats{}
 			}
+			// Clear the current method stats
+			methods = make(map[string]RequestStats, len(methods))
 
 			// Emit stats about our cache
 			if sd.cacheStats != nil {
@@ -131,8 +133,8 @@ type Adaptor struct {
 	Client *statsd.Client
 }
 
-func (n *Adaptor) PrecisionTiming(stat string, dur time.Duration) {
-	n.Client.PrecisionTiming(stat, dur)
+func (n *Adaptor) Gauge(stat string, count int64) {
+	n.Client.Gauge(stat, count)
 }
 
 func (n *Adaptor) Inc(stat string, count int64) {

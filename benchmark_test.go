@@ -63,10 +63,10 @@ func BenchmarkServer_NoOp(b *testing.B) {
 	//total := time.Second / dur
 	//fmt.Printf("Total: %d\n", total)
 
-	b.Run("Ping", func(b *testing.B) {
+	b.Run("HealthCheck", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
 			if err := client.Ping(context.Background()); err != nil {
-				b.Errorf("client.Ping() err: %s", err)
+				b.Errorf("client.HealthCheck() err: %s", err)
 			}
 		}
 	})

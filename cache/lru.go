@@ -20,12 +20,13 @@ package cache
 
 import (
 	"container/list"
-	"github.com/mailgun/gubernator/pb"
-	"github.com/sirupsen/logrus"
 	"sync"
 	"time"
 
+	"github.com/mailgun/gubernator/pb"
 	"github.com/mailgun/holster"
+	"github.com/mailgun/holster/clock"
+	"github.com/sirupsen/logrus"
 )
 
 type LRUCacheConfig struct {
@@ -41,6 +42,9 @@ type LRUCacheConfig struct {
 
 	// The initial cache size. If not provided defaults to 30% of the max cache size.
 	InitialCacheSize int
+
+	// Interval at which the cache should check if it needs to shrink or grow
+	InspectInterval clock.DurationJSON
 }
 
 // Cache is an thread unsafe LRU cache that supports expiration
@@ -66,6 +70,8 @@ func NewLRUCache(conf LRUCacheConfig) *LRUCache {
 	holster.SetDefault(&conf.MaxCacheSize, 50000)
 	// If not provided init cache with 30 percent of the max cache size
 	holster.SetDefault(&conf.InitialCacheSize, int(float32(conf.MaxCacheSize)*0.30))
+	// Inspect the cache for possible resize every 30 seconds
+	holster.SetDefault(&conf.InspectInterval.Duration, time.Second*30)
 
 	return &LRUCache{
 		log:       logrus.WithField("category", "lru-cache"),
@@ -82,23 +88,18 @@ func (c *LRUCache) inspectAndResize() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	// If we have NOT reached the size of our cache
-	if c.cacheSize != c.Size() {
-		return
-	}
-
 	// Inspect the bottom 20% of the cache for expired items
 	inspectSize := int(float32(c.cacheSize) * 0.20)
 	ele := c.ll.Back()
 	if ele == nil {
-		// Not sure how this would happened
+		// return if the cache is empty
 		return
 	}
 
 	var prev *list.Element
 	var count, expired = 0, 0
 	for {
-		if count == inspectSize {
+		if count == inspectSize || ele == nil {
 			break
 		}
 
@@ -119,8 +120,7 @@ func (c *LRUCache) inspectAndResize() {
 
 	// If all the elements expired, we can shrink the cache size
 	if expired == inspectSize {
-		// TODO: Will never be called, since this code doesn't execute unless the cache is at capacity
-		// Increase the cache size by 30%
+		// Decrease the cache size by 30%
 		newSize := c.cacheSize - int(float32(c.cacheSize)*0.30)
 		// Don't shrink beyond the initial cache size
 		if newSize < c.conf.InitialCacheSize {
@@ -148,7 +148,7 @@ func (c *LRUCache) inspectAndResize() {
 }
 
 func (c *LRUCache) Start() error {
-	tick := time.NewTicker(time.Second * 5)
+	tick := time.NewTicker(c.conf.InspectInterval.Duration)
 	c.wg.Until(func(done chan struct{}) bool {
 		select {
 		case <-tick.C:

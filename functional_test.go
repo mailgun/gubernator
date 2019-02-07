@@ -144,7 +144,6 @@ func TestTokenBucket(t *testing.T) {
 	}
 }
 
-// TODO: This test is very time (clock) sensitive, We could ignore the number remaining and increase the limit duration
 func TestLeakyBucket(t *testing.T) {
 	client, errs := gubernator.NewClient(gubernator.RandomPeer(peers))
 	require.Nil(t, errs)

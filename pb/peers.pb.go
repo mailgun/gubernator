@@ -16,8 +16,8 @@ It has these top-level messages:
 	RateLimitRequest
 	RateLimitConfig
 	RateLimitResponse
-	PingRequest
-	PingResponse
+	HealthCheckRequest
+	HealthCheckResponse
 */
 package pb
 

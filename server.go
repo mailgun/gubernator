@@ -2,7 +2,9 @@ package gubernator
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,16 +17,19 @@ import (
 
 const (
 	maxRequestSize = 1 * 1024 * 1024 // 1Mb
+	Healthy        = "healthy"
+	UnHealthy      = "unhealthy"
 )
 
 type Server struct {
+	health    pb.HealthCheckResponse
 	wg        holster.WaitGroup
+	log       *logrus.Entry
 	conf      ServerConfig
 	listener  net.Listener
 	server    *grpc.Server
 	peerMutex sync.RWMutex
 	client    *PeerClient
-	log       *logrus.Entry
 }
 
 // New creates a server instance.
@@ -89,7 +94,7 @@ func (s *Server) Start() error {
 			client := pb.NewRateLimitServiceClient(conn)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*500)
 			defer cancel()
-			_, err = client.Ping(ctx, &pb.PingRequest{})
+			_, err = client.HealthCheck(ctx, &pb.HealthCheckRequest{})
 			return err
 		})
 	}()
@@ -123,7 +128,6 @@ func (s *Server) GetRateLimits(ctx context.Context, reqs *pb.RateLimitRequestLis
 	var result pb.RateLimitResponseList
 
 	// TODO: Support getting multiple keys in an async manner (FanOut)
-	// TODO: Determine what the server Quality of Service is and set context timeouts for each async request?
 	for i, req := range reqs.RateLimits {
 		if req.RateLimitConfig == nil {
 			return nil, errors.Errorf("required field 'RateLimitConfig' missing from 'RateLimit[%d]'", i)
@@ -184,9 +188,11 @@ func (s *Server) GetPeerRateLimits(ctx context.Context, req *pb.PeerRateLimitReq
 	return &resp, nil
 }
 
-// Used for GRPC Benchmarking and liveliness checks
-func (s *Server) Ping(ctx context.Context, in *pb.PingRequest) (*pb.PingResponse, error) {
-	return &pb.PingResponse{}, nil
+// Returns the health of the peer.
+func (s *Server) HealthCheck(ctx context.Context, in *pb.HealthCheckRequest) (*pb.HealthCheckResponse, error) {
+	s.peerMutex.RLock()
+	defer s.peerMutex.RUnlock()
+	return &s.health, nil
 }
 
 func (s *Server) applyAlgorithm(entry *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
@@ -212,14 +218,13 @@ func (s *Server) applyAlgorithm(entry *pb.RateLimitRequest) (*pb.RateLimitRespon
 
 // Called by PeerSyncer when the cluster config changes
 func (s *Server) updatePeers(conf *PeerConfig) {
-	s.log.WithField("peers", conf.Peers).Debug("Peers updated")
 	picker := s.conf.Picker.New()
+	var errs []string
 
 	for _, peer := range conf.Peers {
 		peerInfo, err := NewPeerClient(peer)
 		if err != nil {
-			// TODO: Notify someone that we are unhealthy
-			s.log.Errorf("Unable to connect to peer '%s'; skip add to consistent hash", peer)
+			errs = append(errs, fmt.Sprintf("failed to connect to peer '%s'; consistent hash is incomplete", peer))
 			continue
 		}
 
@@ -237,10 +242,20 @@ func (s *Server) updatePeers(conf *PeerConfig) {
 
 	// TODO: schedule a disconnect for old PeerClients once they are no longer in flight
 
-	// Replace our current picker
 	s.peerMutex.Lock()
+	defer s.peerMutex.Unlock()
+
+	// Replace our current picker
 	s.conf.Picker = picker
-	s.peerMutex.Unlock()
+
+	// Update our health status
+	s.health.Status = Healthy
+	if len(errs) != 0 {
+		s.health.Status = UnHealthy
+		s.health.Message = strings.Join(errs, "|")
+	}
+	s.health.PeerCount = int32(picker.Size())
+	s.log.WithField("peers", conf.Peers).Debug("Peers updated")
 }
 
 func retry(attempts int, d time.Duration, callback func() error) (err error) {

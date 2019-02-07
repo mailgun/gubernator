@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"os"
 
 	"github.com/mailgun/gubernator"
 	"github.com/mailgun/gubernator/cache"
 	"github.com/mailgun/gubernator/metrics"
+	"github.com/mailgun/gubernator/pb"
 	"github.com/mailgun/gubernator/sync"
 	"github.com/mailgun/service"
+	"github.com/mailgun/service/httpapi"
 )
 
 var Version = "dev-build"
@@ -38,6 +41,18 @@ func (s *Service) Start(ctx context.Context) error {
 		PeerSyncer:       sync.NewEtcdSync(service.Etcd()),
 		AdvertiseAddress: s.conf.AdvertiseAddress,
 		ListenAddress:    s.conf.ListenAddress,
+	})
+	if err != nil {
+		return err
+	}
+
+	err = s.AddHandler(httpapi.Spec{
+		Method: "GET",
+		Path:   "/healthz",
+		Scope:  httpapi.ScopeProtected,
+		Handler: func(w http.ResponseWriter, r *http.Request, p map[string]string) (interface{}, error) {
+			return s.srv.HealthCheck(r.Context(), &pb.HealthCheckRequest{})
+		},
 	})
 	if err != nil {
 		return err

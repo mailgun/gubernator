@@ -73,7 +73,7 @@ func (c *Client) GetClient() pb.RateLimitServiceClient {
 }
 
 func (c *Client) Ping(ctx context.Context) error {
-	_, err := c.client.Ping(ctx, &pb.PingRequest{})
+	_, err := c.client.HealthCheck(ctx, &pb.HealthCheckRequest{})
 	return err
 }
 

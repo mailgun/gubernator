@@ -12,7 +12,7 @@ service RateLimitService {
 
   // This method is for round trip benchmarking and can be used by
   // the client to determine connectivity to the server
-  rpc Ping (PingRequest) returns (PingResponse) {}
+  rpc HealthCheck (HealthCheckRequest) returns (HealthCheckResponse) {}
 }
 
 // Must specify at least one RateLimitRequest.
@@ -79,5 +79,12 @@ message RateLimitResponse {
   map<string, string> metadata = 5;
 }
 
-message PingRequest {}
-message PingResponse {}
+message HealthCheckRequest {}
+message HealthCheckResponse {
+  // Valid entries are 'healthy' or 'unhealthy'
+  string status = 1;
+  // If 'unhealthy' message indicates the problem
+  string message = 2;
+  // The number of peers we know about
+  int32 peer_count = 3;
+}

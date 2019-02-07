@@ -29,10 +29,15 @@ AdvertiseAddress: localhost:9040
 LRUCache:
   # Max size of the cache; The cache size will never grow beyond
   # this size.
-  MaxCacheSize: 100
+  MaxCacheSize: 100000
   # The initial size of the cache; The cache may grow or shrink
   # depending on the number of rate limits the server is handling
   # currently. However the cache will never shrink lower than the
   # initial size.
-  InitialCacheSize: 50
+  InitialCacheSize: 10000
+  # Interval at which gubernator should check if the cache size
+  # needs to shrink or grow. Lower the inspection interval to
+  # make the cache more responsive to high volume bursts, raise
+  # the interval to conserve more memory during bursts.
+  InspectInterval: 30s
 

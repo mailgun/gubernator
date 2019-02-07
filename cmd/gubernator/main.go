@@ -7,7 +7,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/mailgun/gubernator"
 	"github.com/mailgun/holster"
 )
@@ -47,12 +46,12 @@ func main() {
 			fan.Run(func(obj interface{}) error {
 				r := obj.(*gubernator.Request)
 				// Now hit our cluster with the rate limits
-				resp, err := client.GetRateLimit(context.Background(), r)
+				_, err := client.GetRateLimit(context.Background(), r)
 				checkErr(err)
 
-				if resp.Status == gubernator.OverLimit {
+				/*if resp.Status == gubernator.OverLimit {
 					spew.Dump(resp)
-				}
+				}*/
 				return nil
 			}, rateLimit)
 		}

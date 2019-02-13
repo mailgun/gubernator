@@ -196,10 +196,6 @@ func (s *Server) HealthCheck(ctx context.Context, in *pb.HealthCheckRequest) (*p
 }
 
 func (s *Server) applyAlgorithm(entry *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
-	if entry.Hits == 0 {
-		entry.Hits = 1
-	}
-
 	if entry.RateLimitConfig == nil {
 		return nil, errors.New("required field 'RateLimitConfig' missing from 'RateLimitKeyRequest_Entry'")
 	}

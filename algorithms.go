@@ -28,6 +28,11 @@ func tokenBucket(c cache.Cache, req *pb.RateLimitRequest) (*pb.RateLimitResponse
 			return status, nil
 		}
 
+		// Client is only interested in retrieving the current status
+		if req.Hits == 0 {
+			return status, nil
+		}
+
 		// If requested hits takes the remainder
 		if status.LimitRemaining == req.Hits {
 			status.LimitRemaining = 0

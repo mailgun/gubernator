@@ -53,7 +53,7 @@ func BenchmarkServer_GetRateLimit(b *testing.B) {
 		}
 	})
 }
-func BenchmarkServer_NoOp(b *testing.B) {
+func BenchmarkServer_Ping(b *testing.B) {
 	client, err := gubernator.NewClient(gubernator.RandomPeer(peers))
 	if err != nil {
 		b.Errorf("NewClient err: %s", err)

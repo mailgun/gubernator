@@ -16,20 +16,20 @@ import (
 )
 
 var peers []string
-var servers []*gubernator.Server
+var servers []*gubernator.GRPCServer
 
 func startCluster() error {
 	syncer := gubernator.LocalPeerSyncer{}
 
 	for i := 0; i < 5; i++ {
-		srv, err := gubernator.NewServer(gubernator.ServerConfig{
+		srv, err := gubernator.NewGRPCServer(gubernator.ServerConfig{
 			Metrics:    metrics.NewStatsdMetrics(&metrics.NullClient{}),
 			Cache:      cache.NewLRUCache(cache.LRUCacheConfig{}),
 			Picker:     gubernator.NewConsistantHash(nil),
 			PeerSyncer: &syncer,
 		})
 		if err != nil {
-			return errors.Wrap(err, "NewServer()")
+			return errors.Wrap(err, "NewGRPCServer()")
 		}
 		peers = append(peers, srv.Address())
 		go srv.Start()

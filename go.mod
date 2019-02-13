@@ -16,8 +16,9 @@ require (
 	github.com/golang/protobuf v1.2.0
 	github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db // indirect
 	github.com/gorilla/mux v1.7.0 // indirect
+	github.com/grpc-ecosystem/grpc-gateway v1.7.0
 	github.com/kr/pretty v0.1.0 // indirect
-	github.com/mailgun/holster v2.3.2+incompatible
+	github.com/mailgun/holster v2.3.5+incompatible
 	github.com/mailgun/iptools v0.0.0-20170310010557-ba8d5743f678 // indirect
 	github.com/mailgun/logrus-hooks v1.2.1 // indirect
 	github.com/mailgun/service v1.3.2-0.20190206210623-7e20717c1d65
@@ -36,6 +37,7 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/x-cray/logrus-prefixed-formatter v0.5.2 // indirect
 	golang.org/x/net v0.0.0-20190119204137-ed066c81e75e
+	google.golang.org/genproto v0.0.0-20180817151627-c66870c02cf8
 	google.golang.org/grpc v1.18.0
 	gopkg.in/ahmetb/go-linq.v3 v3.0.0 // indirect
 	gopkg.in/alexcesaro/statsd.v2 v2.0.0 // indirect

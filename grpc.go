@@ -21,7 +21,7 @@ const (
 	UnHealthy      = "unhealthy"
 )
 
-type Server struct {
+type GRPCServer struct {
 	health    pb.HealthCheckResponse
 	wg        holster.WaitGroup
 	log       *logrus.Entry
@@ -33,18 +33,18 @@ type Server struct {
 }
 
 // New creates a server instance.
-func NewServer(conf ServerConfig) (*Server, error) {
-	listener, err := net.Listen("tcp", conf.ListenAddress)
+func NewGRPCServer(conf ServerConfig) (*GRPCServer, error) {
+	listener, err := net.Listen("tcp", conf.GRPCListenAddress)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to listen on %s", conf.ListenAddress)
+		return nil, errors.Wrapf(err, "failed to listen on %s", conf.GRPCListenAddress)
 	}
 
 	server := grpc.NewServer(
 		grpc.MaxRecvMsgSize(maxRequestSize),
 		grpc.StatsHandler(conf.Metrics.GRPCStatsHandler()))
 
-	s := Server{
-		log:      logrus.WithField("category", "server"),
+	s := GRPCServer{
+		log:      logrus.WithField("category", "grpc"),
 		listener: listener,
 		server:   server,
 		conf:     conf,
@@ -61,13 +61,13 @@ func NewServer(conf ServerConfig) (*Server, error) {
 	s.conf.Metrics.RegisterCacheStats(s.conf.Cache)
 
 	// Advertise address is our listen address if not specified
-	holster.SetDefault(&s.conf.AdvertiseAddress, s.Address())
+	holster.SetDefault(&s.conf.GRPCAdvertiseAddress, s.Address())
 
 	return &s, nil
 }
 
 // Runs the gRPC server; returns when the server starts
-func (s *Server) Start() error {
+func (s *GRPCServer) Start() error {
 	// Start the cache
 	if err := s.conf.Cache.Start(); err != nil {
 		return errors.Wrap(err, "failed to start cache")
@@ -79,10 +79,11 @@ func (s *Server) Start() error {
 	}
 
 	// Start the GRPC server
-	errs := make(chan error)
-	go func() {
+	errs := make(chan error, 1)
+	s.wg.Go(func() {
+		// Serve will return a non-nil error unless Stop or GracefulStop is called.
 		errs <- s.server.Serve(s.listener)
-	}()
+	})
 
 	// Ensure the server is running before we return
 	go func() {
@@ -102,29 +103,31 @@ func (s *Server) Start() error {
 	// Wait until the server starts or errors
 	err := <-errs
 	if err != nil {
-		return err
+		return errors.Wrap(err, "while waiting for server to pass health check")
 	}
 
 	// Now that our service is up, register our server
-	if err := s.conf.PeerSyncer.Start(s.conf.AdvertiseAddress); err != nil {
+	if err := s.conf.PeerSyncer.Start(s.conf.GRPCAdvertiseAddress); err != nil {
 		return errors.Wrap(err, "failed to sync configs with other peers")
 	}
 
+	s.log.Infof("GRPC Listening on %s ...", s.Address())
 	return nil
 }
 
-func (s *Server) Stop() {
+func (s *GRPCServer) Stop() {
 	s.server.Stop()
 	s.conf.PeerSyncer.Stop()
 	s.conf.Metrics.Stop()
+	s.wg.Wait()
 }
 
 // Return the address the server is listening too
-func (s *Server) Address() string {
+func (s *GRPCServer) Address() string {
 	return s.listener.Addr().String()
 }
 
-func (s *Server) GetRateLimits(ctx context.Context, reqs *pb.RateLimitRequestList) (*pb.RateLimitResponseList, error) {
+func (s *GRPCServer) GetRateLimits(ctx context.Context, reqs *pb.RateLimitRequestList) (*pb.RateLimitResponseList, error) {
 	var result pb.RateLimitResponseList
 
 	// TODO: Support getting multiple keys in an async manner (FanOut)
@@ -175,7 +178,7 @@ func (s *Server) GetRateLimits(ctx context.Context, reqs *pb.RateLimitRequestLis
 	return &result, nil
 }
 
-func (s *Server) GetPeerRateLimits(ctx context.Context, req *pb.PeerRateLimitRequest) (*pb.PeerRateLimitResponse, error) {
+func (s *GRPCServer) GetPeerRateLimits(ctx context.Context, req *pb.PeerRateLimitRequest) (*pb.PeerRateLimitResponse, error) {
 	var resp pb.PeerRateLimitResponse
 
 	for _, entry := range req.RateLimits {
@@ -189,13 +192,13 @@ func (s *Server) GetPeerRateLimits(ctx context.Context, req *pb.PeerRateLimitReq
 }
 
 // Returns the health of the peer.
-func (s *Server) HealthCheck(ctx context.Context, in *pb.HealthCheckRequest) (*pb.HealthCheckResponse, error) {
+func (s *GRPCServer) HealthCheck(ctx context.Context, in *pb.HealthCheckRequest) (*pb.HealthCheckResponse, error) {
 	s.peerMutex.RLock()
 	defer s.peerMutex.RUnlock()
 	return &s.health, nil
 }
 
-func (s *Server) applyAlgorithm(entry *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
+func (s *GRPCServer) applyAlgorithm(entry *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
 	if entry.RateLimitConfig == nil {
 		return nil, errors.New("required field 'RateLimitConfig' missing from 'RateLimitKeyRequest_Entry'")
 	}
@@ -213,7 +216,7 @@ func (s *Server) applyAlgorithm(entry *pb.RateLimitRequest) (*pb.RateLimitRespon
 }
 
 // Called by PeerSyncer when the cluster config changes
-func (s *Server) updatePeers(conf *PeerConfig) {
+func (s *GRPCServer) updatePeers(conf *PeerConfig) {
 	picker := s.conf.Picker.New()
 	var errs []string
 
@@ -229,7 +232,7 @@ func (s *Server) updatePeers(conf *PeerConfig) {
 		}
 
 		// If this peer refers to this server instance
-		if peer == s.conf.AdvertiseAddress {
+		if peer == s.conf.GRPCAdvertiseAddress {
 			peerInfo.isOwner = true
 		}
 

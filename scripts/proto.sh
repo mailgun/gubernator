@@ -11,5 +11,11 @@ PROTO_DIR=./pb
 rm -f $PROTO_DIR/*.go
 
 protoc -I=$PROTO_DIR \
+    -I=$GOPATH/pkg/mod/github.com/grpc-ecosystem/grpc-gateway\@v1.7.0/third_party/googleapis \
     --go_out=plugins=grpc:$PROTO_DIR \
+    $PROTO_DIR/*.proto
+
+protoc -I=$PROTO_DIR \
+    -I=$GOPATH/pkg/mod/github.com/grpc-ecosystem/grpc-gateway\@v1.7.0/third_party/googleapis \
+    --grpc-gateway_out=logtostderr=true:$PROTO_DIR \
     $PROTO_DIR/*.proto

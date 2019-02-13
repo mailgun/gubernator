@@ -39,7 +39,7 @@ func NewHTTPServer(grpcSrv *GRPCServer, conf ServerConfig) (*HTTPServer, error) 
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 
 	// Fetch the listener address if none was set
-	holster.SetDefault(&s.conf.HTTPListenAddress, listener.Addr())
+	holster.SetDefault(&s.conf.HTTPListenAddress, s.Address())
 
 	mux := http.NewServeMux()
 	gateway := runtime.NewServeMux()

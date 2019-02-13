@@ -16,10 +16,12 @@ import (
 )
 
 var peers []string
-var servers []*gubernator.GRPCServer
+var grpcServers []*gubernator.GRPCServer
+var httpServer *gubernator.HTTPServer
 
 func startCluster() error {
 	syncer := gubernator.LocalPeerSyncer{}
+	var err error
 
 	for i := 0; i < 5; i++ {
 		srv, err := gubernator.NewGRPCServer(gubernator.ServerConfig{
@@ -32,8 +34,19 @@ func startCluster() error {
 			return errors.Wrap(err, "NewGRPCServer()")
 		}
 		peers = append(peers, srv.Address())
-		go srv.Start()
-		servers = append(servers, srv)
+		if err := srv.Start(); err != nil {
+			return errors.Wrap(err, "GRPCServer.Start()")
+		}
+		grpcServers = append(grpcServers, srv)
+	}
+
+	httpServer, err = gubernator.NewHTTPServer(grpcServers[0], gubernator.ServerConfig{})
+	if err != nil {
+		return errors.Wrap(err, "NewHTTPServer()")
+	}
+
+	if err := httpServer.Start(); err != nil {
+		return errors.Wrap(err, "HTTPServer.Start()")
 	}
 
 	syncer.Update(gubernator.PeerConfig{
@@ -44,7 +57,7 @@ func startCluster() error {
 }
 
 func stopCluster() {
-	for _, srv := range servers {
+	for _, srv := range grpcServers {
 		srv.Stop()
 	}
 }

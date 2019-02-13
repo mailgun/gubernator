@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -14,16 +15,16 @@ import (
 )
 
 type StatsdClient interface {
-	Gauge(string, int64)
-	Inc(string, int64)
+	Gauge(string, int64, ...statsd.Tag)
+	Incr(string, int64, ...statsd.Tag)
 	Close() error
 }
 
 type NullClient struct{}
 
-func (n *NullClient) Gauge(string, int64) {}
-func (n *NullClient) Inc(string, int64)   {}
-func (n *NullClient) Close() error        { return nil }
+func (n *NullClient) Gauge(string, int64, ...statsd.Tag) {}
+func (n *NullClient) Incr(string, int64, ...statsd.Tag)  {}
+func (n *NullClient) Close() error                       { return nil }
 
 type StatsdMetrics struct {
 	reqChan    chan *RequestStats
@@ -39,6 +40,29 @@ func NewStatsdMetrics(client StatsdClient) *StatsdMetrics {
 		log:    logrus.WithField("category", "metrics"),
 	}
 	return &sd
+}
+
+func NewStatsdMetricsFromConf(conf Config) Collector {
+	if conf.Host == "" || conf.Port == 0 {
+		return NewStatsdMetrics(&NullClient{})
+	}
+
+	if conf.Prefix == "" {
+		hostname, _ := os.Hostname()
+		normalizedHostname := strings.Replace(hostname, ".", "_", -1)
+		conf.Prefix = fmt.Sprintf("gubernator.%v.", normalizedHostname)
+	}
+
+	log := logrus.WithField("category", "metrics")
+
+	holster.SetDefault(&conf.Period.Duration, time.Second)
+
+	client := statsd.NewClient(fmt.Sprintf("%v:%v", conf.Host, conf.Port),
+		statsd.FlushInterval(conf.Period.Duration),
+		statsd.MetricPrefix(conf.Prefix),
+		statsd.Logger(log))
+
+	return NewStatsdMetrics(client)
 }
 
 func (sd *StatsdMetrics) Start() error {
@@ -66,8 +90,8 @@ func (sd *StatsdMetrics) Start() error {
 			for k, v := range methods {
 				method := k[strings.LastIndex(k, "/")+1:]
 				sd.client.Gauge(fmt.Sprintf("api.%s.duration", method), int64(v.Duration))
-				sd.client.Inc(fmt.Sprintf("api.%s.total", method), v.Called)
-				sd.client.Inc(fmt.Sprintf("api.%s.failed", method), v.Failed)
+				sd.client.Incr(fmt.Sprintf("api.%s.total", method), v.Called)
+				sd.client.Incr(fmt.Sprintf("api.%s.failed", method), v.Failed)
 			}
 			// Clear the current method stats
 			methods = make(map[string]*RequestStats, len(methods))
@@ -76,8 +100,8 @@ func (sd *StatsdMetrics) Start() error {
 			if sd.cacheStats != nil {
 				stats := sd.cacheStats.Stats(true)
 				sd.client.Gauge("cache.size", stats.Size)
-				sd.client.Inc("cache.hit", stats.Hit)
-				sd.client.Inc("cache.miss", stats.Miss)
+				sd.client.Incr("cache.hit", stats.Hit)
+				sd.client.Incr("cache.miss", stats.Miss)
 			}
 		case <-done:
 			tick.Stop()
@@ -126,27 +150,4 @@ func (sd *StatsdMetrics) TagConn(ctx context.Context, _ *stats.ConnTagInfo) cont
 
 func (sd *StatsdMetrics) TagRPC(ctx context.Context, tagInfo *stats.RPCTagInfo) context.Context {
 	return ContextWithStats(ctx, &RequestStats{Method: tagInfo.FullMethodName})
-}
-
-// Adapt a statsd client to our interface
-type Adaptor struct {
-	Client *statsd.Client
-}
-
-func (n *Adaptor) Gauge(stat string, count int64) {
-	n.Client.Gauge(stat, count)
-}
-
-func (n *Adaptor) Inc(stat string, count int64) {
-	n.Client.Incr(stat, count)
-}
-
-func (n *Adaptor) Close() error {
-	return n.Client.Close()
-}
-
-type StatsdConfig struct {
-	Interval time.Duration
-	Endpoint string
-	Prefix   string
 }

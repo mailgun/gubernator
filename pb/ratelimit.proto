@@ -6,13 +6,25 @@ option cc_generic_services = true;
 
 package pb.gubernator;
 
+import "google/api/annotations.proto";
+
 service RateLimitService {
   // Given a list of rate limits return the rates and statuses of each request.
-  rpc GetRateLimits (RateLimitRequestList) returns (RateLimitResponseList) {}
+  rpc GetRateLimits (RateLimitRequestList) returns (RateLimitResponseList) {
+    option (google.api.http) = {
+      post: "/v1/GetRateLimits"
+      body: "*"
+    };
+  }
+
 
   // This method is for round trip benchmarking and can be used by
   // the client to determine connectivity to the server
-  rpc HealthCheck (HealthCheckRequest) returns (HealthCheckResponse) {}
+  rpc HealthCheck (HealthCheckRequest) returns (HealthCheckResponse) {
+    option (google.api.http) = {
+      get: "/v1/HealthCheck"
+    };
+  }
 }
 
 // Must specify at least one RateLimitRequest.

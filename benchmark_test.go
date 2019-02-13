@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/mailgun/gubernator"
 	"github.com/mailgun/gubernator/pb"
+	"net/http"
 	"testing"
 	"time"
 )
@@ -53,6 +54,7 @@ func BenchmarkServer_GetRateLimit(b *testing.B) {
 		}
 	})
 }
+
 func BenchmarkServer_Ping(b *testing.B) {
 	client, err := gubernator.NewClient(gubernator.RandomPeer(peers))
 	if err != nil {
@@ -70,6 +72,15 @@ func BenchmarkServer_Ping(b *testing.B) {
 			}
 		}
 	})
+}
+
+func BenchmarkServer_GRPCGateway(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		_, err := http.Get("http://" + httpServer.Address() + "/v1/HealthCheck")
+		if err != nil {
+			b.Errorf("GRPCGateway() err: %s", err)
+		}
+	}
 }
 
 // TODO: Benchmark with fanout to simulate thundering heard of simultaneous requests from many clients

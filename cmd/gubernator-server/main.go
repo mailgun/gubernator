@@ -4,19 +4,19 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/ghodss/yaml"
-	"github.com/mailgun/holster"
 	"io/ioutil"
 	"os"
 	"os/signal"
 	"time"
 
 	etcd "github.com/coreos/etcd/clientv3"
+	"github.com/ghodss/yaml"
 	"github.com/mailgun/gubernator"
 	"github.com/mailgun/gubernator/cache"
 	"github.com/mailgun/gubernator/logging"
 	"github.com/mailgun/gubernator/metrics"
 	"github.com/mailgun/gubernator/sync"
+	"github.com/mailgun/holster"
 	"github.com/mailgun/holster/etcdutil"
 	"github.com/sirupsen/logrus"
 )
@@ -68,7 +68,7 @@ func main() {
 
 	checkErr(grpcSrv.Start(), "while starting GRPC server")
 
-	httpSrv, err := gubernator.NewHTTPServer(grpcSrv, gubernator.ServerConfig{
+	httpSrv, err := gubernator.NewHTTPServer(gubernator.ServerConfig{
 		HTTPListenAddress: conf.HTTPListenAddress,
 		GRPCListenAddress: conf.GRPCListenAddress,
 	})

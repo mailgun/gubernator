@@ -153,3 +153,29 @@ func (sd *StatsdMetrics) TagConn(ctx context.Context, _ *stats.ConnTagInfo) cont
 func (sd *StatsdMetrics) TagRPC(ctx context.Context, tagInfo *stats.RPCTagInfo) context.Context {
 	return ContextWithStats(ctx, &RequestStats{Method: tagInfo.FullMethodName})
 }
+
+type ServiceMetrics interface {
+	Gauge(stat string, value int64)
+	Inc(stat string, value int64)
+	Close() error
+}
+
+type ClientAdaptor struct {
+	client ServiceMetrics
+}
+
+func NewClientAdaptor(client ServiceMetrics) *ClientAdaptor {
+	return &ClientAdaptor{client: client}
+}
+
+func (c *ClientAdaptor) Gauge(stat string, value int64, tags ...statsd.Tag) {
+	c.client.Gauge(stat, value)
+}
+
+func (c *ClientAdaptor) Incr(stat string, value int64, tags ...statsd.Tag) {
+	c.client.Inc(stat, value)
+}
+
+func (c *ClientAdaptor) Close() error {
+	return c.client.Close()
+}

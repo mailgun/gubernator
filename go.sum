@@ -58,6 +58,14 @@ github.com/mailgun/service v1.3.1 h1:wQ71ADMe4DcIuCkPthPaliHmjzMvOdY7Vyt3LaCw8BQ
 github.com/mailgun/service v1.3.1/go.mod h1:v7v8DsEfe8xL/SdvRXuxonjzeI7leewDaS3/gfcwG1k=
 github.com/mailgun/service v1.3.2-0.20190206210623-7e20717c1d65 h1:3qUfzkTSLvq34LG+rJu0AUGbsqhXELKRD1Lm3ESFjCA=
 github.com/mailgun/service v1.3.2-0.20190206210623-7e20717c1d65/go.mod h1:v7v8DsEfe8xL/SdvRXuxonjzeI7leewDaS3/gfcwG1k=
+github.com/mailgun/service v1.3.2-0.20190211201126-27bedb4b4e04 h1:lwhVLDBBpOY/9dRB9f4/C23dtuMjnJz8xxv3/Q77SAw=
+github.com/mailgun/service v1.3.2-0.20190211201126-27bedb4b4e04/go.mod h1:v7v8DsEfe8xL/SdvRXuxonjzeI7leewDaS3/gfcwG1k=
+github.com/mailgun/service v1.3.2-0.20190214031322-428206853157 h1:GlZzRogXrEENeb+JO3Nf74dXMHaYG7w6GHeDn5ro7Fc=
+github.com/mailgun/service v1.3.2-0.20190214031322-428206853157/go.mod h1:v7v8DsEfe8xL/SdvRXuxonjzeI7leewDaS3/gfcwG1k=
+github.com/mailgun/service v1.3.2-0.20190214032701-3c04650144df h1:x49ejAb2BS2tdpS5RIytEE2j/oPj2yVEzsHgsx7h8DU=
+github.com/mailgun/service v1.3.2-0.20190214032701-3c04650144df/go.mod h1:v7v8DsEfe8xL/SdvRXuxonjzeI7leewDaS3/gfcwG1k=
+github.com/mailgun/service v1.3.2-0.20190214034514-38a9fb32dabc h1:vXPZaCJQyL22BN2trg38E/4XGfRULjsWGu2a11PnonM=
+github.com/mailgun/service v1.3.2-0.20190214034514-38a9fb32dabc/go.mod h1:v7v8DsEfe8xL/SdvRXuxonjzeI7leewDaS3/gfcwG1k=
 github.com/mailru/easyjson v0.0.0-20180823135443-60711f1a8329 h1:2gxZ0XQIU/5z3Z3bUBu+FXuk2pFbkN6tcwi/pjyaDic=
 github.com/mailru/easyjson v0.0.0-20180823135443-60711f1a8329/go.mod h1:C1wdFJiN94OJF2b5HbByQZoLdCWB1Yqtg26g4irojpc=
 github.com/mattn/go-colorable v0.1.0 h1:v2XXALHHh6zHfYTJ+cSkwtyffnaOyR1MXaA91mTrb8o=

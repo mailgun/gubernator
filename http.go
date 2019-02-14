@@ -2,7 +2,6 @@ package gubernator
 
 import (
 	"context"
-	"encoding/json"
 	"net"
 	"net/http"
 	"time"
@@ -25,7 +24,7 @@ type HTTPServer struct {
 	server   *http.Server
 }
 
-func NewHTTPServer(grpcSrv *GRPCServer, conf ServerConfig) (*HTTPServer, error) {
+func NewHTTPServer(conf ServerConfig) (*HTTPServer, error) {
 	listener, err := net.Listen("tcp", conf.HTTPListenAddress)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to listen on %s", conf.HTTPListenAddress)
@@ -46,23 +45,10 @@ func NewHTTPServer(grpcSrv *GRPCServer, conf ServerConfig) (*HTTPServer, error) 
 	err = pb.RegisterRateLimitServiceHandlerFromEndpoint(s.ctx, gateway,
 		conf.GRPCListenAddress, []grpc.DialOption{grpc.WithInsecure()})
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "while registering GRPC gateway handler")
 	}
 
 	mux.Handle("/", gateway)
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		resp, err := grpcSrv.HealthCheck(r.Context(), &pb.HealthCheckRequest{})
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		toJSON(w, resp)
-	})
-	mux.HandleFunc("/_ping", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("pong"))
-	})
-
 	s.server = &http.Server{Addr: conf.HTTPListenAddress, Handler: mux}
 
 	return &s, nil
@@ -104,14 +90,4 @@ func (s *HTTPServer) Stop() {
 	}
 	s.cancel()
 	s.wg.Wait()
-}
-
-func toJSON(w http.ResponseWriter, obj interface{}) {
-	resp, err := json.Marshal(obj)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(resp)
 }

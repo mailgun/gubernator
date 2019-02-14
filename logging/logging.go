@@ -26,13 +26,13 @@ type HandlerCfg struct {
 	Nodes    []string     `json:"nodes"`
 }
 
-func Init(ctx context.Context, cfg Config, appName string) error {
+func Init(ctx context.Context, cfg Config) error {
 	for name, handler := range cfg.Handlers {
 		holster.SetDefault(&handler.LogLevel.Level, logrus.DebugLevel)
 		switch name {
 		case "syslog":
 			h, err := logrus_syslog.NewSyslogHook(
-				"udp", "127.0.0.1:514", syslog.LOG_INFO|syslog.LOG_MAIL, appName)
+				"udp", "127.0.0.1:514", syslog.LOG_INFO|syslog.LOG_MAIL, "gubernator")
 			if err != nil {
 				continue
 			}

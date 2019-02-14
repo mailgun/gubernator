@@ -44,7 +44,9 @@ func NewStatsdMetrics(client StatsdClient) *StatsdMetrics {
 
 func NewStatsdMetricsFromConf(conf Config) Collector {
 	if conf.Host == "" || conf.Port == 0 {
-		return NewStatsdMetrics(&NullClient{})
+		s := NewStatsdMetrics(&NullClient{})
+		s.log.Info("Metrics config missing; metrics disabled")
+		return s
 	}
 
 	if conf.Prefix == "" {

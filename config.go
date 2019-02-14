@@ -24,14 +24,14 @@ type ServerConfig struct {
 	// This is the interface and port number the service will listen to for GRPC connections
 	// If unset, the server will pick a random port on localhost. You can retrieve the listening
 	// address and port by calling `server.Address()`.
-	GRPCListenAddress string
+	GRPCListenAddress string `json:"grpc-listen-address"`
 
 	// This is the address and port number the service will advertise to other peers in the cluster
 	// If unset, defaults to `GRPCListenAddress`.
-	GRPCAdvertiseAddress string
+	GRPCAdvertiseAddress string `json:"grpc-advertise-address"`
 
 	// This is the interface and port number the service will listen to for HTTP connections
-	HTTPListenAddress string
+	HTTPListenAddress string `json:"http-listen-address"`
 
 	// The cache implementation
 	Cache cache.Cache

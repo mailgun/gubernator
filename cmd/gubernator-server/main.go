@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"github.com/ghodss/yaml"
@@ -8,10 +9,12 @@ import (
 	"io/ioutil"
 	"os"
 	"os/signal"
+	"time"
 
 	etcd "github.com/coreos/etcd/clientv3"
 	"github.com/mailgun/gubernator"
 	"github.com/mailgun/gubernator/cache"
+	"github.com/mailgun/gubernator/logging"
 	"github.com/mailgun/gubernator/metrics"
 	"github.com/mailgun/gubernator/sync"
 	"github.com/mailgun/holster/etcdutil"
@@ -24,8 +27,9 @@ var Version = "dev-build"
 type Config struct {
 	gubernator.ServerConfig
 
-	LRUCache cache.LRUCacheConfig
-	Metrics  metrics.Config
+	LRUCache cache.LRUCacheConfig `json:"lru-cache"`
+	Statsd   metrics.Config       `json:"statsd"`
+	Logging  logging.Config       `json:"logging"`
 	EtcdConf etcd.Config
 }
 
@@ -35,11 +39,16 @@ func main() {
 
 	flags := flag.NewFlagSet("gubernator-server", flag.ContinueOnError)
 	flags.StringVar(&configFile, "config", "", "yaml config file")
-	checkErr(flags.Parse(os.Args), "while parsing cli flags")
+	checkErr(flags.Parse(os.Args[1:]), "while parsing cli flags")
 
 	if configFile != "" {
+		log.Infof("Loading config: %s", configFile)
 		checkErr(loadConfig(configFile, &conf), "while loading config")
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	checkErr(logging.Init(ctx, conf.Logging), "while initializing logging")
 
 	holster.SetDefault(&conf.HTTPListenAddress, "127.0.0.1:9090")
 	holster.SetDefault(&conf.GRPCListenAddress, "127.0.0.1:9091")
@@ -48,7 +57,7 @@ func main() {
 	checkErr(err, "while connecting to etcd")
 
 	grpcSrv, err := gubernator.NewGRPCServer(gubernator.ServerConfig{
-		Metrics:              metrics.NewStatsdMetricsFromConf(conf.Metrics),
+		Metrics:              metrics.NewStatsdMetricsFromConf(conf.Statsd),
 		Picker:               gubernator.NewConsistantHash(nil),
 		Cache:                cache.NewLRUCache(conf.LRUCache),
 		PeerSyncer:           sync.NewEtcdSync(etcdClient),

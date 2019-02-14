@@ -1,43 +1,48 @@
-# mailgun/service config
-base_api_port: 9020 # Port the HTTP handler for `/_ping` will respond on
-public_api_host: api.ninomail.com
-protected_api_host: localhost
-protected_api_url: http://localhost:9001
-vulcand_namespace: /vulcand
-
 logging:
+  # Skip logging to stdout
   no_stdout: false
   log_level: DEBUG
-  handlers:
-    kafka:
-      log_level: INFO
-      topic: udplog
-      nodes:
-        - localhost:9092
+#  handlers:
+#    kafka:
+#      log_level: INFO
+#      topic: udplog
+#      nodes:
+#        - localhost:9092
 
-statsd:
-  period: 5s
-  host: 127.0.0.1
-  port: 8125
+#statsd:
+#  # How often the client emits metrics
+#  period: 5s
+#  # The statsd host
+#  host: 127.0.0.1
+#  # The statsd port
+#  port: 8125
+
+# The address HTTP requests will listen on
+http-listen-address: localhost:9040
 
 # The address GRPC requests will listen on
-ListenAddress: localhost:9040
-# Should be the same as ListenAddress unless you are running behind
-# a NAT or running in a docker container without host networking
-AdvertiseAddress: localhost:9040
+grpc-listen-address: localhost:9041
 
-LRUCache:
+# Should be the same as grpc-listen-address unless you are running behind
+# a NAT or running in a docker container without host networking
+grpc-advertise-address: localhost:9041
+
+lru-cache:
   # Max size of the cache; The cache size will never grow beyond
   # this size.
-  MaxCacheSize: 100000
+  max-cache-size: 100000
   # The initial size of the cache; The cache may grow or shrink
   # depending on the number of rate limits the server is handling
   # currently. However the cache will never shrink lower than the
   # initial size.
-  InitialCacheSize: 10000
+  initial-cache-size: 10000
   # Interval at which gubernator should check if the cache size
   # needs to shrink or grow. Lower the inspection interval to
   # make the cache more responsive to high volume bursts, raise
   # the interval to conserve more memory during bursts.
-  InspectInterval: 30s
+  inspect-interval: 30s
+
+etcd:
+  # Endpoints
+  endpoints: [localhost:2379]
 

@@ -38,13 +38,13 @@ type LRUCacheConfig struct {
 	// The size of the struct stored in the cache is 40 bytes, not including any additional metadata
 	// that might be attached. The key which is formatted `domain_<key_value>_<key_value>` will also
 	// effect the cache size.
-	MaxCacheSize int
+	MaxCacheSize int `json:"max-cache-size"`
 
 	// The initial cache size. If not provided defaults to 30% of the max cache size.
-	InitialCacheSize int
+	InitialCacheSize int `json:"initial-cache-size"`
 
 	// Interval at which the cache should check if it needs to shrink or grow
-	InspectInterval clock.DurationJSON
+	InspectInterval clock.DurationJSON `json:"inspect-interval"`
 }
 
 // Cache is an thread unsafe LRU cache that supports expiration

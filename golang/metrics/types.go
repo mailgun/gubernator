@@ -1,7 +1,7 @@
 package metrics
 
 import (
-	"github.com/mailgun/gubernator/cache"
+	"github.com/mailgun/gubernator/golang/cache"
 	"github.com/mailgun/holster/clock"
 	"google.golang.org/grpc/stats"
 	"time"

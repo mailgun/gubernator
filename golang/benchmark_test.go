@@ -2,8 +2,8 @@ package gubernator_test
 
 import (
 	"context"
-	"github.com/mailgun/gubernator"
-	"github.com/mailgun/gubernator/pb"
+	"github.com/mailgun/gubernator/golang"
+	"github.com/mailgun/gubernator/golang/pb"
 	"net/http"
 	"testing"
 	"time"

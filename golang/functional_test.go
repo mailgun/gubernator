@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mailgun/gubernator"
-	"github.com/mailgun/gubernator/cache"
-	"github.com/mailgun/gubernator/metrics"
+	"github.com/mailgun/gubernator/golang"
+	"github.com/mailgun/gubernator/golang/cache"
+	"github.com/mailgun/gubernator/golang/metrics"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,7 +40,7 @@ func startCluster() error {
 		grpcServers = append(grpcServers, srv)
 	}
 
-	httpServer, err = gubernator.NewHTTPServer(grpcServers[0], gubernator.ServerConfig{})
+	httpServer, err = gubernator.NewHTTPServer(gubernator.ServerConfig{})
 	if err != nil {
 		return errors.Wrap(err, "NewHTTPServer()")
 	}

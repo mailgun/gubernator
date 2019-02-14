@@ -1,8 +1,11 @@
+# TODO: https://stackoverflow.com/questions/1722807/how-to-convert-git-urls-to-http-urls
+# TODO: https://medium.com/@tonistiigi/build-secrets-and-ssh-forwarding-in-docker-18-09-ae8161d066
+
 # Build image
 FROM golang:1.11.2 as build
 
 # Copy the local package files to the container
-ADD . /src
+ADD golang /src
 WORKDIR /src
 ENV VERSION=dev-build
 

@@ -2,7 +2,7 @@ package gubernator
 
 import (
 	"context"
-	"github.com/mailgun/gubernator/pb"
+	"github.com/mailgun/gubernator/golang/pb"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"sync"

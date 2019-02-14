@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mailgun/gubernator/pb"
+	"github.com/mailgun/gubernator/golang/pb"
 	"github.com/mailgun/holster"
 	"github.com/mailgun/holster/clock"
 	"github.com/sirupsen/logrus"

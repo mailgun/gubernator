@@ -1,6 +1,6 @@
 package cache
 
-import "github.com/mailgun/gubernator/pb"
+import "github.com/mailgun/gubernator/golang/pb"
 
 // Interface accepts any cache which returns cache stats
 type CacheStats interface {

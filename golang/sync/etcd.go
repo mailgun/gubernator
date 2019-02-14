@@ -5,7 +5,7 @@ import (
 	"time"
 
 	etcd "github.com/coreos/etcd/clientv3"
-	"github.com/mailgun/gubernator"
+	"github.com/mailgun/gubernator/golang"
 	"github.com/mailgun/holster"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"

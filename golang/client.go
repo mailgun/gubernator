@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/mailgun/gubernator/pb"
+	"github.com/mailgun/gubernator/golang/pb"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )

@@ -3,6 +3,7 @@ package gubernator_test
 import (
 	"context"
 	"github.com/mailgun/gubernator/golang"
+	"github.com/mailgun/gubernator/golang/cluster"
 	"github.com/mailgun/gubernator/golang/pb"
 	"net/http"
 	"testing"
@@ -10,7 +11,7 @@ import (
 )
 
 func BenchmarkServer_GetRateLimitByKey(b *testing.B) {
-	client, err := gubernator.NewPeerClient(gubernator.RandomPeer(peers))
+	client, err := gubernator.NewPeerClient(cluster.GetPeer())
 	if err != nil {
 		b.Errorf("NewPeerClient err: %s", err)
 	}
@@ -34,7 +35,7 @@ func BenchmarkServer_GetRateLimitByKey(b *testing.B) {
 }
 
 func BenchmarkServer_GetRateLimit(b *testing.B) {
-	client, err := gubernator.NewClient(gubernator.RandomPeer(peers))
+	client, err := gubernator.NewClient(cluster.GetPeer())
 	if err != nil {
 		b.Errorf("NewClient err: %s", err)
 	}
@@ -56,7 +57,7 @@ func BenchmarkServer_GetRateLimit(b *testing.B) {
 }
 
 func BenchmarkServer_Ping(b *testing.B) {
-	client, err := gubernator.NewClient(gubernator.RandomPeer(peers))
+	client, err := gubernator.NewClient(cluster.GetPeer())
 	if err != nil {
 		b.Errorf("NewClient err: %s", err)
 	}
@@ -76,7 +77,7 @@ func BenchmarkServer_Ping(b *testing.B) {
 
 func BenchmarkServer_GRPCGateway(b *testing.B) {
 	for n := 0; n < b.N; n++ {
-		_, err := http.Get("http://" + httpServer.Address() + "/v1/HealthCheck")
+		_, err := http.Get("http://" + cluster.GetHTTPAddress() + "/v1/HealthCheck")
 		if err != nil {
 			b.Errorf("GRPCGateway() err: %s", err)
 		}

@@ -8,72 +8,23 @@ import (
 	"time"
 
 	"github.com/mailgun/gubernator/golang"
-	"github.com/mailgun/gubernator/golang/cache"
-	"github.com/mailgun/gubernator/golang/metrics"
-	"github.com/pkg/errors"
+	"github.com/mailgun/gubernator/golang/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-var peers []string
-var grpcServers []*gubernator.GRPCServer
-var httpServer *gubernator.HTTPServer
-
-func startCluster() error {
-	syncer := gubernator.LocalPeerSyncer{}
-	var err error
-
-	for i := 0; i < 5; i++ {
-		srv, err := gubernator.NewGRPCServer(gubernator.ServerConfig{
-			Metrics:    metrics.NewStatsdMetrics(&metrics.NullClient{}),
-			Cache:      cache.NewLRUCache(cache.LRUCacheConfig{}),
-			Picker:     gubernator.NewConsistantHash(nil),
-			PeerSyncer: &syncer,
-		})
-		if err != nil {
-			return errors.Wrap(err, "NewGRPCServer()")
-		}
-		peers = append(peers, srv.Address())
-		if err := srv.Start(); err != nil {
-			return errors.Wrap(err, "GRPCServer.Start()")
-		}
-		grpcServers = append(grpcServers, srv)
-	}
-
-	httpServer, err = gubernator.NewHTTPServer(gubernator.ServerConfig{})
-	if err != nil {
-		return errors.Wrap(err, "NewHTTPServer()")
-	}
-
-	if err := httpServer.Start(); err != nil {
-		return errors.Wrap(err, "HTTPServer.Start()")
-	}
-
-	syncer.Update(gubernator.PeerConfig{
-		Peers: peers,
-	})
-
-	return nil
-}
-
-func stopCluster() {
-	for _, srv := range grpcServers {
-		srv.Stop()
-	}
-}
-
 // Setup and shutdown the mailgun mock server for the entire test suite
 func TestMain(m *testing.M) {
-	if err := startCluster(); err != nil {
+	if err := cluster.Start(5); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	defer stopCluster()
+	defer cluster.Stop()
 	os.Exit(m.Run())
 }
 
 func TestOverTheLimit(t *testing.T) {
-	client, errs := gubernator.NewClient(gubernator.RandomPeer(peers))
+	client, errs := gubernator.NewClient(cluster.GetPeer())
 	require.Nil(t, errs)
 
 	tests := []struct {
@@ -113,7 +64,7 @@ func TestOverTheLimit(t *testing.T) {
 }
 
 func TestTokenBucket(t *testing.T) {
-	client, errs := gubernator.NewClient(gubernator.RandomPeer(peers))
+	client, errs := gubernator.NewClient(cluster.GetPeer())
 	require.Nil(t, errs)
 
 	tests := []struct {
@@ -158,7 +109,7 @@ func TestTokenBucket(t *testing.T) {
 }
 
 func TestLeakyBucket(t *testing.T) {
-	client, errs := gubernator.NewClient(gubernator.RandomPeer(peers))
+	client, errs := gubernator.NewClient(cluster.GetPeer())
 	require.Nil(t, errs)
 
 	tests := []struct {

@@ -15,4 +15,3 @@ for file in files:
             print("from . " + line, end='')
             continue
         print(line, end='')
-    

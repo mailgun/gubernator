@@ -25,6 +25,8 @@ func main() {
 		fmt.Println(err)
 	}
 
+	fmt.Println("Ready")
+
 	// Wait until we get a INT signal then shutdown the cluster
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)

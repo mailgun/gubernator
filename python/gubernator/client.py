@@ -1,3 +1,5 @@
+# This code is py3.7 and py2.7 compatible
+
 import gubernator.pb.ratelimit_pb2_grpc as pb_grpc
 import gubernator.pb.ratelimit_pb2 as pb
 from datetime import datetime
@@ -11,18 +13,18 @@ MINUTE = SECOND * 60
 
 
 class RateLimit(object):
-    def __init__(self, status: str = "", reset_time: int = 0,
-                 remaining: int = 0, limit: int = 0):
+    def __init__(self, status="", reset_time=0, remaining=0, limit=0):
         self.status = status
         self.reset_time = datetime.fromtimestamp(reset_time/1000.0)
         self.remaining = remaining
         self.limit = limit
 
     def __str__(self):
-        return f"RateLimit(status={self.status}, " + \
-               f"reset_time={self.reset_time}, " + \
-               f" remaining={self.remaining}, " + \
-               f" limit={self.limit}"
+        return "RateLimit(status={}, " + \
+               "reset_time={}, " + \
+               " remaining={}, " + \
+               " limit={}".format(self.status, self.reset_time,
+                                  self.remaining, self.limit)
 
     def sleep_until_reset(self):
         now = datetime.now()
@@ -30,20 +32,17 @@ class RateLimit(object):
 
 
 class Client(object):
-    def __init__(self, endpoint: str = '127.0.0.1:9090', timeout: int = None):
+    def __init__(self, endpoint='127.0.0.1:9090', timeout=None):
         channel = grpc.insecure_channel(endpoint)
         self.stub = pb_grpc.RateLimitServiceStub(channel)
         self.timeout = timeout
 
-    def health_check(self) -> pb.HealthCheckResponse:
+    def health_check(self):
         return self.stub.HealthCheck(pb.HealthCheckRequest(),
                                      timeout=self.timeout)
 
-    def get_rate_limit(self, namespace: str, unique: str, limit: int,
-                       duration: int, hits: int = 0,
-                       algorithm: int = pb.RateLimitConfig.TOKEN_BUCKET) \
-            -> RateLimit:
-
+    def get_rate_limit(self, namespace, unique, limit, duration, hits=0,
+                       algorithm=pb.RateLimitConfig.TOKEN_BUCKET):
         req = pb.RateLimitRequestList()
         rate_limit = req.rate_limits.add()
 

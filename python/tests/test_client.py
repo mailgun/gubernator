@@ -32,4 +32,4 @@ def test_get_rate_limit(cluster):
     client = Client()
     resp = client.get_rate_limit("test-ns", "domain_id_00001", 10,
                                  SECOND*2, hits=1)
-    print(f"RateLimit: {resp}")
+    print("RateLimit: {}".format(resp))

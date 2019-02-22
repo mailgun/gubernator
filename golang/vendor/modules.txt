@@ -1,0 +1,151 @@
+# github.com/DataDog/zstd v1.3.5
+github.com/DataDog/zstd
+# github.com/Shopify/sarama v1.20.1
+github.com/Shopify/sarama
+# github.com/coreos/etcd v3.3.11+incompatible
+github.com/coreos/etcd/clientv3
+github.com/coreos/etcd/auth/authpb
+github.com/coreos/etcd/etcdserver/api/v3rpc/rpctypes
+github.com/coreos/etcd/etcdserver/etcdserverpb
+github.com/coreos/etcd/mvcc/mvccpb
+github.com/coreos/etcd/pkg/types
+github.com/coreos/etcd/clientv3/concurrency
+# github.com/davecgh/go-spew v1.1.1
+github.com/davecgh/go-spew/spew
+# github.com/eapache/go-resiliency v1.1.0
+github.com/eapache/go-resiliency/breaker
+# github.com/eapache/go-xerial-snappy v0.0.0-20180814174437-776d5712da21
+github.com/eapache/go-xerial-snappy
+# github.com/eapache/queue v1.1.0
+github.com/eapache/queue
+# github.com/fatih/structs v1.1.0
+github.com/fatih/structs
+# github.com/ghodss/yaml v1.0.0
+github.com/ghodss/yaml
+# github.com/gogo/protobuf v1.2.0
+github.com/gogo/protobuf/gogoproto
+github.com/gogo/protobuf/proto
+github.com/gogo/protobuf/protoc-gen-gogo/descriptor
+# github.com/golang/protobuf v1.2.0
+github.com/golang/protobuf/proto
+github.com/golang/protobuf/jsonpb
+github.com/golang/protobuf/protoc-gen-go/generator
+github.com/golang/protobuf/ptypes/any
+github.com/golang/protobuf/ptypes/duration
+github.com/golang/protobuf/ptypes/timestamp
+github.com/golang/protobuf/ptypes/wrappers
+github.com/golang/protobuf/protoc-gen-go/descriptor
+github.com/golang/protobuf/ptypes
+github.com/golang/protobuf/ptypes/struct
+github.com/golang/protobuf/protoc-gen-go/generator/internal/remap
+github.com/golang/protobuf/protoc-gen-go/plugin
+# github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db
+github.com/golang/snappy
+# github.com/gorilla/mux v1.7.0
+github.com/gorilla/mux
+# github.com/grpc-ecosystem/grpc-gateway v1.7.0
+github.com/grpc-ecosystem/grpc-gateway/runtime
+github.com/grpc-ecosystem/grpc-gateway/utilities
+github.com/grpc-ecosystem/grpc-gateway/internal
+# github.com/konsorten/go-windows-terminal-sequences v1.0.1
+github.com/konsorten/go-windows-terminal-sequences
+# github.com/mailgun/holster v2.3.5+incompatible
+github.com/mailgun/holster
+github.com/mailgun/holster/clock
+github.com/mailgun/holster/etcdutil
+github.com/mailgun/holster/errors
+github.com/mailgun/holster/stack
+# github.com/mailgun/iptools v0.0.0-20170310010557-ba8d5743f678
+github.com/mailgun/iptools
+# github.com/mailgun/logrus-hooks v1.2.1
+github.com/mailgun/logrus-hooks/kafkahook
+github.com/mailgun/logrus-hooks/levelfilter
+github.com/mailgun/logrus-hooks/common
+# github.com/mailgun/service v1.3.2-0.20190214034514-38a9fb32dabc
+github.com/mailgun/service
+github.com/mailgun/service/httpapi
+github.com/mailgun/service/internal/debug
+github.com/mailgun/service/internal/logging
+github.com/mailgun/service/internal/metrics
+github.com/mailgun/service/internal/vulcand
+github.com/mailgun/service/testutils
+github.com/mailgun/service/vulcand
+# github.com/mailru/easyjson v0.0.0-20180823135443-60711f1a8329
+github.com/mailru/easyjson/jwriter
+github.com/mailru/easyjson
+github.com/mailru/easyjson/jlexer
+github.com/mailru/easyjson/buffer
+# github.com/pierrec/lz4 v2.0.5+incompatible
+github.com/pierrec/lz4
+github.com/pierrec/lz4/internal/xxh32
+# github.com/pkg/errors v0.8.1
+github.com/pkg/errors
+# github.com/pmezard/go-difflib v1.0.0
+github.com/pmezard/go-difflib/difflib
+# github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a
+github.com/rcrowley/go-metrics
+# github.com/sirupsen/logrus v1.3.0
+github.com/sirupsen/logrus
+github.com/sirupsen/logrus/hooks/syslog
+# github.com/smira/go-statsd v1.2.1
+github.com/smira/go-statsd
+# github.com/stretchr/testify v1.3.0
+github.com/stretchr/testify/assert
+github.com/stretchr/testify/require
+# golang.org/x/crypto v0.0.0-20180904163835-0709b304e793
+golang.org/x/crypto/ssh/terminal
+# golang.org/x/net v0.0.0-20190119204137-ed066c81e75e
+golang.org/x/net/context
+golang.org/x/net/trace
+golang.org/x/net/internal/timeseries
+golang.org/x/net/http2
+golang.org/x/net/http2/hpack
+golang.org/x/net/http/httpguts
+golang.org/x/net/idna
+# golang.org/x/sys v0.0.0-20180905080454-ebe1bf3edb33
+golang.org/x/sys/unix
+golang.org/x/sys/windows
+# golang.org/x/text v0.3.0
+golang.org/x/text/secure/bidirule
+golang.org/x/text/unicode/bidi
+golang.org/x/text/unicode/norm
+golang.org/x/text/transform
+# google.golang.org/genproto v0.0.0-20180817151627-c66870c02cf8
+google.golang.org/genproto/googleapis/api/annotations
+google.golang.org/genproto/protobuf/field_mask
+google.golang.org/genproto/googleapis/rpc/status
+# google.golang.org/grpc v1.18.0
+google.golang.org/grpc
+google.golang.org/grpc/stats
+google.golang.org/grpc/codes
+google.golang.org/grpc/grpclog
+google.golang.org/grpc/status
+google.golang.org/grpc/metadata
+google.golang.org/grpc/balancer
+google.golang.org/grpc/balancer/roundrobin
+google.golang.org/grpc/connectivity
+google.golang.org/grpc/credentials
+google.golang.org/grpc/encoding
+google.golang.org/grpc/encoding/proto
+google.golang.org/grpc/internal
+google.golang.org/grpc/internal/backoff
+google.golang.org/grpc/internal/binarylog
+google.golang.org/grpc/internal/channelz
+google.golang.org/grpc/internal/envconfig
+google.golang.org/grpc/internal/grpcrand
+google.golang.org/grpc/internal/grpcsync
+google.golang.org/grpc/internal/transport
+google.golang.org/grpc/keepalive
+google.golang.org/grpc/naming
+google.golang.org/grpc/peer
+google.golang.org/grpc/resolver
+google.golang.org/grpc/resolver/dns
+google.golang.org/grpc/resolver/passthrough
+google.golang.org/grpc/tap
+google.golang.org/grpc/health/grpc_health_v1
+google.golang.org/grpc/balancer/base
+google.golang.org/grpc/credentials/internal
+google.golang.org/grpc/binarylog/grpc_binarylog_v1
+google.golang.org/grpc/internal/syscall
+# gopkg.in/yaml.v2 v2.2.2
+gopkg.in/yaml.v2

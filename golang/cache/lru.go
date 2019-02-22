@@ -153,7 +153,6 @@ func (c *LRUCache) Start() error {
 		select {
 		case <-tick.C:
 			c.inspectAndResize()
-			return true
 		case <-done:
 			tick.Stop()
 			return false

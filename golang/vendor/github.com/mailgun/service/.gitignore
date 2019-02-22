@@ -1,0 +1,5 @@
+# Idea
+.idea/
+
+# libs should not check in vendor
+vendor/

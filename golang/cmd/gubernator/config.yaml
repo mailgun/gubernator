@@ -45,7 +45,3 @@ lru-cache:
   # the interval to conserve more memory during bursts.
   inspect-interval: 30s
 
-etcd:
-  # Endpoints
-  endpoints: [localhost:2379]
-

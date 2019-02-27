@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/mailgun/holster"
 	"os"
 
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
@@ -36,6 +37,9 @@ type Service struct {
 func (s *Service) Start(ctx context.Context) error {
 	grpcAddress := fmt.Sprintf("127.0.0.1:%d", s.conf.GRPCPort)
 	var err error
+
+	// If not provided in the config, the advertise address should be the hostname:9091 port
+	holster.SetDefault(&s.conf.GRPCAdvertiseAddress, fmt.Sprintf("%s:%d", s.Meta.FQDN, s.conf.GRPCPort))
 
 	s.grpcSrv, err = gubernator.NewGRPCServer(gubernator.ServerConfig{
 		Metrics:              metrics.NewStatsdMetrics(metrics.NewClientAdaptor(service.Metrics())),

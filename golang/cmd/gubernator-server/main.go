@@ -50,8 +50,8 @@ func main() {
 	defer cancel()
 	checkErr(logging.Init(ctx, conf.Logging), "while initializing logging")
 
-	holster.SetDefault(&conf.HTTPListenAddress, "127.0.0.1:9090")
-	holster.SetDefault(&conf.GRPCListenAddress, "127.0.0.1:9091")
+	holster.SetDefault(&conf.HTTPListenAddress, "0.0.0.0:9090")
+	holster.SetDefault(&conf.GRPCListenAddress, "0.0.0.0:9091")
 
 	etcdClient, err := etcdutil.NewClient(&conf.EtcdConf)
 	checkErr(err, "while connecting to etcd")

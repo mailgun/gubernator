@@ -35,7 +35,7 @@ type Service struct {
 }
 
 func (s *Service) Start(ctx context.Context) error {
-	grpcAddress := fmt.Sprintf("127.0.0.1:%d", s.conf.GRPCPort)
+	grpcAddress := fmt.Sprintf("0.0.0.0:%d", s.conf.GRPCPort)
 	var err error
 
 	// If not provided in the config, the advertise address should be the hostname:9091 port

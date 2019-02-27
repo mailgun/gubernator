@@ -3,57 +3,79 @@ package main
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"os"
-	"time"
 
+	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/mailgun/gubernator/golang"
-	"github.com/mailgun/holster"
+	"github.com/mailgun/gubernator/golang/cache"
+	"github.com/mailgun/gubernator/golang/metrics"
+	"github.com/mailgun/gubernator/golang/pb"
+	"github.com/mailgun/gubernator/golang/sync"
+	"github.com/mailgun/service"
+	"github.com/pkg/errors"
+	"google.golang.org/grpc"
 )
 
-func checkErr(err error) {
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %s\n", err)
-		os.Exit(1)
-	}
+var Version = "dev-build"
+
+type Config struct {
+	service.BasicConfig
+
+	GRPCAdvertiseAddress string               `json:"grpc-advertise-address"`
+	LRUCache             cache.LRUCacheConfig `json:"lru-cache"`
 }
 
-func randInt(min, max int) int64 {
-	return int64(rand.Intn(max-min) + min)
+type Service struct {
+	service.BasicService
+
+	grpcSrv *gubernator.GRPCServer
+	cancel  context.CancelFunc
+	conf    Config
+}
+
+func (s *Service) Start(ctx context.Context) error {
+	grpcAddress := fmt.Sprintf("127.0.0.1:%d", s.conf.GRPCPort)
+	var err error
+
+	s.grpcSrv, err = gubernator.NewGRPCServer(gubernator.ServerConfig{
+		Metrics:              metrics.NewStatsdMetrics(metrics.NewClientAdaptor(service.Metrics())),
+		Picker:               gubernator.NewConsistantHash(nil),
+		Cache:                cache.NewLRUCache(s.conf.LRUCache),
+		PeerSyncer:           sync.NewEtcdSync(service.Etcd()),
+		GRPCAdvertiseAddress: s.conf.GRPCAdvertiseAddress,
+		GRPCListenAddress:    grpcAddress,
+	})
+	if err != nil {
+		return errors.Wrap(err, "while initializing GRPC server")
+	}
+
+	// Register GRPC Gateway
+	ctx, s.cancel = context.WithCancel(context.Background())
+
+	mux := s.Mux()
+	gateway := runtime.NewServeMux()
+	err = pb.RegisterRateLimitServiceHandlerFromEndpoint(ctx, gateway,
+		grpcAddress, []grpc.DialOption{grpc.WithInsecure()})
+	if err != nil {
+		return errors.Wrap(err, "while registering GRPC gateway handler")
+	}
+
+	// TODO: Add some metrics collecting middleware for gateway requests
+	mux.Handle("/v1/{wildcard}", gateway)
+
+	return s.grpcSrv.Start()
+}
+
+func (s *Service) Stop() error {
+	s.cancel()
+	s.grpcSrv.Stop()
+	return nil
 }
 
 func main() {
-	client, err := gubernator.NewClient(os.Args[1])
-	checkErr(err)
-
-	// Generate a selection of rate limits with random limits
-	var rateLimits []*gubernator.Request
-
-	for i := 0; i < 2000; i++ {
-		rateLimits = append(rateLimits, &gubernator.Request{
-			Namespace: fmt.Sprintf("ID-%d", i),
-			UniqueKey: gubernator.RandomString(10),
-			Hits:      1,
-			Limit:     randInt(1, 10),
-			Duration:  time.Duration(randInt(int(time.Millisecond*500), int(time.Second*6))),
-			Algorithm: gubernator.TokenBucket,
-		})
-	}
-
-	fan := holster.NewFanOut(10)
-	for {
-		for _, rateLimit := range rateLimits {
-			fan.Run(func(obj interface{}) error {
-				r := obj.(*gubernator.Request)
-				// Now hit our cluster with the rate limits
-				_, err := client.GetRateLimit(context.Background(), r)
-				checkErr(err)
-
-				/*if resp.Status == gubernator.OverLimit {
-					spew.Dump(resp)
-				}*/
-				return nil
-			}, rateLimit)
-		}
-	}
+	var svc Service
+	service.Run(&svc.conf, &svc,
+		service.WithName("gubernator"),
+		service.WithInstanceID(os.Getenv("GUBER_ID")),
+	)
 }

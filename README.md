@@ -5,7 +5,7 @@ via a configurable algorithm.
 
 ## Architecture overview
 
-![gubernator arch image](https://raw.githubusercontent.com/mailgun/gubernator/master/architecture.png)
+![gubernator arch image](/architecture.png)
 
 Gubernator is designed to run as a cluster of peers which utilize an
 in memory cache of all the currently active rate limits, no data is 

@@ -20,14 +20,14 @@ longer durations to disk, but currently this is not supported.
 When a rate limit request is made to Gubernator the request is keyed and 
 a consistent hashing algorithm is applied to determine which of the 
 peers will be the coordinator for the rate limit request. Choosing a
-single coordinator for a rate limit make atomic increments of counts very fast 
-avoids the complexity and latency involved in distributing counts consistently 
+single coordinator for a rate limit makes atomic increments of counts very fast 
+and avoids the complexity and latency involved in distributing counts consistently 
 across a cluster of peers. Although simple and performant this design can be 
-susceptible a thundering herd of requests since a single coordinator is responsible
-for possibly many requests to a rate limit. To combat this the server can take
-multiple requests within a specified window and batch the requests into a single
-peer request, thus reducing the total number of requests to a single Gubernator 
-peer tremendously.
+susceptible to a thundering herd of requests since a single coordinator is responsible
+for possibly hundreds of thousands of requests to a rate limit. To combat this the 
+server can take multiple requests within a specified window and batch the requests 
+into a single peer request, thus reducing the total number of requests to a single 
+Gubernator peer tremendously.
 
 To ensure each peer in the cluster accurately calculates the correct hash
 for a rate limit key, the list of peers in the cluster must be distributed

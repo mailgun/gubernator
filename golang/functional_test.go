@@ -9,6 +9,7 @@ import (
 
 	"github.com/mailgun/gubernator/golang"
 	"github.com/mailgun/gubernator/golang/cluster"
+	"github.com/mailgun/gubernator/golang/pb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -161,4 +162,87 @@ func TestLeakyBucket(t *testing.T) {
 		assert.False(t, resp.ResetTime.IsZero())
 		time.Sleep(test.Sleep)
 	}
+}
+
+func TestMissingFields(t *testing.T) {
+	guber, errs := gubernator.NewClient(cluster.GetPeer())
+	require.Nil(t, errs)
+
+	client := guber.GetClient()
+
+	tests := []struct {
+		Req    pb.RateLimitRequest
+		Status pb.RateLimitResponse_Status
+		Error  string
+	}{
+		{
+			Req: pb.RateLimitRequest{
+				Namespace: "test_missing_fields",
+				UniqueKey: "account:1234",
+				Hits:      1,
+				RateLimitConfig: &pb.RateLimitConfig{
+					Limit:    10,
+					Duration: 0,
+				},
+			},
+			Error:  "", // No Error
+			Status: pb.RateLimitResponse_UNDER_LIMIT,
+		},
+		{
+			Req: pb.RateLimitRequest{
+				Namespace: "test_missing_fields",
+				UniqueKey: "account:12345",
+				Hits:      1,
+				RateLimitConfig: &pb.RateLimitConfig{
+					Duration: 10000,
+					Limit:    0,
+				},
+			},
+			Error:  "", // No Error
+			Status: pb.RateLimitResponse_OVER_LIMIT,
+		},
+		{
+			Req: pb.RateLimitRequest{
+				UniqueKey: "account:1234",
+				Hits:      1,
+				RateLimitConfig: &pb.RateLimitConfig{
+					Duration: 10000,
+					Limit:    5,
+				},
+			},
+			Error:  "field 'namespace' cannot be empty",
+			Status: pb.RateLimitResponse_UNDER_LIMIT,
+		},
+		{
+			Req: pb.RateLimitRequest{
+				Namespace: "test_missing_fields",
+				Hits:      1,
+				RateLimitConfig: &pb.RateLimitConfig{
+					Duration: 10000,
+					Limit:    5,
+				},
+			},
+			Error:  "field 'unique_key' cannot be empty",
+			Status: pb.RateLimitResponse_UNDER_LIMIT,
+		},
+		{
+			Req: pb.RateLimitRequest{
+				Namespace: "test_missing_fields",
+				UniqueKey: "account:12345",
+				Hits:      1,
+			},
+			Error:  "field 'rate_limit_config' cannot be empty",
+			Status: pb.RateLimitResponse_UNDER_LIMIT,
+		},
+	}
+
+	for i, test := range tests {
+		resp, err := client.GetRateLimits(context.Background(), &pb.RateLimitRequestList{
+			RateLimits: []*pb.RateLimitRequest{&test.Req},
+		})
+		require.Nil(t, err)
+		assert.Equal(t, test.Error, resp.RateLimits[0].Error, i)
+		assert.Equal(t, test.Status, resp.RateLimits[0].Status, i)
+	}
+
 }

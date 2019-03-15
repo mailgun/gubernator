@@ -50,6 +50,8 @@ type Response struct {
 	ResetTime time.Time
 	// Indicates if the requested hit is over the limit
 	Status Status
+	// If set contains the error for this request
+	Error string
 }
 
 // Create a new connection to the server
@@ -107,6 +109,7 @@ func (c *Client) GetRateLimit(ctx context.Context, req *Request) (*Response, err
 		ResetTime:      FromUnixMilliseconds(result.ResetTime),
 		LimitRemaining: result.LimitRemaining,
 		CurrentLimit:   result.CurrentLimit,
+		Error:          result.Error,
 	}, nil
 }
 

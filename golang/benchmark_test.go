@@ -5,6 +5,7 @@ import (
 	"github.com/mailgun/gubernator/golang"
 	"github.com/mailgun/gubernator/golang/cluster"
 	"github.com/mailgun/gubernator/golang/pb"
+	"github.com/mailgun/holster"
 	"net/http"
 	"testing"
 	"time"
@@ -85,3 +86,28 @@ func BenchmarkServer_GRPCGateway(b *testing.B) {
 }
 
 // TODO: Benchmark with fanout to simulate thundering heard of simultaneous requests from many clients
+func BenchmarkServer_ThunderingHeard(b *testing.B) {
+	client, err := gubernator.NewClient(cluster.GetPeer())
+	if err != nil {
+		b.Errorf("NewClient err: %s", err)
+	}
+
+	b.Run("ThunderingHeard", func(b *testing.B) {
+		fan := holster.NewFanOut(100)
+		for n := 0; n < b.N; n++ {
+			fan.Run(func(o interface{}) error {
+				_, err := client.GetRateLimit(context.Background(), &gubernator.Request{
+					Namespace: "get_rate_limit_benchmark",
+					UniqueKey: gubernator.RandomString(10),
+					Limit:     10,
+					Duration:  time.Second * 5,
+					Hits:      1,
+				})
+				if err != nil {
+					b.Errorf("client.RateLimit() err: %s", err)
+				}
+				return nil
+			}, nil)
+		}
+	})
+}

@@ -59,8 +59,9 @@ func tokenBucket(c cache.Cache, req *pb.RateLimitRequest) (*pb.RateLimitResponse
 		ResetTime:      expire,
 	}
 
-	// Kind of a weird corner case, but the client could be dumb
+	// Client could be requesting that we always return OVER_LIMIT
 	if req.Hits > req.RateLimitConfig.Limit {
+		status.Status = pb.RateLimitResponse_OVER_LIMIT
 		status.LimitRemaining = 0
 	}
 
@@ -138,17 +139,21 @@ func leakyBucket(c cache.Cache, req *pb.RateLimitRequest) (*pb.RateLimitResponse
 		TimeStamp:       now,
 	}
 
-	// Kind of a weird corner case, but the client could be dumb
+	resp := pb.RateLimitResponse{
+		Status:         pb.RateLimitResponse_UNDER_LIMIT,
+		CurrentLimit:   req.RateLimitConfig.Limit,
+		LimitRemaining: req.RateLimitConfig.Limit - req.Hits,
+		ResetTime:      0,
+	}
+
+	// Client could be requesting that we start with the bucket OVER_LIMIT
 	if req.Hits > req.RateLimitConfig.Limit {
+		resp.Status = pb.RateLimitResponse_OVER_LIMIT
+		resp.LimitRemaining = 0
 		bucket.LimitRemaining = 0
 	}
 
 	c.Add(req, &bucket, now+req.RateLimitConfig.Duration)
 
-	return &pb.RateLimitResponse{
-		Status:         pb.RateLimitResponse_UNDER_LIMIT,
-		CurrentLimit:   req.RateLimitConfig.Limit,
-		LimitRemaining: req.RateLimitConfig.Limit - req.Hits,
-		ResetTime:      0,
-	}, nil
+	return &resp, nil
 }

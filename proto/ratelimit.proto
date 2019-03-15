@@ -87,8 +87,10 @@ message RateLimitResponse {
   int64 limit_remaining = 3;
   // This is the time when the rate limit span will be reset, provided as a unix timestamp in milliseconds.
   int64 reset_time = 4;
+  // Contains the error; If set all other values should be ignored
+  string error = 5;
   // This is additional metadata that a client might find useful. (IE: Additional headers, corrdinator ownership, etc..)
-  map<string, string> metadata = 5;
+  map<string, string> metadata = 6;
 }
 
 message HealthCheckRequest {}

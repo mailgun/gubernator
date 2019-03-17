@@ -37,6 +37,44 @@ message RateLimitResponseList {
   repeated RateLimitResponse rate_limits = 1;
 }
 
+enum Algorithm {
+  // Token bucket algorithm https://en.wikipedia.org/wiki/Token_bucket
+  TOKEN_BUCKET = 0;
+  // Leaky bucket algorithm https://en.wikipedia.org/wiki/Leaky_bucket
+  LEAKY_BUCKET = 1;
+}
+
+enum Behavior {
+  // BATCHING is the default behavior. This enables batching requests which protects the
+  // service from thundering herd. IE: When a service experiences spikes of unexpected high
+  // volume requests.
+  //
+  // Using this option introduces a small amount of latency depending on
+  // the `batchWait` setting. Defaults to around 500 Microseconds of additional
+  // latency in low throughput situations. For high volume loads, batching can reduce
+  // the overall load on the system substantially.
+  BATCHING = 0;
+
+  // Disables batching. Use this for super low latency rate limit requests when
+  // thundering herd is not a concern but latency of requests is of paramount importance.
+  NO_BATCHING = 1;
+
+  // Enables Global caching of the rate limit. Use this if the rate limit applies globally to
+  // all ingress requests. (IE: Throttle hundreds of thousands of requests to an entire
+  // datacenter or cluster of http servers)
+  //
+  // Using this option gubernator will continue to use a single peer as the rate limit coordinator
+  // to increment and manage the state of the rate limit, however the result of the rate limit is
+  // distributed to each peer and cached locally. A rate limit request received from any peer in the
+  // cluster will first check the local cache for a rate limit answer, if it exists the peer will
+  // immediately return the answer to the client and asynchronously forward the aggregate hits to
+  // the peer coordinator. Because of GLOBALS async nature we lose some accuracy in rate limit
+  // reporting, which may result in allowing some requests beyond the chosen rate limit. However we
+  // gain massive performance as every request coming into the system does not have to wait for a
+  // single peer to decide if the rate limit has been reached.
+  GLOBAL = 2;
+}
+
 message RateLimitRequest {
   // The namespace scopes the unique_key to avoid collisions with other services or applications.
   string namespace = 1;
@@ -44,75 +82,33 @@ message RateLimitRequest {
   // Uniquely identifies this rate limit within a namespace.
   string unique_key = 2;
 
-  // Rate limit requests optionally specify the number of hits a request adds to the matched limit. If the
-  // value is not set, a request increases the matched limit by 1.
+  // Rate limit requests optionally specify the number of hits a request adds to the matched limit. If Hit
+  // is zero, the request returns the current limit, but does not increment the hit count.
   int64 hits = 3;
 
-  // This is the rate limit configuration provided by the client. The configuration may change on
-  // subsequent requests, however when this occurs any previous rate limit counts are reset.
-  RateLimitConfig rate_limit_config = 4;
-}
-
-// Defines a rate limit duration and requests per duration
-message RateLimitConfig {
-  enum Algorithm {
-    TOKEN_BUCKET = 0;
-    LEAKY_BUCKET = 1;
-  }
-
-  enum Behavior {
-
-    // BATCHING is the default behavior. This enables batching requests which protects the
-    // service from thundering herd. IE: When a service experiences spikes of unexpected high
-    // volume requests.
-    //
-    // Using this option introduces a small amount of latency depending on
-    // the `batchWait` setting. Defaults to around 500 Microseconds of additional
-    // latency in low throughput situations. For high volume loads, batching can reduce
-    // the overall load on the system substantially.
-    BATCHING = 0;
-
-    // Disables batching. Use this for super low latency rate limit requests when
-    // thundering herd is not a concern but latency of requests is of paramount importance.
-    NO_BATCHING = 1;
-
-    // Enables Global caching of the rate limit. Use this if the rate limit applies globally to
-    // all ingress requests. (IE: Throttle hundreds of thousands of requests to an entire
-    // datacenter or cluster of http servers)
-    //
-    // Using this option gubernator will continue to use a single peer as the rate limit coordinator
-    // to increment and manage the state of the rate limit, however the result of the rate limit is
-    // distributed to each peer and cached locally. A rate limit request received from any peer in the
-    // cluster will first check the local cache for a rate limit answer, if it exists the peer will
-    // immediately return the answer to the client and asynchronously forward the aggregate hits to
-    // the peer coordinator. Because of GLOBALS async nature we lose some accuracy in rate limit
-    // reporting, which may result in allowing some requests beyond the chosen rate limit. However we
-    // gain massive performance as every request coming into the system does not have to wait for a
-    // single peer to decide if the rate limit has been reached.
-    GLOBAL = 2;
-  }
-
   // The number of requests that can occur for the duration of the rate limit
-  int64 limit = 1;
+  int64 limit = 4;
 
   // The duration of the rate limit in milliseconds
   // Second = 1000 Milliseconds
   // Minute = 60000 Milliseconds
   // Hour = 3600000 Milliseconds
-  int64 duration = 2;
+  int64 duration = 5;
 
-  // The algorithm used to calculate the rate limit
-  Algorithm algorithm = 3;
+  // The algorithm used to calculate the rate limit. The algorithm may change on
+  // subsequent requests, when this occurs any previous rate limit hit counts are reset.
+  Algorithm algorithm = 6;
 
   // The behavior of the rate limit in gubernator.
-  Behavior behavior = 4;
+  Behavior behavior = 7;
+}
+
+enum Status {
+  UNDER_LIMIT = 0;
+  OVER_LIMIT = 1;
 }
 
 message RateLimitResponse {
-  enum Status {
-    UNDER_LIMIT = 0;
-    OVER_LIMIT = 1;
-  }
 
   // The status of the rate limit.
   Status status = 1;
@@ -132,7 +128,7 @@ message HealthCheckRequest {}
 message HealthCheckResponse {
   // Valid entries are 'healthy' or 'unhealthy'
   string status = 1;
-  // If 'unhealthy' message indicates the problem
+  // If 'unhealthy', message indicates the problem
   string message = 2;
   // The number of peers we know about
   int32 peer_count = 3;

@@ -172,7 +172,7 @@ func TestMissingFields(t *testing.T) {
 
 	tests := []struct {
 		Req    pb.RateLimitRequest
-		Status pb.RateLimitResponse_Status
+		Status pb.Status
 		Error  string
 	}{
 		{
@@ -180,59 +180,42 @@ func TestMissingFields(t *testing.T) {
 				Namespace: "test_missing_fields",
 				UniqueKey: "account:1234",
 				Hits:      1,
-				RateLimitConfig: &pb.RateLimitConfig{
-					Limit:    10,
-					Duration: 0,
-				},
+				Limit:     10,
+				Duration:  0,
 			},
 			Error:  "", // No Error
-			Status: pb.RateLimitResponse_UNDER_LIMIT,
+			Status: pb.Status_UNDER_LIMIT,
 		},
 		{
 			Req: pb.RateLimitRequest{
 				Namespace: "test_missing_fields",
 				UniqueKey: "account:12345",
 				Hits:      1,
-				RateLimitConfig: &pb.RateLimitConfig{
-					Duration: 10000,
-					Limit:    0,
-				},
+				Duration:  10000,
+				Limit:     0,
 			},
 			Error:  "", // No Error
-			Status: pb.RateLimitResponse_OVER_LIMIT,
+			Status: pb.Status_OVER_LIMIT,
 		},
 		{
 			Req: pb.RateLimitRequest{
 				UniqueKey: "account:1234",
 				Hits:      1,
-				RateLimitConfig: &pb.RateLimitConfig{
-					Duration: 10000,
-					Limit:    5,
-				},
+				Duration:  10000,
+				Limit:     5,
 			},
 			Error:  "field 'namespace' cannot be empty",
-			Status: pb.RateLimitResponse_UNDER_LIMIT,
+			Status: pb.Status_UNDER_LIMIT,
 		},
 		{
 			Req: pb.RateLimitRequest{
 				Namespace: "test_missing_fields",
 				Hits:      1,
-				RateLimitConfig: &pb.RateLimitConfig{
-					Duration: 10000,
-					Limit:    5,
-				},
+				Duration:  10000,
+				Limit:     5,
 			},
 			Error:  "field 'unique_key' cannot be empty",
-			Status: pb.RateLimitResponse_UNDER_LIMIT,
-		},
-		{
-			Req: pb.RateLimitRequest{
-				Namespace: "test_missing_fields",
-				UniqueKey: "account:12345",
-				Hits:      1,
-			},
-			Error:  "field 'rate_limit_config' cannot be empty",
-			Status: pb.RateLimitResponse_UNDER_LIMIT,
+			Status: pb.Status_UNDER_LIMIT,
 		},
 	}
 

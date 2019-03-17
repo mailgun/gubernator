@@ -28,12 +28,10 @@ func BenchmarkServer_GetPeerRateLimitNoBatching(b *testing.B) {
 			_, err := client.GetPeerRateLimit(context.Background(), &pb.RateLimitRequest{
 				Namespace: "get_peer_rate_limits_benchmark",
 				UniqueKey: gubernator.RandomString(10),
-				RateLimitConfig: &pb.RateLimitConfig{
-					Behavior: pb.RateLimitConfig_NO_BATCHING,
-					Limit:    10,
-					Duration: 5,
-				},
-				Hits: 1,
+				Behavior:  pb.Behavior_NO_BATCHING,
+				Limit:     10,
+				Duration:  5,
+				Hits:      1,
 			})
 			if err != nil {
 				b.Errorf("client.RateLimit() err: %s", err)

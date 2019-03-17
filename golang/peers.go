@@ -53,16 +53,14 @@ func NewPeerClient(conf BehaviorConfig, host string) (*PeerClient, error) {
 	return c, nil
 }
 
-type Behavior pb.RateLimitConfig_Behavior
-
 // GetPeerRateLimit forwards a rate limit request to a peer. If the rate limit has `behavior == BATCHING` configured
 // this method will attempt to batch the rate limits
 func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
 
 	// TODO: remove batching for global if we end up implementing a HIT aggregator
 	// If config asked for batching or is global rate limit
-	if r.RateLimitConfig.Behavior == pb.RateLimitConfig_BATCHING ||
-		r.RateLimitConfig.Behavior == pb.RateLimitConfig_GLOBAL {
+	if r.Behavior == pb.Behavior_BATCHING ||
+		r.Behavior == pb.Behavior_GLOBAL {
 		return c.getPeerRateLimitsBatch(ctx, r)
 	}
 

@@ -39,6 +39,7 @@ type Request struct {
 	Hits int64
 	// The Algorithm used to calculate the rate limit
 	Algorithm Algorithm
+	//
 }
 
 type Response struct {
@@ -82,18 +83,16 @@ func (c *Client) Ping(ctx context.Context) error {
 }
 
 // Get a single rate limit
-func (c *Client) GetRateLimit(ctx context.Context, namespace string, reqs []Request) (*Response, error) {
+func (c *Client) GetRateLimit(ctx context.Context, req *Request) (*Response, error) {
 	resp, err := c.client.GetRateLimits(ctx, &pb.RateLimitRequestList{
 		RateLimits: []*pb.RateLimitRequest{
 			{
 				Namespace: req.Namespace,
 				UniqueKey: req.UniqueKey,
 				Hits:      req.Hits,
-				RateLimitConfig: &pb.RateLimitConfig{
-					Limit:     req.Limit,
-					Duration:  ToTimeStamp(req.Duration),
-					Algorithm: pb.RateLimitConfig_Algorithm(req.Algorithm),
-				},
+				Limit:     req.Limit,
+				Duration:  ToTimeStamp(req.Duration),
+				Algorithm: pb.Algorithm(req.Algorithm),
 			},
 		},
 	})

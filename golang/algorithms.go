@@ -24,7 +24,7 @@ func tokenBucket(c cache.Cache, r *pb.RateLimitRequest) (*pb.RateLimitResponse, 
 
 		// If we are already at the limit
 		if status.LimitRemaining == 0 {
-			status.Status = pb.RateLimitResponse_OVER_LIMIT
+			status.Status = pb.Status_OVER_LIMIT
 			return status, nil
 		}
 
@@ -42,7 +42,7 @@ func tokenBucket(c cache.Cache, r *pb.RateLimitRequest) (*pb.RateLimitResponse, 
 		// If requested is more than available, then return over the limit without updating the cache.
 		if r.Hits > status.LimitRemaining {
 			retStatus := *status
-			retStatus.Status = pb.RateLimitResponse_OVER_LIMIT
+			retStatus.Status = pb.Status_OVER_LIMIT
 			return &retStatus, nil
 		}
 
@@ -51,17 +51,17 @@ func tokenBucket(c cache.Cache, r *pb.RateLimitRequest) (*pb.RateLimitResponse, 
 	}
 
 	// Add a new rate limit to the cache
-	expire := cache.MillisecondNow() + r.RateLimitConfig.Duration
+	expire := cache.MillisecondNow() + r.Duration
 	status := &pb.RateLimitResponse{
-		Status:         pb.RateLimitResponse_UNDER_LIMIT,
-		CurrentLimit:   r.RateLimitConfig.Limit,
-		LimitRemaining: r.RateLimitConfig.Limit - r.Hits,
+		Status:         pb.Status_UNDER_LIMIT,
+		CurrentLimit:   r.Limit,
+		LimitRemaining: r.Limit - r.Hits,
 		ResetTime:      expire,
 	}
 
 	// Client could be requesting that we always return OVER_LIMIT
-	if r.Hits > r.RateLimitConfig.Limit {
-		status.Status = pb.RateLimitResponse_OVER_LIMIT
+	if r.Hits > r.Limit {
+		status.Status = pb.Status_OVER_LIMIT
 		status.LimitRemaining = 0
 	}
 
@@ -72,9 +72,10 @@ func tokenBucket(c cache.Cache, r *pb.RateLimitRequest) (*pb.RateLimitResponse, 
 // Implements leaky bucket algorithm for rate limiting https://en.wikipedia.org/wiki/Leaky_bucket
 func leakyBucket(c cache.Cache, r *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
 	type LeakyBucket struct {
-		RateLimitConfig pb.RateLimitConfig
-		LimitRemaining  int64
-		TimeStamp       int64
+		Limit          int64
+		Duration       int64
+		LimitRemaining int64
+		TimeStamp      int64
 	}
 
 	now := cache.MillisecondNow()
@@ -88,27 +89,27 @@ func leakyBucket(c cache.Cache, r *pb.RateLimitRequest) (*pb.RateLimitResponse, 
 			return tokenBucket(c, r)
 		}
 
-		rate := bucket.RateLimitConfig.Duration / r.RateLimitConfig.Limit
+		rate := bucket.Duration / r.Limit
 
 		// Calculate how much leaked out of the bucket since the last hit
 		elapsed := now - bucket.TimeStamp
 		leak := int64(elapsed / rate)
 
 		bucket.LimitRemaining += leak
-		if bucket.LimitRemaining > bucket.RateLimitConfig.Limit {
-			bucket.LimitRemaining = bucket.RateLimitConfig.Limit
+		if bucket.LimitRemaining > bucket.Limit {
+			bucket.LimitRemaining = bucket.Limit
 		}
 
 		bucket.TimeStamp = now
 		status := &pb.RateLimitResponse{
-			CurrentLimit:   bucket.RateLimitConfig.Limit,
+			CurrentLimit:   bucket.Limit,
 			LimitRemaining: bucket.LimitRemaining,
-			Status:         pb.RateLimitResponse_UNDER_LIMIT,
+			Status:         pb.Status_UNDER_LIMIT,
 		}
 
 		// If we are already at the limit
 		if bucket.LimitRemaining == 0 {
-			status.Status = pb.RateLimitResponse_OVER_LIMIT
+			status.Status = pb.Status_OVER_LIMIT
 			status.ResetTime = now + rate
 			return status, nil
 		}
@@ -122,38 +123,39 @@ func leakyBucket(c cache.Cache, r *pb.RateLimitRequest) (*pb.RateLimitResponse, 
 
 		// If requested is more than available, then return over the limit without updating the bucket.
 		if r.Hits > bucket.LimitRemaining {
-			status.Status = pb.RateLimitResponse_OVER_LIMIT
+			status.Status = pb.Status_OVER_LIMIT
 			return status, nil
 		}
 
 		bucket.LimitRemaining -= r.Hits
 		status.LimitRemaining = bucket.LimitRemaining
-		c.UpdateExpiration(r, now*r.RateLimitConfig.Duration)
+		c.UpdateExpiration(r, now*r.Duration)
 		return status, nil
 	}
 
 	// Create a new leaky bucket
 	bucket := LeakyBucket{
-		LimitRemaining:  r.RateLimitConfig.Limit - r.Hits,
-		RateLimitConfig: *r.RateLimitConfig,
-		TimeStamp:       now,
+		LimitRemaining: r.Limit - r.Hits,
+		Limit:          r.Limit,
+		Duration:       r.Duration,
+		TimeStamp:      now,
 	}
 
 	resp := pb.RateLimitResponse{
-		Status:         pb.RateLimitResponse_UNDER_LIMIT,
-		CurrentLimit:   r.RateLimitConfig.Limit,
-		LimitRemaining: r.RateLimitConfig.Limit - r.Hits,
+		Status:         pb.Status_UNDER_LIMIT,
+		CurrentLimit:   r.Limit,
+		LimitRemaining: r.Limit - r.Hits,
 		ResetTime:      0,
 	}
 
 	// Client could be requesting that we start with the bucket OVER_LIMIT
-	if r.Hits > r.RateLimitConfig.Limit {
-		resp.Status = pb.RateLimitResponse_OVER_LIMIT
+	if r.Hits > r.Limit {
+		resp.Status = pb.Status_OVER_LIMIT
 		resp.LimitRemaining = 0
 		bucket.LimitRemaining = 0
 	}
 
-	c.Add(r, &bucket, now+r.RateLimitConfig.Duration)
+	c.Add(r, &bucket, now+r.Duration)
 
 	return &resp, nil
 }

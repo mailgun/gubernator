@@ -160,11 +160,6 @@ func (s *GRPCServer) GetRateLimits(ctx context.Context, r *pb.RateLimitRequestLi
 			goto NextRateLimit
 		}
 
-		if req.RateLimitConfig == nil {
-			resp = &pb.RateLimitResponse{Error: "field 'rate_limit_config' cannot be empty"}
-			goto NextRateLimit
-		}
-
 		s.peerMutex.RLock()
 		peer, err = s.conf.Picker.Get(globalKey)
 		if err != nil {
@@ -218,21 +213,11 @@ func (s *GRPCServer) GetPeerRateLimits(ctx context.Context, r *pb.PeerRateLimitR
 	}
 
 	for _, req := range r.RateLimits {
-		var resp *pb.RateLimitResponse
-		var err error
-
-		// This check is here to protect us from bad actors that might want to cause us to panic
-		if req.RateLimitConfig == nil {
-			resp = &pb.RateLimitResponse{Error: "field 'rate_limit_config' cannot be empty"}
-			goto NextRateLimit
-		}
-
-		resp, err = s.applyAlgorithm(req)
+		resp, err := s.applyAlgorithm(req)
 		if err != nil {
 			// Return the error for this request
 			resp = &pb.RateLimitResponse{Error: err.Error()}
 		}
-	NextRateLimit:
 		peerResp.RateLimits = append(peerResp.RateLimits, resp)
 	}
 	return &peerResp, nil
@@ -249,13 +234,13 @@ func (s *GRPCServer) applyAlgorithm(r *pb.RateLimitRequest) (*pb.RateLimitRespon
 	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
 
-	switch r.RateLimitConfig.Algorithm {
-	case pb.RateLimitConfig_TOKEN_BUCKET:
+	switch r.Algorithm {
+	case pb.Algorithm_TOKEN_BUCKET:
 		return tokenBucket(s.conf.Cache, r)
-	case pb.RateLimitConfig_LEAKY_BUCKET:
+	case pb.Algorithm_LEAKY_BUCKET:
 		return leakyBucket(s.conf.Cache, r)
 	}
-	return nil, errors.Errorf("invalid rate limit algorithm '%d'", r.RateLimitConfig.Algorithm)
+	return nil, errors.Errorf("invalid rate limit algorithm '%d'", r.Algorithm)
 }
 
 // Called by PeerSyncer when the cluster config changes

@@ -16,7 +16,6 @@ It has these top-level messages:
 	RateLimitRequestList
 	RateLimitResponseList
 	RateLimitRequest
-	RateLimitConfig
 	RateLimitResponse
 	HealthCheckRequest
 	HealthCheckResponse

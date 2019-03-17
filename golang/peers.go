@@ -2,13 +2,10 @@ package gubernator
 
 import (
 	"context"
-	"github.com/mailgun/holster"
+	"github.com/mailgun/gubernator/golang/pb"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"sync"
-	"time"
-
-	"github.com/mailgun/gubernator/golang/pb"
 )
 
 type PeerPicker interface {
@@ -21,15 +18,13 @@ type PeerPicker interface {
 }
 
 type PeerClient struct {
-	client     pb.PeersServiceClient
-	conn       *grpc.ClientConn
-	host       string
-	isOwner    bool // true if this peer refers to this server instance
-	mutex      sync.Mutex
-	queue      chan *request
-	timeout    time.Duration
-	batchWait  time.Duration
-	batchLimit int
+	client  pb.PeersServiceClient
+	conn    *grpc.ClientConn
+	conf    BehaviorConfig
+	queue   chan *request
+	mutex   sync.Mutex
+	host    string
+	isOwner bool // true if this peer refers to this server instance
 }
 
 type response struct {
@@ -42,20 +37,12 @@ type request struct {
 	resp         chan *response
 }
 
-func NewPeerClient(host string) (*PeerClient, error) {
+func NewPeerClient(conf BehaviorConfig, host string) (*PeerClient, error) {
 	c := &PeerClient{
 		queue: make(chan *request, 1000),
 		host:  host,
+		conf:  conf,
 	}
-
-	// TODO: Allow the user to configure this (Move this to the config module)
-	// How long to wait for the peer server to respond
-	holster.SetDefault(&c.timeout, time.Millisecond*500)
-	// The limit of batched requests in a single peer request
-	// TODO: Error if this is higher than the max BatchSize
-	holster.SetDefault(&c.batchLimit, maxBatchSize)
-	// How long we should wait before sending a batch
-	holster.SetDefault(&c.batchWait, time.Microsecond*500)
 
 	if err := c.dialPeer(); err != nil {
 		return nil, err
@@ -135,7 +122,7 @@ func (c *PeerClient) dialPeer() error {
 // run waits for requests to be queued, when either c.batchWait time
 // has elapsed or the queue reaches c.batchLimit. Send what is in the queue.
 func (c *PeerClient) run() {
-	var interval = NewInterval(c.batchWait)
+	var interval = NewInterval(c.conf.BatchWait)
 	var queue []*request
 
 	for {
@@ -144,7 +131,7 @@ func (c *PeerClient) run() {
 			queue = append(queue, r)
 
 			// Send the queue if we reached our batch limit
-			if len(queue) > c.batchLimit {
+			if len(queue) > c.conf.BatchLimit {
 				c.sendQueue(queue)
 				queue = nil
 				continue
@@ -173,8 +160,7 @@ func (c *PeerClient) sendQueue(queue []*request) {
 		peerReq.RateLimits = append(peerReq.RateLimits, r.rateLimitReq)
 	}
 
-	//fmt.Printf("Send(%d)\n", len(queue))
-	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), c.conf.BatchTimeout)
 	resp, err := c.client.GetPeerRateLimits(ctx, &peerReq)
 	cancel()
 

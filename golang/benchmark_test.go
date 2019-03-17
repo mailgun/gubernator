@@ -2,17 +2,23 @@ package gubernator_test
 
 import (
 	"context"
+	"net/http"
+	"testing"
+	"time"
+
 	"github.com/mailgun/gubernator/golang"
 	"github.com/mailgun/gubernator/golang/cluster"
 	"github.com/mailgun/gubernator/golang/pb"
 	"github.com/mailgun/holster"
-	"net/http"
-	"testing"
-	"time"
 )
 
 func BenchmarkServer_GetPeerRateLimitNoBatching(b *testing.B) {
-	client, err := gubernator.NewPeerClient(cluster.GetPeer())
+	conf := gubernator.ServerConfig{}
+	if err := gubernator.ApplyConfigDefaults(&conf); err != nil {
+		b.Errorf("ApplyConfigDefaults err: %s", err)
+	}
+
+	client, err := gubernator.NewPeerClient(conf.Behaviors, cluster.GetPeer())
 	if err != nil {
 		b.Errorf("NewPeerClient err: %s", err)
 	}

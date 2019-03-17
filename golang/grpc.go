@@ -37,6 +37,11 @@ type GRPCServer struct {
 
 // New creates a server instance.
 func NewGRPCServer(conf ServerConfig) (*GRPCServer, error) {
+
+	if err := ApplyConfigDefaults(&conf); err != nil {
+		return nil, err
+	}
+
 	listener, err := net.Listen("tcp", conf.GRPCListenAddress)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to listen on %s", conf.GRPCListenAddress)
@@ -259,7 +264,7 @@ func (s *GRPCServer) updatePeers(conf *PeerConfig) {
 	var errs []string
 
 	for _, peer := range conf.Peers {
-		peerInfo, err := NewPeerClient(peer)
+		peerInfo, err := NewPeerClient(s.conf.Behaviors, peer)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("failed to connect to peer '%s'; consistent hash is incomplete", peer))
 			continue

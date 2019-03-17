@@ -1,8 +1,11 @@
 package gubernator
 
 import (
+	"fmt"
 	"github.com/mailgun/gubernator/golang/cache"
 	"github.com/mailgun/gubernator/golang/metrics"
+	"github.com/mailgun/holster"
+	"time"
 )
 
 type UpdateFunc func(*PeerConfig)
@@ -46,6 +49,29 @@ type ServerConfig struct {
 
 	// Metrics collector
 	Metrics metrics.Collector
+
+	// Adjust how gubernator behaviors are configured
+	Behaviors BehaviorConfig
+}
+
+type BehaviorConfig struct {
+	// How long we should wait for a batched response from a peer
+	BatchTimeout time.Duration
+	// How long we should wait before sending a batched request
+	BatchWait time.Duration
+	// The max number of requests we can batch into a single peer request
+	BatchLimit int
+}
+
+func ApplyConfigDefaults(c *ServerConfig) error {
+	holster.SetDefault(&c.Behaviors.BatchTimeout, time.Millisecond*500)
+	holster.SetDefault(&c.Behaviors.BatchLimit, maxBatchSize)
+	holster.SetDefault(&c.Behaviors.BatchWait, time.Microsecond*500)
+
+	if c.Behaviors.BatchLimit > maxBatchSize {
+		return fmt.Errorf("Behaviors.BatchLimit cannot exceed '%d'", maxBatchSize)
+	}
+	return nil
 }
 
 // An implementation of PeerSyncer suitable for testing local clusters

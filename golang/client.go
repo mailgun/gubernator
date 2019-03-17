@@ -54,6 +54,8 @@ type Response struct {
 	Error string
 }
 
+// TODO: Change the client to match the account service's rate limit config
+
 // Create a new connection to the server
 func NewClient(server string) (*Client, error) {
 	if len(server) == 0 {
@@ -80,7 +82,7 @@ func (c *Client) Ping(ctx context.Context) error {
 }
 
 // Get a single rate limit
-func (c *Client) GetRateLimit(ctx context.Context, req *Request) (*Response, error) {
+func (c *Client) GetRateLimit(ctx context.Context, namespace string, reqs []Request) (*Response, error) {
 	resp, err := c.client.GetRateLimits(ctx, &pb.RateLimitRequestList{
 		RateLimits: []*pb.RateLimitRequest{
 			{

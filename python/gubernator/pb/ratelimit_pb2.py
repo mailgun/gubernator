@@ -20,7 +20,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='pb.gubernator',
   syntax='proto3',
   serialized_options=_b('Z\002pb\200\001\001'),
-  serialized_pb=_b('\n\x0fratelimit.proto\x12\rpb.gubernator\x1a\x1cgoogle/api/annotations.proto\"L\n\x14RateLimitRequestList\x12\x34\n\x0brate_limits\x18\x01 \x03(\x0b\x32\x1f.pb.gubernator.RateLimitRequest\"N\n\x15RateLimitResponseList\x12\x35\n\x0brate_limits\x18\x01 \x03(\x0b\x32 .pb.gubernator.RateLimitResponse\"\x82\x01\n\x10RateLimitRequest\x12\x11\n\tnamespace\x18\x01 \x01(\t\x12\x12\n\nunique_key\x18\x02 \x01(\t\x12\x0c\n\x04hits\x18\x03 \x01(\x03\x12\x39\n\x11rate_limit_config\x18\x04 \x01(\x0b\x32\x1e.pb.gubernator.RateLimitConfig\"\xa0\x01\n\x0fRateLimitConfig\x12\r\n\x05limit\x18\x01 \x01(\x03\x12\x10\n\x08\x64uration\x18\x02 \x01(\x03\x12;\n\talgorithm\x18\x03 \x01(\x0e\x32(.pb.gubernator.RateLimitConfig.Algorithm\"/\n\tAlgorithm\x12\x10\n\x0cTOKEN_BUCKET\x10\x00\x12\x10\n\x0cLEAKY_BUCKET\x10\x01\"\xbd\x02\n\x11RateLimitResponse\x12\x37\n\x06status\x18\x01 \x01(\x0e\x32\'.pb.gubernator.RateLimitResponse.Status\x12\x15\n\rcurrent_limit\x18\x02 \x01(\x03\x12\x17\n\x0flimit_remaining\x18\x03 \x01(\x03\x12\x12\n\nreset_time\x18\x04 \x01(\x03\x12\r\n\x05\x65rror\x18\x05 \x01(\t\x12@\n\x08metadata\x18\x06 \x03(\x0b\x32..pb.gubernator.RateLimitResponse.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\")\n\x06Status\x12\x0f\n\x0bUNDER_LIMIT\x10\x00\x12\x0e\n\nOVER_LIMIT\x10\x01\"\x14\n\x12HealthCheckRequest\"J\n\x13HealthCheckResponse\x12\x0e\n\x06status\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x12\n\npeer_count\x18\x03 \x01(\x05\x32\xfb\x01\n\x10RateLimitService\x12x\n\rGetRateLimits\x12#.pb.gubernator.RateLimitRequestList\x1a$.pb.gubernator.RateLimitResponseList\"\x1c\x82\xd3\xe4\x93\x02\x16\"\x11/v1/GetRateLimits:\x01*\x12m\n\x0bHealthCheck\x12!.pb.gubernator.HealthCheckRequest\x1a\".pb.gubernator.HealthCheckResponse\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/HealthCheckB\x07Z\x02pb\x80\x01\x01\x62\x06proto3')
+  serialized_pb=_b('\n\x0fratelimit.proto\x12\rpb.gubernator\x1a\x1cgoogle/api/annotations.proto\"L\n\x14RateLimitRequestList\x12\x34\n\x0brate_limits\x18\x01 \x03(\x0b\x32\x1f.pb.gubernator.RateLimitRequest\"N\n\x15RateLimitResponseList\x12\x35\n\x0brate_limits\x18\x01 \x03(\x0b\x32 .pb.gubernator.RateLimitResponse\"\x82\x01\n\x10RateLimitRequest\x12\x11\n\tnamespace\x18\x01 \x01(\t\x12\x12\n\nunique_key\x18\x02 \x01(\t\x12\x0c\n\x04hits\x18\x03 \x01(\x03\x12\x39\n\x11rate_limit_config\x18\x04 \x01(\x0b\x32\x1e.pb.gubernator.RateLimitConfig\"\x92\x02\n\x0fRateLimitConfig\x12\r\n\x05limit\x18\x01 \x01(\x03\x12\x10\n\x08\x64uration\x18\x02 \x01(\x03\x12;\n\talgorithm\x18\x03 \x01(\x0e\x32(.pb.gubernator.RateLimitConfig.Algorithm\x12\x39\n\x08\x62\x65havior\x18\x04 \x01(\x0e\x32\'.pb.gubernator.RateLimitConfig.Behavior\"/\n\tAlgorithm\x12\x10\n\x0cTOKEN_BUCKET\x10\x00\x12\x10\n\x0cLEAKY_BUCKET\x10\x01\"5\n\x08\x42\x65havior\x12\x0c\n\x08\x42\x41TCHING\x10\x00\x12\x0f\n\x0bNO_BATCHING\x10\x01\x12\n\n\x06GLOBAL\x10\x02\"\xbd\x02\n\x11RateLimitResponse\x12\x37\n\x06status\x18\x01 \x01(\x0e\x32\'.pb.gubernator.RateLimitResponse.Status\x12\x15\n\rcurrent_limit\x18\x02 \x01(\x03\x12\x17\n\x0flimit_remaining\x18\x03 \x01(\x03\x12\x12\n\nreset_time\x18\x04 \x01(\x03\x12\r\n\x05\x65rror\x18\x05 \x01(\t\x12@\n\x08metadata\x18\x06 \x03(\x0b\x32..pb.gubernator.RateLimitResponse.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\")\n\x06Status\x12\x0f\n\x0bUNDER_LIMIT\x10\x00\x12\x0e\n\nOVER_LIMIT\x10\x01\"\x14\n\x12HealthCheckRequest\"J\n\x13HealthCheckResponse\x12\x0e\n\x06status\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x12\n\npeer_count\x18\x03 \x01(\x05\x32\xfb\x01\n\x10RateLimitService\x12x\n\rGetRateLimits\x12#.pb.gubernator.RateLimitRequestList\x1a$.pb.gubernator.RateLimitResponseList\"\x1c\x82\xd3\xe4\x93\x02\x16\"\x11/v1/GetRateLimits:\x01*\x12m\n\x0bHealthCheck\x12!.pb.gubernator.HealthCheckRequest\x1a\".pb.gubernator.HealthCheckResponse\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/HealthCheckB\x07Z\x02pb\x80\x01\x01\x62\x06proto3')
   ,
   dependencies=[google_dot_api_dot_annotations__pb2.DESCRIPTOR,])
 
@@ -43,10 +43,36 @@ _RATELIMITCONFIG_ALGORITHM = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=469,
-  serialized_end=516,
+  serialized_start=528,
+  serialized_end=575,
 )
 _sym_db.RegisterEnumDescriptor(_RATELIMITCONFIG_ALGORITHM)
+
+_RATELIMITCONFIG_BEHAVIOR = _descriptor.EnumDescriptor(
+  name='Behavior',
+  full_name='pb.gubernator.RateLimitConfig.Behavior',
+  filename=None,
+  file=DESCRIPTOR,
+  values=[
+    _descriptor.EnumValueDescriptor(
+      name='BATCHING', index=0, number=0,
+      serialized_options=None,
+      type=None),
+    _descriptor.EnumValueDescriptor(
+      name='NO_BATCHING', index=1, number=1,
+      serialized_options=None,
+      type=None),
+    _descriptor.EnumValueDescriptor(
+      name='GLOBAL', index=2, number=2,
+      serialized_options=None,
+      type=None),
+  ],
+  containing_type=None,
+  serialized_options=None,
+  serialized_start=577,
+  serialized_end=630,
+)
+_sym_db.RegisterEnumDescriptor(_RATELIMITCONFIG_BEHAVIOR)
 
 _RATELIMITRESPONSE_STATUS = _descriptor.EnumDescriptor(
   name='Status',
@@ -65,8 +91,8 @@ _RATELIMITRESPONSE_STATUS = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=795,
-  serialized_end=836,
+  serialized_start=909,
+  serialized_end=950,
 )
 _sym_db.RegisterEnumDescriptor(_RATELIMITRESPONSE_STATUS)
 
@@ -213,12 +239,20 @@ _RATELIMITCONFIG = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='behavior', full_name='pb.gubernator.RateLimitConfig.behavior', index=3,
+      number=4, type=14, cpp_type=8, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
   ],
   extensions=[
   ],
   nested_types=[],
   enum_types=[
     _RATELIMITCONFIG_ALGORITHM,
+    _RATELIMITCONFIG_BEHAVIOR,
   ],
   serialized_options=None,
   is_extendable=False,
@@ -227,7 +261,7 @@ _RATELIMITCONFIG = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=356,
-  serialized_end=516,
+  serialized_end=630,
 )
 
 
@@ -264,8 +298,8 @@ _RATELIMITRESPONSE_METADATAENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=746,
-  serialized_end=793,
+  serialized_start=860,
+  serialized_end=907,
 )
 
 _RATELIMITRESPONSE = _descriptor.Descriptor(
@@ -330,8 +364,8 @@ _RATELIMITRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=519,
-  serialized_end=836,
+  serialized_start=633,
+  serialized_end=950,
 )
 
 
@@ -354,8 +388,8 @@ _HEALTHCHECKREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=838,
-  serialized_end=858,
+  serialized_start=952,
+  serialized_end=972,
 )
 
 
@@ -399,15 +433,17 @@ _HEALTHCHECKRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=860,
-  serialized_end=934,
+  serialized_start=974,
+  serialized_end=1048,
 )
 
 _RATELIMITREQUESTLIST.fields_by_name['rate_limits'].message_type = _RATELIMITREQUEST
 _RATELIMITRESPONSELIST.fields_by_name['rate_limits'].message_type = _RATELIMITRESPONSE
 _RATELIMITREQUEST.fields_by_name['rate_limit_config'].message_type = _RATELIMITCONFIG
 _RATELIMITCONFIG.fields_by_name['algorithm'].enum_type = _RATELIMITCONFIG_ALGORITHM
+_RATELIMITCONFIG.fields_by_name['behavior'].enum_type = _RATELIMITCONFIG_BEHAVIOR
 _RATELIMITCONFIG_ALGORITHM.containing_type = _RATELIMITCONFIG
+_RATELIMITCONFIG_BEHAVIOR.containing_type = _RATELIMITCONFIG
 _RATELIMITRESPONSE_METADATAENTRY.containing_type = _RATELIMITRESPONSE
 _RATELIMITRESPONSE.fields_by_name['status'].enum_type = _RATELIMITRESPONSE_STATUS
 _RATELIMITRESPONSE.fields_by_name['metadata'].message_type = _RATELIMITRESPONSE_METADATAENTRY
@@ -488,8 +524,8 @@ _RATELIMITSERVICE = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=937,
-  serialized_end=1188,
+  serialized_start=1051,
+  serialized_end=1302,
   methods=[
   _descriptor.MethodDescriptor(
     name='GetRateLimits',

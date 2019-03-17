@@ -5,8 +5,8 @@ import peers_pb2 as peers__pb2
 
 
 class PeersServiceStub(object):
-  # missing associated documentation comment in .proto file
-  pass
+  """NOTE: For use by gubernator peers only
+  """
 
   def __init__(self, channel):
     """Constructor.
@@ -19,14 +19,26 @@ class PeersServiceStub(object):
         request_serializer=peers__pb2.PeerRateLimitRequest.SerializeToString,
         response_deserializer=peers__pb2.PeerRateLimitResponse.FromString,
         )
+    self.PeerUpdateGlobal = channel.unary_unary(
+        '/pb.gubernator.PeersService/PeerUpdateGlobal',
+        request_serializer=peers__pb2.PeerUpdateGlobalRequest.SerializeToString,
+        response_deserializer=peers__pb2.PeerUpdateGlobalResponse.FromString,
+        )
 
 
 class PeersServiceServicer(object):
-  # missing associated documentation comment in .proto file
-  pass
+  """NOTE: For use by gubernator peers only
+  """
 
   def GetPeerRateLimits(self, request, context):
     """Used by peers to relay batches of requests to an authoritative peer
+    """
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def PeerUpdateGlobal(self, request, context):
+    """Used by peers send global rate limit updates to other peers
     """
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
@@ -39,6 +51,11 @@ def add_PeersServiceServicer_to_server(servicer, server):
           servicer.GetPeerRateLimits,
           request_deserializer=peers__pb2.PeerRateLimitRequest.FromString,
           response_serializer=peers__pb2.PeerRateLimitResponse.SerializeToString,
+      ),
+      'PeerUpdateGlobal': grpc.unary_unary_rpc_method_handler(
+          servicer.PeerUpdateGlobal,
+          request_deserializer=peers__pb2.PeerUpdateGlobalRequest.FromString,
+          response_serializer=peers__pb2.PeerUpdateGlobalResponse.SerializeToString,
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(

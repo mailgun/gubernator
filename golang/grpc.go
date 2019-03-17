@@ -3,6 +3,8 @@ package gubernator
 import (
 	"context"
 	"fmt"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"net"
 	"strings"
 	"sync"
@@ -128,15 +130,16 @@ func (s *GRPCServer) Address() string {
 	return s.listener.Addr().String()
 }
 
-func (s *GRPCServer) GetRateLimits(ctx context.Context, reqList *pb.RateLimitRequestList) (*pb.RateLimitResponseList, error) {
+func (s *GRPCServer) GetRateLimits(ctx context.Context, r *pb.RateLimitRequestList) (*pb.RateLimitResponseList, error) {
 	var respList pb.RateLimitResponseList
 
-	if len(reqList.RateLimits) > maxBatchSize {
-		return nil, fmt.Errorf("RateLimitRequestList.RateLimits list too large; max size is '%d'", maxBatchSize)
+	if len(r.RateLimits) > maxBatchSize {
+		return nil, status.Errorf(codes.OutOfRange,
+			"RateLimitRequestList.RateLimits list too large; max size is '%d'", maxBatchSize)
 	}
 
 	// TODO: Support getting multiple keys in an async manner (FanOut)
-	for _, req := range reqList.RateLimits {
+	for _, req := range r.RateLimits {
 		globalKey := req.Namespace + "_" + req.UniqueKey
 		var resp *pb.RateLimitResponse
 		var peer *PeerClient
@@ -180,7 +183,7 @@ func (s *GRPCServer) GetRateLimits(ctx context.Context, reqList *pb.RateLimitReq
 			}
 		} else {
 			// Make an RPC call to the peer that owns this rate limit
-			resp, err = peer.GetPeerRateLimits(ctx, req)
+			resp, err = peer.GetPeerRateLimit(ctx, req)
 			if err != nil {
 				resp = &pb.RateLimitResponse{
 					Error: fmt.Sprintf("while fetching rate limit '%s' from peer - '%s'", globalKey, err),
@@ -196,14 +199,20 @@ func (s *GRPCServer) GetRateLimits(ctx context.Context, reqList *pb.RateLimitReq
 	return &respList, nil
 }
 
-func (s *GRPCServer) GetPeerRateLimits(ctx context.Context, peerReq *pb.PeerRateLimitRequest) (*pb.PeerRateLimitResponse, error) {
+func (s *GRPCServer) PeerUpdateGlobal(ctx context.Context, r *pb.PeerUpdateGlobalRequest) (*pb.PeerUpdateGlobalResponse, error) {
+	// NOT IMPLEMENTED
+	return nil, nil
+}
+
+func (s *GRPCServer) GetPeerRateLimits(ctx context.Context, r *pb.PeerRateLimitRequest) (*pb.PeerRateLimitResponse, error) {
 	var peerResp pb.PeerRateLimitResponse
 
-	if len(peerReq.RateLimits) > maxBatchSize {
-		return nil, fmt.Errorf("'PeerRateLimitRequest.rate_limits' list too large; max size is '%d'", maxBatchSize)
+	if len(r.RateLimits) > maxBatchSize {
+		return nil, status.Errorf(codes.OutOfRange,
+			"'PeerRateLimitRequest.rate_limits' list too large; max size is '%d'", maxBatchSize)
 	}
 
-	for _, req := range peerReq.RateLimits {
+	for _, req := range r.RateLimits {
 		var resp *pb.RateLimitResponse
 		var err error
 
@@ -225,23 +234,23 @@ func (s *GRPCServer) GetPeerRateLimits(ctx context.Context, peerReq *pb.PeerRate
 }
 
 // Returns the health of the peer.
-func (s *GRPCServer) HealthCheck(ctx context.Context, in *pb.HealthCheckRequest) (*pb.HealthCheckResponse, error) {
+func (s *GRPCServer) HealthCheck(ctx context.Context, r *pb.HealthCheckRequest) (*pb.HealthCheckResponse, error) {
 	s.peerMutex.RLock()
 	defer s.peerMutex.RUnlock()
 	return &s.health, nil
 }
 
-func (s *GRPCServer) applyAlgorithm(entry *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
+func (s *GRPCServer) applyAlgorithm(r *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
 	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
 
-	switch entry.RateLimitConfig.Algorithm {
+	switch r.RateLimitConfig.Algorithm {
 	case pb.RateLimitConfig_TOKEN_BUCKET:
-		return tokenBucket(s.conf.Cache, entry)
+		return tokenBucket(s.conf.Cache, r)
 	case pb.RateLimitConfig_LEAKY_BUCKET:
-		return leakyBucket(s.conf.Cache, entry)
+		return leakyBucket(s.conf.Cache, r)
 	}
-	return nil, errors.Errorf("invalid rate limit algorithm '%d'", entry.RateLimitConfig.Algorithm)
+	return nil, errors.Errorf("invalid rate limit algorithm '%d'", r.RateLimitConfig.Algorithm)
 }
 
 // Called by PeerSyncer when the cluster config changes

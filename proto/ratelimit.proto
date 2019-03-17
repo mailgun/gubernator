@@ -60,6 +60,38 @@ message RateLimitConfig {
     LEAKY_BUCKET = 1;
   }
 
+  enum Behavior {
+
+    // BATCHING is the default behavior. This enables batching requests which protects the
+    // service from thundering herd. IE: When a service experiences spikes of unexpected high
+    // volume requests.
+    //
+    // Using this option introduces a small amount of latency depending on
+    // the `batchWait` setting. Defaults to around 500 Microseconds of additional
+    // latency in low throughput situations. For high volume loads, batching can reduce
+    // the overall load on the system substantially.
+    BATCHING = 0;
+
+    // Disables batching. Use this for super low latency rate limit requests when
+    // thundering herd is not a concern but latency of requests is of paramount importance.
+    NO_BATCHING = 1;
+
+    // Enables Global caching of the rate limit. Use this if the rate limit applies globally to
+    // all ingress requests. (IE: Throttle hundreds of thousands of requests to an entire
+    // datacenter or cluster of http servers)
+    //
+    // Using this option gubernator will continue to use a single peer as the rate limit coordinator
+    // to increment and manage the state of the rate limit, however the result of the rate limit is
+    // distributed to each peer and cached locally. A rate limit request received from any peer in the
+    // cluster will first check the local cache for a rate limit answer, if it exists the peer will
+    // immediately return the answer to the client and asynchronously forward the aggregate hits to
+    // the peer coordinator. Because of GLOBALS async nature we lose some accuracy in rate limit
+    // reporting, which may result in allowing some requests beyond the chosen rate limit. However we
+    // gain massive performance as every request coming into the system does not have to wait for a
+    // single peer to decide if the rate limit has been reached.
+    GLOBAL = 2;
+  }
+
   // The number of requests that can occur for the duration of the rate limit
   int64 limit = 1;
 
@@ -71,6 +103,9 @@ message RateLimitConfig {
 
   // The algorithm used to calculate the rate limit
   Algorithm algorithm = 3;
+
+  // The behavior of the rate limit in gubernator.
+  Behavior behavior = 4;
 }
 
 message RateLimitResponse {

@@ -244,5 +244,6 @@ func TestMissingFields(t *testing.T) {
 		assert.Equal(t, test.Error, resp.RateLimits[0].Error, i)
 		assert.Equal(t, test.Status, resp.RateLimits[0].Status, i)
 	}
-
 }
+
+// TODO: Add a test for sending no rate limits RateLimitRequestList.RateLimits = nil

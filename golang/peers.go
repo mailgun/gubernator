@@ -66,8 +66,43 @@ func NewPeerClient(host string) (*PeerClient, error) {
 	return c, nil
 }
 
-// GetPeerRateLimits will batch requests that occur within
-func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
+type Behavior pb.RateLimitConfig_Behavior
+
+// GetPeerRateLimit forwards a rate limit request to a peer. If the rate limit has `behavior == BATCHING` configured
+// this method will attempt to batch the rate limits
+func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
+
+	// TODO: remove batching for global if we end up implementing a HIT aggregator
+	// If config asked for batching or is global rate limit
+	if r.RateLimitConfig.Behavior == pb.RateLimitConfig_BATCHING ||
+		r.RateLimitConfig.Behavior == pb.RateLimitConfig_GLOBAL {
+		return c.getPeerRateLimitsBatch(ctx, r)
+	}
+
+	// Send a single low latency rate limit request
+	resp, err := c.getPeerRateLimits(ctx, &pb.PeerRateLimitRequest{
+		RateLimits: []*pb.RateLimitRequest{r},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp.RateLimits[0], nil
+}
+
+func (c *PeerClient) getPeerRateLimits(ctx context.Context, r *pb.PeerRateLimitRequest) (*pb.PeerRateLimitResponse, error) {
+	resp, err := c.client.GetPeerRateLimits(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+
+	// Unlikely, but this avoids a panic if something wonky happens
+	if len(resp.RateLimits) != len(r.RateLimits) {
+		return nil, errors.New("server responded with incorrect rate limit list size")
+	}
+	return resp, nil
+}
+
+func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
 	req := request{rateLimitReq: r, resp: make(chan *response, 1)}
 
 	// Enqueue the request to be sent

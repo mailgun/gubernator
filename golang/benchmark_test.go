@@ -11,18 +11,19 @@ import (
 	"time"
 )
 
-func BenchmarkServer_GetRateLimitByKey(b *testing.B) {
+func BenchmarkServer_GetPeerRateLimitNoBatching(b *testing.B) {
 	client, err := gubernator.NewPeerClient(cluster.GetPeer())
 	if err != nil {
 		b.Errorf("NewPeerClient err: %s", err)
 	}
 
-	b.Run("GetPeerRateLimits", func(b *testing.B) {
+	b.Run("GetPeerRateLimitNoBatching", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
-			_, err := client.GetPeerRateLimits(context.Background(), &pb.RateLimitRequest{
+			_, err := client.GetPeerRateLimit(context.Background(), &pb.RateLimitRequest{
 				Namespace: "get_peer_rate_limits_benchmark",
 				UniqueKey: gubernator.RandomString(10),
 				RateLimitConfig: &pb.RateLimitConfig{
+					Behavior: pb.RateLimitConfig_NO_BATCHING,
 					Limit:    10,
 					Duration: 5,
 				},
@@ -85,7 +86,6 @@ func BenchmarkServer_GRPCGateway(b *testing.B) {
 	}
 }
 
-// TODO: Benchmark with fanout to simulate thundering heard of simultaneous requests from many clients
 func BenchmarkServer_ThunderingHeard(b *testing.B) {
 	client, err := gubernator.NewClient(cluster.GetPeer())
 	if err != nil {

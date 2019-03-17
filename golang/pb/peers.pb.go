@@ -11,6 +11,8 @@ It is generated from these files:
 It has these top-level messages:
 	PeerRateLimitRequest
 	PeerRateLimitResponse
+	PeerUpdateGlobalRequest
+	PeerUpdateGlobalResponse
 	RateLimitRequestList
 	RateLimitResponseList
 	RateLimitRequest
@@ -41,7 +43,6 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
 
-// NOTE: For use by gubernator peers only
 type PeerRateLimitRequest struct {
 	// Must specify at least one RateLimitRequest. The peer that recives this request MUST be authoritative for
 	// each rate_limit[x].unique_key provided, as the peer will not forward the request to any other peers
@@ -77,9 +78,36 @@ func (m *PeerRateLimitResponse) GetRateLimits() []*RateLimitResponse {
 	return nil
 }
 
+type PeerUpdateGlobalRequest struct {
+	// Must specify at least one RateLimitRequest
+	RateLimits []*RateLimitRequest `protobuf:"bytes,1,rep,name=rate_limits,json=rateLimits" json:"rate_limits,omitempty"`
+}
+
+func (m *PeerUpdateGlobalRequest) Reset()                    { *m = PeerUpdateGlobalRequest{} }
+func (m *PeerUpdateGlobalRequest) String() string            { return proto.CompactTextString(m) }
+func (*PeerUpdateGlobalRequest) ProtoMessage()               {}
+func (*PeerUpdateGlobalRequest) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{2} }
+
+func (m *PeerUpdateGlobalRequest) GetRateLimits() []*RateLimitRequest {
+	if m != nil {
+		return m.RateLimits
+	}
+	return nil
+}
+
+type PeerUpdateGlobalResponse struct {
+}
+
+func (m *PeerUpdateGlobalResponse) Reset()                    { *m = PeerUpdateGlobalResponse{} }
+func (m *PeerUpdateGlobalResponse) String() string            { return proto.CompactTextString(m) }
+func (*PeerUpdateGlobalResponse) ProtoMessage()               {}
+func (*PeerUpdateGlobalResponse) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{3} }
+
 func init() {
 	proto.RegisterType((*PeerRateLimitRequest)(nil), "pb.gubernator.PeerRateLimitRequest")
 	proto.RegisterType((*PeerRateLimitResponse)(nil), "pb.gubernator.PeerRateLimitResponse")
+	proto.RegisterType((*PeerUpdateGlobalRequest)(nil), "pb.gubernator.PeerUpdateGlobalRequest")
+	proto.RegisterType((*PeerUpdateGlobalResponse)(nil), "pb.gubernator.PeerUpdateGlobalResponse")
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -95,6 +123,8 @@ const _ = grpc.SupportPackageIsVersion4
 type PeersServiceClient interface {
 	// Used by peers to relay batches of requests to an authoritative peer
 	GetPeerRateLimits(ctx context.Context, in *PeerRateLimitRequest, opts ...grpc.CallOption) (*PeerRateLimitResponse, error)
+	// Used by peers send global rate limit updates to other peers
+	PeerUpdateGlobal(ctx context.Context, in *PeerUpdateGlobalRequest, opts ...grpc.CallOption) (*PeerUpdateGlobalResponse, error)
 }
 
 type peersServiceClient struct {
@@ -114,11 +144,22 @@ func (c *peersServiceClient) GetPeerRateLimits(ctx context.Context, in *PeerRate
 	return out, nil
 }
 
+func (c *peersServiceClient) PeerUpdateGlobal(ctx context.Context, in *PeerUpdateGlobalRequest, opts ...grpc.CallOption) (*PeerUpdateGlobalResponse, error) {
+	out := new(PeerUpdateGlobalResponse)
+	err := grpc.Invoke(ctx, "/pb.gubernator.PeersService/PeerUpdateGlobal", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // Server API for PeersService service
 
 type PeersServiceServer interface {
 	// Used by peers to relay batches of requests to an authoritative peer
 	GetPeerRateLimits(context.Context, *PeerRateLimitRequest) (*PeerRateLimitResponse, error)
+	// Used by peers send global rate limit updates to other peers
+	PeerUpdateGlobal(context.Context, *PeerUpdateGlobalRequest) (*PeerUpdateGlobalResponse, error)
 }
 
 func RegisterPeersServiceServer(s *grpc.Server, srv PeersServiceServer) {
@@ -143,6 +184,24 @@ func _PeersService_GetPeerRateLimits_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PeersService_PeerUpdateGlobal_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PeerUpdateGlobalRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PeersServiceServer).PeerUpdateGlobal(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pb.gubernator.PeersService/PeerUpdateGlobal",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PeersServiceServer).PeerUpdateGlobal(ctx, req.(*PeerUpdateGlobalRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _PeersService_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "pb.gubernator.PeersService",
 	HandlerType: (*PeersServiceServer)(nil),
@@ -150,6 +209,10 @@ var _PeersService_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetPeerRateLimits",
 			Handler:    _PeersService_GetPeerRateLimits_Handler,
+		},
+		{
+			MethodName: "PeerUpdateGlobal",
+			Handler:    _PeersService_PeerUpdateGlobal_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -159,7 +222,7 @@ var _PeersService_serviceDesc = grpc.ServiceDesc{
 func init() { proto.RegisterFile("peers.proto", fileDescriptor0) }
 
 var fileDescriptor0 = []byte{
-	// 195 bytes of a gzipped FileDescriptorProto
+	// 243 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xe2, 0x2e, 0x48, 0x4d, 0x2d,
 	0x2a, 0xd6, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0xe2, 0x2d, 0x48, 0xd2, 0x4b, 0x2f, 0x4d, 0x4a,
 	0x2d, 0xca, 0x4b, 0x2c, 0xc9, 0x2f, 0x92, 0xe2, 0x2f, 0x4a, 0x2c, 0x49, 0xcd, 0xc9, 0xcc, 0xcd,
@@ -167,10 +230,13 @@ var fileDescriptor0 = []byte{
 	0x80, 0x84, 0x83, 0x52, 0x0b, 0x4b, 0x53, 0x8b, 0x4b, 0x84, 0x1c, 0xb8, 0xb8, 0x41, 0x4a, 0xe3,
 	0xc1, 0x6a, 0x8b, 0x25, 0x18, 0x15, 0x98, 0x35, 0xb8, 0x8d, 0xe4, 0xf5, 0x50, 0x4c, 0xd3, 0x43,
 	0xd7, 0x15, 0xc4, 0x55, 0x04, 0x13, 0x29, 0x56, 0x8a, 0xe2, 0x12, 0x45, 0x33, 0xb9, 0xb8, 0x20,
-	0x3f, 0xaf, 0x38, 0x55, 0xc8, 0x11, 0x9b, 0xd1, 0x0a, 0xb8, 0x8d, 0x86, 0x68, 0x43, 0x36, 0xdb,
-	0xa8, 0x80, 0x8b, 0x07, 0x64, 0x76, 0x71, 0x70, 0x6a, 0x51, 0x59, 0x66, 0x72, 0xaa, 0x50, 0x02,
-	0x97, 0xa0, 0x7b, 0x6a, 0x09, 0x8a, 0x75, 0xc5, 0x42, 0xca, 0x68, 0x46, 0x62, 0xf3, 0xa7, 0x94,
-	0x0a, 0x7e, 0x45, 0x10, 0xbb, 0x95, 0x18, 0x9c, 0xd8, 0xa3, 0x98, 0x0a, 0x92, 0x1a, 0x18, 0x19,
-	0x93, 0xd8, 0xc0, 0xe1, 0x66, 0x0c, 0x08, 0x00, 0x00, 0xff, 0xff, 0x9c, 0x9e, 0x8c, 0x21, 0x66,
-	0x01, 0x00, 0x00,
+	0x3f, 0xaf, 0x38, 0x55, 0xc8, 0x11, 0x9b, 0xd1, 0x0a, 0xb8, 0x8d, 0x86, 0x68, 0x43, 0x31, 0x3b,
+	0x9a, 0x4b, 0x1c, 0x64, 0x76, 0x68, 0x41, 0x4a, 0x62, 0x49, 0xaa, 0x7b, 0x4e, 0x7e, 0x52, 0x62,
+	0x0e, 0xf5, 0x1c, 0x2e, 0xc5, 0x25, 0x81, 0x69, 0x38, 0xc4, 0x11, 0x46, 0xd7, 0x19, 0xb9, 0x78,
+	0x40, 0x92, 0xc5, 0xc1, 0xa9, 0x45, 0x65, 0x99, 0xc9, 0xa9, 0x42, 0x09, 0x5c, 0x82, 0xee, 0xa9,
+	0x25, 0x28, 0x1e, 0x2d, 0x16, 0x52, 0x46, 0xb3, 0x0e, 0x5b, 0x08, 0x4b, 0xa9, 0xe0, 0x57, 0x04,
+	0xb1, 0x50, 0x89, 0x41, 0x28, 0x95, 0x4b, 0x00, 0xdd, 0x39, 0x42, 0x6a, 0x58, 0xf4, 0x62, 0x09,
+	0x0c, 0x29, 0x75, 0x82, 0xea, 0x60, 0xd6, 0x38, 0xb1, 0x47, 0x31, 0x15, 0x24, 0x35, 0x30, 0x32,
+	0x26, 0xb1, 0x81, 0x13, 0x86, 0x31, 0x20, 0x00, 0x00, 0xff, 0xff, 0x41, 0x20, 0x1d, 0x90, 0x47,
+	0x02, 0x00, 0x00,
 }

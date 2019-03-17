@@ -20,7 +20,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='pb.gubernator',
   syntax='proto3',
   serialized_options=_b('Z\002pb\200\001\001'),
-  serialized_pb=_b('\n\x0bpeers.proto\x12\rpb.gubernator\x1a\x0fratelimit.proto\"L\n\x14PeerRateLimitRequest\x12\x34\n\x0brate_limits\x18\x01 \x03(\x0b\x32\x1f.pb.gubernator.RateLimitRequest\"N\n\x15PeerRateLimitResponse\x12\x35\n\x0brate_limits\x18\x01 \x03(\x0b\x32 .pb.gubernator.RateLimitResponse2p\n\x0cPeersService\x12`\n\x11GetPeerRateLimits\x12#.pb.gubernator.PeerRateLimitRequest\x1a$.pb.gubernator.PeerRateLimitResponse\"\x00\x42\x07Z\x02pb\x80\x01\x01\x62\x06proto3')
+  serialized_pb=_b('\n\x0bpeers.proto\x12\rpb.gubernator\x1a\x0fratelimit.proto\"L\n\x14PeerRateLimitRequest\x12\x34\n\x0brate_limits\x18\x01 \x03(\x0b\x32\x1f.pb.gubernator.RateLimitRequest\"N\n\x15PeerRateLimitResponse\x12\x35\n\x0brate_limits\x18\x01 \x03(\x0b\x32 .pb.gubernator.RateLimitResponse\"O\n\x17PeerUpdateGlobalRequest\x12\x34\n\x0brate_limits\x18\x01 \x03(\x0b\x32\x1f.pb.gubernator.RateLimitRequest\"\x1a\n\x18PeerUpdateGlobalResponse2\xd7\x01\n\x0cPeersService\x12`\n\x11GetPeerRateLimits\x12#.pb.gubernator.PeerRateLimitRequest\x1a$.pb.gubernator.PeerRateLimitResponse\"\x00\x12\x65\n\x10PeerUpdateGlobal\x12&.pb.gubernator.PeerUpdateGlobalRequest\x1a\'.pb.gubernator.PeerUpdateGlobalResponse\"\x00\x42\x07Z\x02pb\x80\x01\x01\x62\x06proto3')
   ,
   dependencies=[ratelimit__pb2.DESCRIPTOR,])
 
@@ -88,10 +88,68 @@ _PEERRATELIMITRESPONSE = _descriptor.Descriptor(
   serialized_end=203,
 )
 
+
+_PEERUPDATEGLOBALREQUEST = _descriptor.Descriptor(
+  name='PeerUpdateGlobalRequest',
+  full_name='pb.gubernator.PeerUpdateGlobalRequest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='rate_limits', full_name='pb.gubernator.PeerUpdateGlobalRequest.rate_limits', index=0,
+      number=1, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=205,
+  serialized_end=284,
+)
+
+
+_PEERUPDATEGLOBALRESPONSE = _descriptor.Descriptor(
+  name='PeerUpdateGlobalResponse',
+  full_name='pb.gubernator.PeerUpdateGlobalResponse',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=286,
+  serialized_end=312,
+)
+
 _PEERRATELIMITREQUEST.fields_by_name['rate_limits'].message_type = ratelimit__pb2._RATELIMITREQUEST
 _PEERRATELIMITRESPONSE.fields_by_name['rate_limits'].message_type = ratelimit__pb2._RATELIMITRESPONSE
+_PEERUPDATEGLOBALREQUEST.fields_by_name['rate_limits'].message_type = ratelimit__pb2._RATELIMITREQUEST
 DESCRIPTOR.message_types_by_name['PeerRateLimitRequest'] = _PEERRATELIMITREQUEST
 DESCRIPTOR.message_types_by_name['PeerRateLimitResponse'] = _PEERRATELIMITRESPONSE
+DESCRIPTOR.message_types_by_name['PeerUpdateGlobalRequest'] = _PEERUPDATEGLOBALREQUEST
+DESCRIPTOR.message_types_by_name['PeerUpdateGlobalResponse'] = _PEERUPDATEGLOBALRESPONSE
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 PeerRateLimitRequest = _reflection.GeneratedProtocolMessageType('PeerRateLimitRequest', (_message.Message,), dict(
@@ -108,6 +166,20 @@ PeerRateLimitResponse = _reflection.GeneratedProtocolMessageType('PeerRateLimitR
   ))
 _sym_db.RegisterMessage(PeerRateLimitResponse)
 
+PeerUpdateGlobalRequest = _reflection.GeneratedProtocolMessageType('PeerUpdateGlobalRequest', (_message.Message,), dict(
+  DESCRIPTOR = _PEERUPDATEGLOBALREQUEST,
+  __module__ = 'peers_pb2'
+  # @@protoc_insertion_point(class_scope:pb.gubernator.PeerUpdateGlobalRequest)
+  ))
+_sym_db.RegisterMessage(PeerUpdateGlobalRequest)
+
+PeerUpdateGlobalResponse = _reflection.GeneratedProtocolMessageType('PeerUpdateGlobalResponse', (_message.Message,), dict(
+  DESCRIPTOR = _PEERUPDATEGLOBALRESPONSE,
+  __module__ = 'peers_pb2'
+  # @@protoc_insertion_point(class_scope:pb.gubernator.PeerUpdateGlobalResponse)
+  ))
+_sym_db.RegisterMessage(PeerUpdateGlobalResponse)
+
 
 DESCRIPTOR._options = None
 
@@ -117,8 +189,8 @@ _PEERSSERVICE = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=205,
-  serialized_end=317,
+  serialized_start=315,
+  serialized_end=530,
   methods=[
   _descriptor.MethodDescriptor(
     name='GetPeerRateLimits',
@@ -127,6 +199,15 @@ _PEERSSERVICE = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=_PEERRATELIMITREQUEST,
     output_type=_PEERRATELIMITRESPONSE,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='PeerUpdateGlobal',
+    full_name='pb.gubernator.PeersService.PeerUpdateGlobal',
+    index=1,
+    containing_service=None,
+    input_type=_PEERUPDATEGLOBALREQUEST,
+    output_type=_PEERUPDATEGLOBALRESPONSE,
     serialized_options=None,
   ),
 ])

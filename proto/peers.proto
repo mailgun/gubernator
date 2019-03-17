@@ -8,12 +8,15 @@ package pb.gubernator;
 
 import "ratelimit.proto";
 
+// NOTE: For use by gubernator peers only
 service PeersService {
     // Used by peers to relay batches of requests to an authoritative peer
     rpc GetPeerRateLimits (PeerRateLimitRequest) returns (PeerRateLimitResponse) {}
+
+    // Used by peers send global rate limit updates to other peers
+    rpc PeerUpdateGlobal (PeerUpdateGlobalRequest) returns (PeerUpdateGlobalResponse) {}
 }
 
-// NOTE: For use by gubernator peers only
 message PeerRateLimitRequest {
     // Must specify at least one RateLimitRequest. The peer that recives this request MUST be authoritative for
     // each rate_limit[x].unique_key provided, as the peer will not forward the request to any other peers
@@ -25,3 +28,9 @@ message PeerRateLimitResponse {
     repeated RateLimitResponse rate_limits = 1;
 }
 
+message PeerUpdateGlobalRequest {
+    // Must specify at least one RateLimitRequest
+    repeated RateLimitRequest rate_limits = 1;
+}
+
+message PeerUpdateGlobalResponse { }

@@ -7,9 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mailgun/gubernator/golang"
+	guber "github.com/mailgun/gubernator/golang"
 	"github.com/mailgun/gubernator/golang/cluster"
-	"github.com/mailgun/gubernator/golang/pb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,158 +24,173 @@ func TestMain(m *testing.M) {
 }
 
 func TestOverTheLimit(t *testing.T) {
-	client, errs := gubernator.NewClient(cluster.GetPeer())
+	client, errs := guber.NewV1Client(cluster.GetPeer())
 	require.Nil(t, errs)
 
 	tests := []struct {
 		Remaining int64
-		Status    gubernator.Status
+		Status    guber.Status
 	}{
 		{
 			Remaining: 1,
-			Status:    gubernator.UnderLimit,
+			Status:    guber.Status_UNDER_LIMIT,
 		},
 		{
 			Remaining: 0,
-			Status:    gubernator.UnderLimit,
+			Status:    guber.Status_UNDER_LIMIT,
 		},
 		{
 			Remaining: 0,
-			Status:    gubernator.OverLimit,
+			Status:    guber.Status_OVER_LIMIT,
 		},
 	}
 
 	for _, test := range tests {
-		resp, err := client.GetRateLimit(context.Background(), &gubernator.Request{
-			Namespace: "test_over_limit",
-			UniqueKey: "account:1234",
-			Algorithm: gubernator.TokenBucket,
-			Duration:  time.Second * 1,
-			Limit:     2,
-			Hits:      1,
+		resp, err := client.GetRateLimits(context.Background(), &guber.Requests{
+			Requests: []*guber.Request{
+				{
+					Namespace: "test_over_limit",
+					UniqueKey: "account:1234",
+					Algorithm: guber.Algorithm_TOKEN_BUCKET,
+					Duration:  guber.Second,
+					Limit:     2,
+					Hits:      1,
+				},
+			},
 		})
 		require.Nil(t, err)
 
-		assert.Equal(t, test.Status, resp.Status)
-		assert.Equal(t, test.Remaining, resp.LimitRemaining)
-		assert.Equal(t, int64(2), resp.CurrentLimit)
-		assert.False(t, resp.ResetTime.IsZero())
+		rl := resp.RateLimits[0]
+
+		assert.Equal(t, test.Status, rl.Status)
+		assert.Equal(t, test.Remaining, rl.LimitRemaining)
+		assert.Equal(t, int64(2), rl.CurrentLimit)
+		assert.True(t, rl.ResetTime != 0)
 	}
 }
 
 func TestTokenBucket(t *testing.T) {
-	client, errs := gubernator.NewClient(cluster.GetPeer())
+	client, errs := guber.NewV1Client(cluster.GetPeer())
 	require.Nil(t, errs)
 
 	tests := []struct {
 		Remaining int64
-		Status    gubernator.Status
+		Status    guber.Status
 		Sleep     time.Duration
 	}{
 		{
 			Remaining: 1,
-			Status:    gubernator.UnderLimit,
+			Status:    guber.Status_UNDER_LIMIT,
 			Sleep:     time.Duration(0),
 		},
 		{
 			Remaining: 0,
-			Status:    gubernator.UnderLimit,
+			Status:    guber.Status_UNDER_LIMIT,
 			Sleep:     time.Duration(time.Millisecond * 5),
 		},
 		{
 			Remaining: 1,
-			Status:    gubernator.UnderLimit,
+			Status:    guber.Status_UNDER_LIMIT,
 			Sleep:     time.Duration(0),
 		},
 	}
 
 	for _, test := range tests {
-		resp, err := client.GetRateLimit(context.Background(), &gubernator.Request{
-			Namespace: "test_token_bucket",
-			UniqueKey: "account:1234",
-			Algorithm: gubernator.TokenBucket,
-			Duration:  time.Millisecond * 5,
-			Limit:     2,
-			Hits:      1,
+		resp, err := client.GetRateLimits(context.Background(), &guber.Requests{
+			Requests: []*guber.Request{
+				{
+					Namespace: "test_token_bucket",
+					UniqueKey: "account:1234",
+					Algorithm: guber.Algorithm_TOKEN_BUCKET,
+					Duration:  guber.Millisecond * 5,
+					Limit:     2,
+					Hits:      1,
+				},
+			},
 		})
 		require.Nil(t, err)
 
-		assert.Equal(t, test.Status, resp.Status)
-		assert.Equal(t, test.Remaining, resp.LimitRemaining)
-		assert.Equal(t, int64(2), resp.CurrentLimit)
-		assert.False(t, resp.ResetTime.IsZero())
+		rl := resp.RateLimits[0]
+
+		assert.Equal(t, test.Status, rl.Status)
+		assert.Equal(t, test.Remaining, rl.LimitRemaining)
+		assert.Equal(t, int64(2), rl.CurrentLimit)
+		assert.True(t, rl.ResetTime != 0)
 		time.Sleep(test.Sleep)
 	}
 }
 
 func TestLeakyBucket(t *testing.T) {
-	client, errs := gubernator.NewClient(cluster.GetPeer())
+	client, errs := guber.NewV1Client(cluster.GetPeer())
 	require.Nil(t, errs)
 
 	tests := []struct {
 		Hits      int64
 		Remaining int64
-		Status    gubernator.Status
+		Status    guber.Status
 		Sleep     time.Duration
 	}{
 		{
 			Hits:      5,
 			Remaining: 0,
-			Status:    gubernator.UnderLimit,
+			Status:    guber.Status_UNDER_LIMIT,
 			Sleep:     time.Duration(0),
 		},
 		{
 			Hits:      1,
 			Remaining: 0,
-			Status:    gubernator.OverLimit,
+			Status:    guber.Status_OVER_LIMIT,
 			Sleep:     time.Duration(time.Millisecond * 10),
 		},
 		{
 			Hits:      1,
 			Remaining: 0,
-			Status:    gubernator.UnderLimit,
+			Status:    guber.Status_UNDER_LIMIT,
 			Sleep:     time.Duration(time.Millisecond * 20),
 		},
 		{
 			Hits:      1,
 			Remaining: 1,
-			Status:    gubernator.UnderLimit,
+			Status:    guber.Status_UNDER_LIMIT,
 			Sleep:     time.Duration(0),
 		},
 	}
 
 	for _, test := range tests {
-		resp, err := client.GetRateLimit(context.Background(), &gubernator.Request{
-			Namespace: "test_leaky_bucket",
-			UniqueKey: "account:1234",
-			Algorithm: gubernator.LeakyBucket,
-			Duration:  time.Millisecond * 50,
-			Hits:      test.Hits,
-			Limit:     5,
+		resp, err := client.GetRateLimits(context.Background(), &guber.Requests{
+			Requests: []*guber.Request{
+				{
+					Namespace: "test_leaky_bucket",
+					UniqueKey: "account:1234",
+					Algorithm: guber.Algorithm_LEAKY_BUCKET,
+					Duration:  guber.Millisecond * 50,
+					Hits:      test.Hits,
+					Limit:     5,
+				},
+			},
 		})
 		require.Nil(t, err)
 
-		assert.Equal(t, test.Status, resp.Status)
-		assert.Equal(t, test.Remaining, resp.LimitRemaining)
-		assert.Equal(t, int64(5), resp.CurrentLimit)
-		assert.False(t, resp.ResetTime.IsZero())
+		rl := resp.RateLimits[0]
+
+		assert.Equal(t, test.Status, rl.Status)
+		assert.Equal(t, test.Remaining, rl.LimitRemaining)
+		assert.Equal(t, int64(5), rl.CurrentLimit)
 		time.Sleep(test.Sleep)
 	}
 }
 
 func TestMissingFields(t *testing.T) {
-	guber, errs := gubernator.NewClient(cluster.GetPeer())
+	client, errs := guber.NewV1Client(cluster.GetPeer())
 	require.Nil(t, errs)
 
-	client := guber.GetClient()
-
 	tests := []struct {
-		Req    pb.RateLimitRequest
-		Status pb.Status
+		Req    guber.Request
+		Status guber.Status
 		Error  string
 	}{
 		{
-			Req: pb.RateLimitRequest{
+			Req: guber.Request{
 				Namespace: "test_missing_fields",
 				UniqueKey: "account:1234",
 				Hits:      1,
@@ -184,10 +198,10 @@ func TestMissingFields(t *testing.T) {
 				Duration:  0,
 			},
 			Error:  "", // No Error
-			Status: pb.Status_UNDER_LIMIT,
+			Status: guber.Status_UNDER_LIMIT,
 		},
 		{
-			Req: pb.RateLimitRequest{
+			Req: guber.Request{
 				Namespace: "test_missing_fields",
 				UniqueKey: "account:12345",
 				Hits:      1,
@@ -195,33 +209,33 @@ func TestMissingFields(t *testing.T) {
 				Limit:     0,
 			},
 			Error:  "", // No Error
-			Status: pb.Status_OVER_LIMIT,
+			Status: guber.Status_OVER_LIMIT,
 		},
 		{
-			Req: pb.RateLimitRequest{
+			Req: guber.Request{
 				UniqueKey: "account:1234",
 				Hits:      1,
 				Duration:  10000,
 				Limit:     5,
 			},
 			Error:  "field 'namespace' cannot be empty",
-			Status: pb.Status_UNDER_LIMIT,
+			Status: guber.Status_UNDER_LIMIT,
 		},
 		{
-			Req: pb.RateLimitRequest{
+			Req: guber.Request{
 				Namespace: "test_missing_fields",
 				Hits:      1,
 				Duration:  10000,
 				Limit:     5,
 			},
 			Error:  "field 'unique_key' cannot be empty",
-			Status: pb.Status_UNDER_LIMIT,
+			Status: guber.Status_UNDER_LIMIT,
 		},
 	}
 
 	for i, test := range tests {
-		resp, err := client.GetRateLimits(context.Background(), &pb.RateLimitRequestList{
-			RateLimits: []*pb.RateLimitRequest{&test.Req},
+		resp, err := client.GetRateLimits(context.Background(), &guber.Requests{
+			Requests: []*guber.Request{&test.Req},
 		})
 		require.Nil(t, err)
 		assert.Equal(t, test.Error, resp.RateLimits[0].Error, i)
@@ -229,4 +243,4 @@ func TestMissingFields(t *testing.T) {
 	}
 }
 
-// TODO: Add a test for sending no rate limits RateLimitRequestList.RateLimits = nil
+// TODO: Add a test for sending no rate limits RequestList.RateLimits = nil

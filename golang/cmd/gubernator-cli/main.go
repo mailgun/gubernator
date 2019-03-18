@@ -23,7 +23,7 @@ func randInt(min, max int) int64 {
 }
 
 func main() {
-	client, err := gubernator.NewClient(os.Args[1])
+	client, err := gubernator.NewV1Client(os.Args[1])
 	checkErr(err)
 
 	// Generate a selection of rate limits with random limits

@@ -2,7 +2,6 @@ package gubernator
 
 import (
 	"context"
-	"github.com/mailgun/gubernator/golang/pb"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"sync"
@@ -18,7 +17,7 @@ type PeerPicker interface {
 }
 
 type PeerClient struct {
-	client  pb.PeersServiceClient
+	client  PeersServiceV1Client
 	conn    *grpc.ClientConn
 	conf    BehaviorConfig
 	queue   chan *request
@@ -28,13 +27,13 @@ type PeerClient struct {
 }
 
 type response struct {
-	rateLimitResp *pb.RateLimitResponse
-	err           error
+	rl  *RateLimit
+	err error
 }
 
 type request struct {
-	rateLimitReq *pb.RateLimitRequest
-	resp         chan *response
+	request *Request
+	resp    chan *response
 }
 
 func NewPeerClient(conf BehaviorConfig, host string) (*PeerClient, error) {
@@ -55,18 +54,18 @@ func NewPeerClient(conf BehaviorConfig, host string) (*PeerClient, error) {
 
 // GetPeerRateLimit forwards a rate limit request to a peer. If the rate limit has `behavior == BATCHING` configured
 // this method will attempt to batch the rate limits
-func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
+func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *Request) (*RateLimit, error) {
 
 	// TODO: remove batching for global if we end up implementing a HIT aggregator
 	// If config asked for batching or is global rate limit
-	if r.Behavior == pb.Behavior_BATCHING ||
-		r.Behavior == pb.Behavior_GLOBAL {
+	if r.Behavior == Behavior_BATCHING ||
+		r.Behavior == Behavior_GLOBAL {
 		return c.getPeerRateLimitsBatch(ctx, r)
 	}
 
 	// Send a single low latency rate limit request
-	resp, err := c.getPeerRateLimits(ctx, &pb.PeerRateLimitRequest{
-		RateLimits: []*pb.RateLimitRequest{r},
+	resp, err := c.getPeerRateLimits(ctx, &GetPeerRateLimitsReq{
+		Requests: []*Request{r},
 	})
 	if err != nil {
 		return nil, err
@@ -74,21 +73,21 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *pb.RateLimitReques
 	return resp.RateLimits[0], nil
 }
 
-func (c *PeerClient) getPeerRateLimits(ctx context.Context, r *pb.PeerRateLimitRequest) (*pb.PeerRateLimitResponse, error) {
+func (c *PeerClient) getPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
 	resp, err := c.client.GetPeerRateLimits(ctx, r)
 	if err != nil {
 		return nil, err
 	}
 
 	// Unlikely, but this avoids a panic if something wonky happens
-	if len(resp.RateLimits) != len(r.RateLimits) {
-		return nil, errors.New("server responded with incorrect rate limit list size")
+	if len(resp.RateLimits) != len(r.Requests) {
+		return nil, errors.New("number of rate limits in peer response does not match request")
 	}
 	return resp, nil
 }
 
-func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
-	req := request{rateLimitReq: r, resp: make(chan *response, 1)}
+func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *Request) (*RateLimit, error) {
+	req := request{request: r, resp: make(chan *response, 1)}
 
 	// Enqueue the request to be sent
 	c.queue <- &req
@@ -99,7 +98,7 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *pb.RateLimit
 		if resp.err != nil {
 			return nil, resp.err
 		}
-		return resp.rateLimitResp, nil
+		return resp.rl, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
@@ -113,7 +112,7 @@ func (c *PeerClient) dialPeer() error {
 		return errors.Wrapf(err, "failed to dial peer %s", c.host)
 	}
 
-	c.client = pb.NewPeersServiceClient(c.conn)
+	c.client = NewPeersServiceV1Client(c.conn)
 	return nil
 }
 
@@ -153,13 +152,13 @@ func (c *PeerClient) run() {
 // sendQueue sends the queue provided and returns the responses to
 // waiting go routines
 func (c *PeerClient) sendQueue(queue []*request) {
-	var peerReq pb.PeerRateLimitRequest
+	var req GetPeerRateLimitsReq
 	for _, r := range queue {
-		peerReq.RateLimits = append(peerReq.RateLimits, r.rateLimitReq)
+		req.Requests = append(req.Requests, r.request)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), c.conf.BatchTimeout)
-	resp, err := c.client.GetPeerRateLimits(ctx, &peerReq)
+	resp, err := c.client.GetPeerRateLimits(ctx, &req)
 	cancel()
 
 	// An error here indicates the entire request failed
@@ -181,6 +180,6 @@ func (c *PeerClient) sendQueue(queue []*request) {
 
 	// Provide responses to channels waiting in the queue
 	for i, r := range queue {
-		r.resp <- &response{rateLimitResp: resp.RateLimits[i]}
+		r.resp <- &response{rl: resp.RateLimits[i]}
 	}
 }

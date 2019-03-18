@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"github.com/mailgun/gubernator/golang/pb"
 	"github.com/mailgun/holster"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -42,7 +41,7 @@ func NewHTTPServer(conf ServerConfig) (*HTTPServer, error) {
 
 	mux := http.NewServeMux()
 	gateway := runtime.NewServeMux()
-	err = pb.RegisterRateLimitServiceHandlerFromEndpoint(s.ctx, gateway,
+	err = RegisterRateLimitServiceV1HandlerFromEndpoint(s.ctx, gateway,
 		conf.GRPCListenAddress, []grpc.DialOption{grpc.WithInsecure()})
 	if err != nil {
 		return nil, errors.Wrap(err, "while registering GRPC gateway handler")

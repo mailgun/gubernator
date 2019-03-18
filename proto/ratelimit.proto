@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "pb";
+option go_package = "gubernator";
 
 option cc_generic_services = true;
 
@@ -8,9 +8,10 @@ package pb.gubernator;
 
 import "google/api/annotations.proto";
 
-service RateLimitService {
-  // Given a list of rate limits return the rates and statuses of each request.
-  rpc GetRateLimits (RateLimitRequestList) returns (RateLimitResponseList) {
+service RateLimitServiceV1 {
+
+  // Given a list of rate limit requests, return the rate limits of each.
+  rpc GetRateLimits (Requests) returns (RateLimits) {
     option (google.api.http) = {
       post: "/v1/GetRateLimits"
       body: "*"
@@ -20,21 +21,21 @@ service RateLimitService {
 
   // This method is for round trip benchmarking and can be used by
   // the client to determine connectivity to the server
-  rpc HealthCheck (HealthCheckRequest) returns (HealthCheckResponse) {
+  rpc HealthCheck (HealthCheckReq) returns (HealthCheckResp) {
     option (google.api.http) = {
       get: "/v1/HealthCheck"
     };
   }
 }
 
-// Must specify at least one RateLimitRequest.
-message RateLimitRequestList {
-  repeated RateLimitRequest rate_limits = 1;
+// Must specify at least one Request
+message Requests {
+  repeated Request requests = 1;
 }
 
-// Responses are in the same order as they appeared in the RateLimitsRequest
-message RateLimitResponseList {
-  repeated RateLimitResponse rate_limits = 1;
+// RateLimits returned are in the same order as the Requests
+message RateLimits {
+  repeated RateLimit rate_limits = 1;
 }
 
 enum Algorithm {
@@ -75,7 +76,7 @@ enum Behavior {
   GLOBAL = 2;
 }
 
-message RateLimitRequest {
+message Request {
   // The namespace scopes the unique_key to avoid collisions with other services or applications.
   string namespace = 1;
 
@@ -108,8 +109,7 @@ enum Status {
   OVER_LIMIT = 1;
 }
 
-message RateLimitResponse {
-
+message RateLimit {
   // The status of the rate limit.
   Status status = 1;
   // The currently configured request limit (Identical to RateLimitRequest.rate_limit_config.limit).
@@ -124,8 +124,8 @@ message RateLimitResponse {
   map<string, string> metadata = 6;
 }
 
-message HealthCheckRequest {}
-message HealthCheckResponse {
+message HealthCheckReq {}
+message HealthCheckResp {
   // Valid entries are 'healthy' or 'unhealthy'
   string status = 1;
   // If 'unhealthy', message indicates the problem

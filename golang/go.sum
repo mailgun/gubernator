@@ -44,6 +44,7 @@ github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORN
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0 h1:45sCR5RtlFHMR4UwH9sdQ5TC8v0qDQCHnXt+kaKSTVE=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
+github.com/mailgun/gubernator v0.0.0-20190228001623-675179e6564a h1:FwzFq5HoBFnrHTlcl4X/UU52/IN/dpLfo3/XXY/IxW0=
 github.com/mailgun/holster v2.3.2+incompatible h1:MjqRfQrC77OPm0E0l0Beam6y2sWfRQZkH1X7StB6pek=
 github.com/mailgun/holster v2.3.2+incompatible/go.mod h1:crzolGx27RP/IBT/BnPQiYBB9igmAFHGRrz0zlMP0b0=
 github.com/mailgun/holster v2.3.4+incompatible h1:n4v5ohJZDfecYkKWIFSMPDhucjde/kzoM+APmWHKC/o=

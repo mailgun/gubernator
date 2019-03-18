@@ -23,7 +23,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mailgun/gubernator/golang/pb"
 	"github.com/mailgun/holster"
 	"github.com/mailgun/holster/clock"
 	"github.com/sirupsen/logrus"
@@ -175,9 +174,9 @@ func (c *LRUCache) Unlock() {
 }
 
 // Adds a value to the cache with an expiration
-func (c *LRUCache) Add(req *pb.RateLimitRequest, value interface{}, expireAt int64) bool {
+func (c *LRUCache) Add(key Key, value interface{}, expireAt int64) bool {
 	return c.addRecord(&cacheRecord{
-		key:      req.Namespace + "_" + req.UniqueKey,
+		key:      key,
 		value:    value,
 		expireAt: expireAt,
 	})
@@ -207,9 +206,9 @@ func MillisecondNow() int64 {
 }
 
 // Get looks up a key's value from the cache.
-func (c *LRUCache) Get(req *pb.RateLimitRequest) (value interface{}, ok bool) {
+func (c *LRUCache) Get(key Key) (value interface{}, ok bool) {
 
-	if ele, hit := c.cache[req.Namespace+"_"+req.UniqueKey]; hit {
+	if ele, hit := c.cache[key]; hit {
 		entry := ele.Value.(*cacheRecord)
 
 		// If the entry has expired, remove it from the cache
@@ -227,8 +226,8 @@ func (c *LRUCache) Get(req *pb.RateLimitRequest) (value interface{}, ok bool) {
 }
 
 // Remove removes the provided key from the cache.
-func (c *LRUCache) Remove(req *pb.RateLimitRequest) {
-	if ele, hit := c.cache[req.Namespace+"_"+req.UniqueKey]; hit {
+func (c *LRUCache) Remove(key Key) {
+	if ele, hit := c.cache[key]; hit {
 		c.removeElement(ele)
 	}
 }
@@ -266,8 +265,8 @@ func (c *LRUCache) Stats(clear bool) Stats {
 }
 
 // Update the expiration time for the key
-func (c *LRUCache) UpdateExpiration(req *pb.RateLimitRequest, expireAt int64) bool {
-	if ele, hit := c.cache[req.Namespace+"_"+req.UniqueKey]; hit {
+func (c *LRUCache) UpdateExpiration(key Key, expireAt int64) bool {
+	if ele, hit := c.cache[key]; hit {
 		entry := ele.Value.(*cacheRecord)
 		entry.expireAt = expireAt
 		return true

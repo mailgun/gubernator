@@ -1,8 +1,9 @@
+from gubernator import ratelimit_pb2 as pb
+
 import pytest
 import subprocess
 import os
-
-from gubernator.client import Client, SECOND
+import gubernator
 
 
 @pytest.fixture(scope='module')
@@ -23,13 +24,22 @@ def cluster():
 
 
 def test_health_check(cluster):
-    client = Client()
+    client = gubernator.V1Client()
     resp = client.health_check()
     print("Health:", resp)
 
 
 def test_get_rate_limit(cluster):
-    client = Client()
-    resp = client.get_rate_limit("test-ns", "domain_id_00001", 10,
-                                 SECOND*2, hits=1)
+    req = pb.Requests()
+    rate_limit = req.requests.add()
+
+    rate_limit.algorithm = pb.TOKEN_BUCKET
+    rate_limit.duration = gubernator.SECOND * 2
+    rate_limit.limit = 10
+    rate_limit.namespace = 'test-ns'
+    rate_limit.unique_key = 'domain-id-0001'
+    rate_limit.hits = 1
+
+    client = gubernator.V1Client()
+    resp = client.GetRateLimits(req, timeout=0.5)
     print("RateLimit: {}".format(resp))

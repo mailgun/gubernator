@@ -8,21 +8,23 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mailgun/gubernator/golang/pb"
 	"github.com/mailgun/holster"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
 	maxRequestSize = 1 * 1024 * 1024 // 1Mb
+	maxBatchSize   = 1000
 	Healthy        = "healthy"
 	UnHealthy      = "unhealthy"
 )
 
 type GRPCServer struct {
-	health    pb.HealthCheckResponse
+	health    HealthCheckResp
 	wg        holster.WaitGroup
 	log       *logrus.Entry
 	conf      ServerConfig
@@ -34,6 +36,14 @@ type GRPCServer struct {
 
 // New creates a server instance.
 func NewGRPCServer(conf ServerConfig) (*GRPCServer, error) {
+
+	if err := ApplyConfigDefaults(&conf); err != nil {
+		return nil, err
+	}
+
+	// TODO: Consider using golang.org/x/net/netutil
+	//  netutil.LimitListener(listener,connectionLimit)
+
 	listener, err := net.Listen("tcp", conf.GRPCListenAddress)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to listen on %s", conf.GRPCListenAddress)
@@ -51,8 +61,8 @@ func NewGRPCServer(conf ServerConfig) (*GRPCServer, error) {
 	}
 
 	// Register our server with GRPC
-	pb.RegisterRateLimitServiceServer(server, &s)
-	pb.RegisterPeersServiceServer(server, &s)
+	RegisterRateLimitServiceV1Server(server, &s)
+	RegisterPeersServiceV1Server(server, &s)
 
 	// Register our peer update callback
 	s.conf.PeerSyncer.RegisterOnUpdate(s.updatePeers)
@@ -92,10 +102,10 @@ func (s *GRPCServer) Start() error {
 			if err != nil {
 				return err
 			}
-			client := pb.NewRateLimitServiceClient(conn)
+			client := NewRateLimitServiceV1Client(conn)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*500)
 			defer cancel()
-			_, err = client.HealthCheck(ctx, &pb.HealthCheckRequest{})
+			_, err = client.HealthCheck(ctx, &HealthCheckReq{})
 			return err
 		})
 	}()
@@ -127,92 +137,112 @@ func (s *GRPCServer) Address() string {
 	return s.listener.Addr().String()
 }
 
-func (s *GRPCServer) GetRateLimits(ctx context.Context, reqs *pb.RateLimitRequestList) (*pb.RateLimitResponseList, error) {
-	var result pb.RateLimitResponseList
+func (s *GRPCServer) GetRateLimits(ctx context.Context, r *Requests) (*RateLimits, error) {
+	var resp RateLimits
+
+	if len(r.Requests) > maxBatchSize {
+		return nil, status.Errorf(codes.OutOfRange,
+			"Requests.RateLimits list too large; max size is '%d'", maxBatchSize)
+	}
 
 	// TODO: Support getting multiple keys in an async manner (FanOut)
-	for i, req := range reqs.RateLimits {
-		if req.RateLimitConfig == nil {
-			return nil, errors.Errorf("required field 'RateLimitConfig' missing from 'RateLimit[%d]'", i)
-		}
-
-		if req.Namespace == "" {
-			return nil, errors.New("must provide a 'namespace'; cannot be empty")
-		}
+	for _, req := range r.Requests {
+		globalKey := req.Namespace + "_" + req.UniqueKey
+		var rl *RateLimit
+		var peer *PeerClient
+		var err error
 
 		if len(req.UniqueKey) == 0 {
-			return nil, errors.New("must provide a unique_key; cannot be empty")
+			rl = &RateLimit{Error: "field 'unique_key' cannot be empty"}
+			goto NextRateLimit
 		}
 
-		globalKey := req.Namespace + "_" + req.UniqueKey
+		if len(req.Namespace) == 0 {
+			rl = &RateLimit{Error: "field 'namespace' cannot be empty"}
+			goto NextRateLimit
+		}
 
 		s.peerMutex.RLock()
-		peer, err := s.conf.Picker.Get(globalKey)
+		peer, err = s.conf.Picker.Get(globalKey)
 		if err != nil {
 			s.peerMutex.RUnlock()
-			return nil, errors.Wrapf(err, "while finding peer that owns key '%s'", globalKey)
+			rl = &RateLimit{
+				Error: fmt.Sprintf("while finding peer that owns rate limit '%s' - '%s'", globalKey, err),
+			}
+			goto NextRateLimit
 		}
 		s.peerMutex.RUnlock()
-
-		var resp *pb.RateLimitResponse
 
 		// If our server instance is the owner of this rate limit
 		if peer.isOwner {
 			// Apply our rate limit algorithm to the request
-			resp, err = s.applyAlgorithm(req)
+			rl, err = s.getRateLimit(req)
 			if err != nil {
-				return nil, errors.Wrapf(err, "while fetching key '%s' from peer", globalKey)
+				rl = &RateLimit{
+					Error: fmt.Sprintf("while applying rate limit for '%s' - '%s'", globalKey, err),
+				}
+				goto NextRateLimit
 			}
 		} else {
 			// Make an RPC call to the peer that owns this rate limit
-			resp, err = peer.GetPeerRateLimits(ctx, req)
+			rl, err = peer.GetPeerRateLimit(ctx, req)
 			if err != nil {
-				return nil, errors.Wrapf(err, "while fetching key '%s' from peer", globalKey)
+				rl = &RateLimit{
+					Error: fmt.Sprintf("while fetching rate limit '%s' from peer - '%s'", globalKey, err),
+				}
 			}
 
 			// Inform the client of the owner key of the key
-			resp.Metadata = map[string]string{"owner": peer.host}
+			rl.Metadata = map[string]string{"owner": peer.host}
 		}
-		result.RateLimits = append(result.RateLimits, resp)
+	NextRateLimit:
+		resp.RateLimits = append(resp.RateLimits, rl)
 	}
-	return &result, nil
+	return &resp, nil
 }
 
-func (s *GRPCServer) GetPeerRateLimits(ctx context.Context, req *pb.PeerRateLimitRequest) (*pb.PeerRateLimitResponse, error) {
-	var resp pb.PeerRateLimitResponse
+func (s *GRPCServer) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
+	// NOT IMPLEMENTED
+	return nil, nil
+}
 
-	for _, entry := range req.RateLimits {
-		status, err := s.applyAlgorithm(entry)
+func (s *GRPCServer) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
+	var resp GetPeerRateLimitsResp
+
+	if len(r.Requests) > maxBatchSize {
+		return nil, status.Errorf(codes.OutOfRange,
+			"'PeerRequest.rate_limits' list too large; max size is '%d'", maxBatchSize)
+	}
+
+	for _, req := range r.Requests {
+		rl, err := s.getRateLimit(req)
 		if err != nil {
-			return nil, err
+			// Return the error for this request
+			rl = &RateLimit{Error: err.Error()}
 		}
-		resp.RateLimits = append(resp.RateLimits, status)
+		resp.RateLimits = append(resp.RateLimits, rl)
 	}
 	return &resp, nil
 }
 
 // Returns the health of the peer.
-func (s *GRPCServer) HealthCheck(ctx context.Context, in *pb.HealthCheckRequest) (*pb.HealthCheckResponse, error) {
+func (s *GRPCServer) HealthCheck(ctx context.Context, r *HealthCheckReq) (*HealthCheckResp, error) {
 	s.peerMutex.RLock()
 	defer s.peerMutex.RUnlock()
 	return &s.health, nil
 }
 
-func (s *GRPCServer) applyAlgorithm(entry *pb.RateLimitRequest) (*pb.RateLimitResponse, error) {
-	if entry.RateLimitConfig == nil {
-		return nil, errors.New("required field 'RateLimitConfig' missing from 'RateLimitKeyRequest_Entry'")
-	}
-
+func (s *GRPCServer) getRateLimit(r *Request) (*RateLimit, error) {
 	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
 
-	switch entry.RateLimitConfig.Algorithm {
-	case pb.RateLimitConfig_TOKEN_BUCKET:
-		return tokenBucket(s.conf.Cache, entry)
-	case pb.RateLimitConfig_LEAKY_BUCKET:
-		return leakyBucket(s.conf.Cache, entry)
+	switch r.Algorithm {
+	case Algorithm_TOKEN_BUCKET:
+		return tokenBucket(s.conf.Cache, r)
+	case Algorithm_LEAKY_BUCKET:
+		return leakyBucket(s.conf.Cache, r)
 	}
-	return nil, errors.Errorf("invalid rate limit algorithm '%d'", entry.RateLimitConfig.Algorithm)
+	return nil, errors.Errorf("invalid rate limit algorithm '%d'", r.Algorithm)
 }
 
 // Called by PeerSyncer when the cluster config changes
@@ -221,7 +251,7 @@ func (s *GRPCServer) updatePeers(conf *PeerConfig) {
 	var errs []string
 
 	for _, peer := range conf.Peers {
-		peerInfo, err := NewPeerClient(peer)
+		peerInfo, err := NewPeerClient(s.conf.Behaviors, peer)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("failed to connect to peer '%s'; consistent hash is incomplete", peer))
 			continue

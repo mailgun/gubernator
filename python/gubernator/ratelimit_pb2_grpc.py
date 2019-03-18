@@ -4,7 +4,7 @@ import grpc
 from . import ratelimit_pb2 as ratelimit__pb2
 
 
-class RateLimitServiceStub(object):
+class RateLimitServiceV1Stub(object):
   # missing associated documentation comment in .proto file
   pass
 
@@ -15,23 +15,23 @@ class RateLimitServiceStub(object):
       channel: A grpc.Channel.
     """
     self.GetRateLimits = channel.unary_unary(
-        '/pb.gubernator.RateLimitService/GetRateLimits',
-        request_serializer=ratelimit__pb2.RateLimitRequestList.SerializeToString,
-        response_deserializer=ratelimit__pb2.RateLimitResponseList.FromString,
+        '/pb.gubernator.RateLimitServiceV1/GetRateLimits',
+        request_serializer=ratelimit__pb2.Requests.SerializeToString,
+        response_deserializer=ratelimit__pb2.RateLimits.FromString,
         )
     self.HealthCheck = channel.unary_unary(
-        '/pb.gubernator.RateLimitService/HealthCheck',
-        request_serializer=ratelimit__pb2.HealthCheckRequest.SerializeToString,
-        response_deserializer=ratelimit__pb2.HealthCheckResponse.FromString,
+        '/pb.gubernator.RateLimitServiceV1/HealthCheck',
+        request_serializer=ratelimit__pb2.HealthCheckReq.SerializeToString,
+        response_deserializer=ratelimit__pb2.HealthCheckResp.FromString,
         )
 
 
-class RateLimitServiceServicer(object):
+class RateLimitServiceV1Servicer(object):
   # missing associated documentation comment in .proto file
   pass
 
   def GetRateLimits(self, request, context):
-    """Given a list of rate limits return the rates and statuses of each request.
+    """Given a list of rate limit requests, return the rate limits of each.
     """
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
@@ -46,19 +46,19 @@ class RateLimitServiceServicer(object):
     raise NotImplementedError('Method not implemented!')
 
 
-def add_RateLimitServiceServicer_to_server(servicer, server):
+def add_RateLimitServiceV1Servicer_to_server(servicer, server):
   rpc_method_handlers = {
       'GetRateLimits': grpc.unary_unary_rpc_method_handler(
           servicer.GetRateLimits,
-          request_deserializer=ratelimit__pb2.RateLimitRequestList.FromString,
-          response_serializer=ratelimit__pb2.RateLimitResponseList.SerializeToString,
+          request_deserializer=ratelimit__pb2.Requests.FromString,
+          response_serializer=ratelimit__pb2.RateLimits.SerializeToString,
       ),
       'HealthCheck': grpc.unary_unary_rpc_method_handler(
           servicer.HealthCheck,
-          request_deserializer=ratelimit__pb2.HealthCheckRequest.FromString,
-          response_serializer=ratelimit__pb2.HealthCheckResponse.SerializeToString,
+          request_deserializer=ratelimit__pb2.HealthCheckReq.FromString,
+          response_serializer=ratelimit__pb2.HealthCheckResp.SerializeToString,
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(
-      'pb.gubernator.RateLimitService', rpc_method_handlers)
+      'pb.gubernator.RateLimitServiceV1', rpc_method_handlers)
   server.add_generic_rpc_handlers((generic_handler,))

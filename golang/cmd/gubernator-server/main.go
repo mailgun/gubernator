@@ -11,7 +11,7 @@ import (
 
 	etcd "github.com/coreos/etcd/clientv3"
 	"github.com/ghodss/yaml"
-	"github.com/mailgun/gubernator/golang"
+	guber "github.com/mailgun/gubernator/golang"
 	"github.com/mailgun/gubernator/golang/cache"
 	"github.com/mailgun/gubernator/golang/logging"
 	"github.com/mailgun/gubernator/golang/metrics"
@@ -25,7 +25,7 @@ var log = logrus.WithField("category", "server")
 var Version = "dev-build"
 
 type Config struct {
-	gubernator.ServerConfig
+	guber.ServerConfig
 
 	LRUCache cache.LRUCacheConfig `json:"lru-cache"`
 	Statsd   metrics.Config       `json:"statsd"`
@@ -37,7 +37,7 @@ func main() {
 	var configFile string
 	var conf Config
 
-	flags := flag.NewFlagSet("gubernator-server", flag.ContinueOnError)
+	flags := flag.NewFlagSet("guber-server", flag.ContinueOnError)
 	flags.StringVar(&configFile, "config", "", "yaml config file")
 	checkErr(flags.Parse(os.Args[1:]), "while parsing cli flags")
 
@@ -56,9 +56,9 @@ func main() {
 	etcdClient, err := etcdutil.NewClient(&conf.EtcdConf)
 	checkErr(err, "while connecting to etcd")
 
-	grpcSrv, err := gubernator.NewGRPCServer(gubernator.ServerConfig{
+	grpcSrv, err := guber.NewGRPCServer(guber.ServerConfig{
 		Metrics:              metrics.NewStatsdMetricsFromConf(conf.Statsd),
-		Picker:               gubernator.NewConsistantHash(nil),
+		Picker:               guber.NewConsistantHash(nil),
 		Cache:                cache.NewLRUCache(conf.LRUCache),
 		PeerSyncer:           sync.NewEtcdSync(etcdClient),
 		GRPCAdvertiseAddress: conf.GRPCAdvertiseAddress,
@@ -68,7 +68,7 @@ func main() {
 
 	checkErr(grpcSrv.Start(), "while starting GRPC server")
 
-	httpSrv, err := gubernator.NewHTTPServer(gubernator.ServerConfig{
+	httpSrv, err := guber.NewHTTPServer(guber.ServerConfig{
 		HTTPListenAddress: conf.HTTPListenAddress,
 		GRPCListenAddress: conf.GRPCListenAddress,
 	})

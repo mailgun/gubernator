@@ -1,7 +1,5 @@
 package cache
 
-import "github.com/mailgun/gubernator/golang/pb"
-
 // Interface accepts any cache which returns cache stats
 type CacheStats interface {
 	Stats(bool) Stats
@@ -10,10 +8,10 @@ type CacheStats interface {
 // So algorithms can interface with different cache implementations
 type Cache interface {
 	// Access methods
-	Add(req *pb.RateLimitRequest, value interface{}, expireAt int64) bool
-	UpdateExpiration(req *pb.RateLimitRequest, expireAt int64) bool
-	Get(req *pb.RateLimitRequest) (value interface{}, ok bool)
-	Remove(req *pb.RateLimitRequest)
+	Add(key Key, value interface{}, expireAt int64) bool
+	UpdateExpiration(key Key, expireAt int64) bool
+	Get(key Key) (value interface{}, ok bool)
+	Remove(key Key)
 
 	// Controls init and shutdown of the cache
 	Start() error

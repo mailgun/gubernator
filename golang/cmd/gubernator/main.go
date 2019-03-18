@@ -10,7 +10,6 @@ import (
 	"github.com/mailgun/gubernator/golang"
 	"github.com/mailgun/gubernator/golang/cache"
 	"github.com/mailgun/gubernator/golang/metrics"
-	"github.com/mailgun/gubernator/golang/pb"
 	"github.com/mailgun/gubernator/golang/sync"
 	"github.com/mailgun/service"
 	"github.com/pkg/errors"
@@ -58,7 +57,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 	mux := s.Mux()
 	gateway := runtime.NewServeMux()
-	err = pb.RegisterRateLimitServiceHandlerFromEndpoint(ctx, gateway,
+	err = gubernator.RegisterRateLimitServiceV1HandlerFromEndpoint(ctx, gateway,
 		grpcAddress, []grpc.DialOption{grpc.WithInsecure()})
 	if err != nil {
 		return errors.Wrap(err, "while registering GRPC gateway handler")

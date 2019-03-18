@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/mailgun/gubernator/golang"
+	guber "github.com/mailgun/gubernator/golang"
 	"github.com/mailgun/holster"
 )
 
@@ -23,20 +23,20 @@ func randInt(min, max int) int64 {
 }
 
 func main() {
-	client, err := gubernator.NewV1Client(os.Args[1])
+	client, err := guber.NewV1Client(os.Args[1])
 	checkErr(err)
 
 	// Generate a selection of rate limits with random limits
-	var rateLimits []*gubernator.Request
+	var rateLimits []*guber.Request
 
 	for i := 0; i < 2000; i++ {
-		rateLimits = append(rateLimits, &gubernator.Request{
+		rateLimits = append(rateLimits, &guber.Request{
 			Namespace: fmt.Sprintf("ID-%d", i),
-			UniqueKey: gubernator.RandomString(10),
+			UniqueKey: guber.RandomString(10),
 			Hits:      1,
 			Limit:     randInt(1, 10),
-			Duration:  time.Duration(randInt(int(time.Millisecond*500), int(time.Second*6))),
-			Algorithm: gubernator.TokenBucket,
+			Duration:  randInt(int(time.Millisecond*500), int(time.Second*6)),
+			Algorithm: guber.Algorithm_TOKEN_BUCKET,
 		})
 	}
 
@@ -44,12 +44,14 @@ func main() {
 	for {
 		for _, rateLimit := range rateLimits {
 			fan.Run(func(obj interface{}) error {
-				r := obj.(*gubernator.Request)
+				r := obj.(*guber.Request)
 				// Now hit our cluster with the rate limits
-				_, err := client.GetRateLimit(context.Background(), r)
+				_, err := client.GetRateLimits(context.Background(), &guber.Requests{
+					Requests: []*guber.Request{r},
+				})
 				checkErr(err)
 
-				/*if resp.Status == gubernator.OverLimit {
+				/*if resp.Status == guber.OverLimit {
 					spew.Dump(resp)
 				}*/
 				return nil

@@ -10,7 +10,7 @@ import (
 )
 
 func BenchmarkServer_GetPeerRateLimitNoBatching(b *testing.B) {
-	conf := guber.ServerConfig{}
+	conf := guber.Config{}
 	if err := guber.ApplyConfigDefaults(&conf); err != nil {
 		b.Errorf("ApplyConfigDefaults err: %s", err)
 	}

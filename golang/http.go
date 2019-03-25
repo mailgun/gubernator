@@ -19,14 +19,14 @@ type HTTPServer struct {
 	ctx      context.Context
 	log      *logrus.Entry
 	listener net.Listener
-	conf     ServerConfig
 	server   *http.Server
+	conf     HTTPConfig
 }
 
-func NewHTTPServer(conf ServerConfig) (*HTTPServer, error) {
-	listener, err := net.Listen("tcp", conf.HTTPListenAddress)
+func NewHTTPServer(conf HTTPConfig) (*HTTPServer, error) {
+	listener, err := net.Listen("tcp", conf.ListenAddress)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to listen on %s", conf.HTTPListenAddress)
+		return nil, errors.Wrapf(err, "failed to listen on %s", conf.ListenAddress)
 	}
 
 	s := HTTPServer{
@@ -37,18 +37,18 @@ func NewHTTPServer(conf ServerConfig) (*HTTPServer, error) {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 
 	// Fetch the listener address if none was set
-	holster.SetDefault(&s.conf.HTTPListenAddress, s.Address())
+	holster.SetDefault(&s.conf.ListenAddress, s.Address())
 
 	mux := http.NewServeMux()
 	gateway := runtime.NewServeMux()
 	err = RegisterRateLimitServiceV1HandlerFromEndpoint(s.ctx, gateway,
-		conf.GRPCListenAddress, []grpc.DialOption{grpc.WithInsecure()})
+		conf.GubernatorAddress, []grpc.DialOption{grpc.WithInsecure()})
 	if err != nil {
 		return nil, errors.Wrap(err, "while registering GRPC gateway handler")
 	}
 
 	mux.Handle("/", gateway)
-	s.server = &http.Server{Addr: conf.HTTPListenAddress, Handler: mux}
+	s.server = &http.Server{Addr: conf.ListenAddress, Handler: mux}
 
 	return &s, nil
 }

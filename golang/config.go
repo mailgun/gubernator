@@ -22,19 +22,24 @@ type PeerConfig struct {
 	Peers []string
 }
 
+type HTTPConfig struct {
+	// This is the interface and port number the service will listen to for HTTP connections
+	ListenAddress string `json:"listen-address"`
+
+	// This is the interface and port number the http service will forward GRPC requests too
+	GubernatorAddress string `json:"gubernator-address"`
+}
+
 // Local config for our service instance
-type ServerConfig struct {
+type Config struct {
 	// This is the interface and port number the service will listen to for GRPC connections
 	// If unset, the server will pick a random port on localhost. You can retrieve the listening
 	// address and port by calling `server.Address()`.
-	GRPCListenAddress string `json:"grpc-listen-address"`
+	ListenAddress string `json:"listen-address"`
 
 	// This is the address and port number the service will advertise to other peers in the cluster
 	// If unset, defaults to `GRPCListenAddress`.
-	GRPCAdvertiseAddress string `json:"grpc-advertise-address"`
-
-	// This is the interface and port number the service will listen to for HTTP connections
-	HTTPListenAddress string `json:"http-listen-address"`
+	AdvertiseAddress string `json:"advertise-address"`
 
 	// The cache implementation
 	Cache cache.Cache
@@ -63,10 +68,12 @@ type BehaviorConfig struct {
 	BatchLimit int
 }
 
-func ApplyConfigDefaults(c *ServerConfig) error {
+func ApplyConfigDefaults(c *Config) error {
 	holster.SetDefault(&c.Behaviors.BatchTimeout, time.Millisecond*500)
 	holster.SetDefault(&c.Behaviors.BatchLimit, maxBatchSize)
 	holster.SetDefault(&c.Behaviors.BatchWait, time.Microsecond*500)
+	holster.SetDefault(&c.Picker, NewConsistantHash(nil))
+	holster.SetDefault(&c.Cache, cache.NewLRUCache(cache.LRUCacheConfig{}))
 
 	if c.Behaviors.BatchLimit > maxBatchSize {
 		return fmt.Errorf("Behaviors.BatchLimit cannot exceed '%d'", maxBatchSize)

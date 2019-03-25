@@ -25,7 +25,7 @@ var log = logrus.WithField("category", "server")
 var Version = "dev-build"
 
 type Config struct {
-	guber.ServerConfig
+	guber.Config
 
 	LRUCache cache.LRUCacheConfig `json:"lru-cache"`
 	Statsd   metrics.Config       `json:"statsd"`
@@ -35,6 +35,7 @@ type Config struct {
 
 func main() {
 	var configFile string
+	// TODO: This should be specifically for this server
 	var conf Config
 
 	flags := flag.NewFlagSet("guber-server", flag.ContinueOnError)
@@ -50,27 +51,27 @@ func main() {
 	defer cancel()
 	checkErr(logging.Init(ctx, conf.Logging), "while initializing logging")
 
-	holster.SetDefault(&conf.HTTPListenAddress, "0.0.0.0:9090")
-	holster.SetDefault(&conf.GRPCListenAddress, "0.0.0.0:9091")
+	//holster.SetDefault(&conf.HTTPListenAddress, "0.0.0.0:9090")
+	holster.SetDefault(&conf.ListenAddress, "0.0.0.0:9091")
 
 	etcdClient, err := etcdutil.NewClient(&conf.EtcdConf)
 	checkErr(err, "while connecting to etcd")
 
-	grpcSrv, err := guber.NewGRPCServer(guber.ServerConfig{
-		Metrics:              metrics.NewStatsdMetricsFromConf(conf.Statsd),
-		Picker:               guber.NewConsistantHash(nil),
-		Cache:                cache.NewLRUCache(conf.LRUCache),
-		PeerSyncer:           sync.NewEtcdSync(etcdClient),
-		GRPCAdvertiseAddress: conf.GRPCAdvertiseAddress,
-		GRPCListenAddress:    conf.GRPCListenAddress,
+	grpcSrv, err := guber.New(guber.Config{
+		Metrics:          metrics.NewStatsdMetricsFromConf(conf.Statsd),
+		Picker:           guber.NewConsistantHash(nil),
+		Cache:            cache.NewLRUCache(conf.LRUCache),
+		PeerSyncer:       sync.NewEtcdSync("", etcdClient),
+		AdvertiseAddress: conf.AdvertiseAddress,
+		ListenAddress:    conf.ListenAddress,
 	})
 	checkErr(err, "while initializing GRPC server")
 
 	checkErr(grpcSrv.Start(), "while starting GRPC server")
 
-	httpSrv, err := guber.NewHTTPServer(guber.ServerConfig{
-		HTTPListenAddress: conf.HTTPListenAddress,
-		GRPCListenAddress: conf.GRPCListenAddress,
+	httpSrv, err := guber.NewHTTPServer(guber.HTTPConfig{
+		ListenAddress:     "0.0.0.0:9090",
+		GubernatorAddress: conf.ListenAddress,
 	})
 	checkErr(err, "while initializing HTTP server")
 

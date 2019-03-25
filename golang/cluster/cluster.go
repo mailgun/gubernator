@@ -8,7 +8,7 @@ import (
 )
 
 var peers []string
-var grpcServers []*gubernator.GRPCServer
+var grpcServers []*gubernator.Instance
 var httpServer *gubernator.HTTPServer
 
 // Returns a random peer from the cluster
@@ -36,12 +36,12 @@ func StartWith(addresses []string, httpAddress string) error {
 	var err error
 
 	for _, address := range addresses {
-		srv, err := gubernator.NewGRPCServer(gubernator.ServerConfig{
-			Metrics:           metrics.NewStatsdMetrics(&metrics.NullClient{}),
-			Cache:             cache.NewLRUCache(cache.LRUCacheConfig{}),
-			Picker:            gubernator.NewConsistantHash(nil),
-			GRPCListenAddress: address,
-			PeerSyncer:        &syncer,
+		srv, err := gubernator.New(gubernator.Config{
+			Metrics:       metrics.NewStatsdMetrics(&metrics.NullClient{}),
+			Cache:         cache.NewLRUCache(cache.LRUCacheConfig{}),
+			Picker:        gubernator.NewConsistantHash(nil),
+			ListenAddress: address,
+			PeerSyncer:    &syncer,
 		})
 		if err != nil {
 			return errors.Wrap(err, "NewGRPCServer()")
@@ -53,9 +53,9 @@ func StartWith(addresses []string, httpAddress string) error {
 		grpcServers = append(grpcServers, srv)
 	}
 
-	httpServer, err = gubernator.NewHTTPServer(gubernator.ServerConfig{
-		HTTPListenAddress: httpAddress,
-		GRPCListenAddress: grpcServers[0].Address(),
+	httpServer, err = gubernator.NewHTTPServer(gubernator.HTTPConfig{
+		GubernatorAddress: grpcServers[0].Address(),
+		ListenAddress:     httpAddress,
 	})
 	if err != nil {
 		return errors.Wrap(err, "NewHTTPServer()")

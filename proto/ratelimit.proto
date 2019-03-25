@@ -74,6 +74,10 @@ enum Behavior {
   // gain massive performance as every request coming into the system does not have to wait for a
   // single peer to decide if the rate limit has been reached.
   GLOBAL = 2;
+
+  // TODO: Add support for LOCAL. Which would force the rate limit to be handled by the local instance
+
+  // TODO: Make a golang CLI to retrive a rate limit value
 }
 
 message Request {

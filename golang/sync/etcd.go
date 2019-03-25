@@ -15,11 +15,11 @@ const (
 	etcdTimeout    = time.Second * 10
 	backOffTimeout = time.Second * 5
 	leaseTTL       = 30
-	rootKey        = "/gubernator/peers/"
+	defaultRootKey = "/gubernator/peers/"
 )
 
 type EtcdSync struct {
-	callBack  gubernator.UpdateFunc
+	callBacks []gubernator.UpdateFunc
 	peers     map[string]struct{}
 	wg        holster.WaitGroup
 	ctx       context.Context
@@ -28,13 +28,16 @@ type EtcdSync struct {
 	log       *logrus.Entry
 	client    *etcd.Client
 	watcher   etcd.Watcher
+	rootKey   string
 }
 
-func NewEtcdSync(client *etcd.Client) *EtcdSync {
+func NewEtcdSync(rootKey string, client *etcd.Client) *EtcdSync {
+	holster.SetDefault(&rootKey, defaultRootKey)
 	ctx, cancel := context.WithCancel(context.Background())
 	return &EtcdSync{
 		log:       logrus.WithField("category", "etcd-sync"),
 		peers:     make(map[string]struct{}),
+		rootKey:   rootKey,
 		cancelCtx: cancel,
 		client:    client,
 		ctx:       ctx,
@@ -72,7 +75,7 @@ func (e *EtcdSync) watchPeers() error {
 
 	ready := make(chan struct{})
 	go func() {
-		e.watchChan = e.watcher.Watch(etcd.WithRequireLeader(e.ctx), rootKey,
+		e.watchChan = e.watcher.Watch(etcd.WithRequireLeader(e.ctx), e.rootKey,
 			etcd.WithRev(revision), etcd.WithPrefix(), etcd.WithPrevKV())
 		close(ready)
 	}()
@@ -90,9 +93,9 @@ func (e *EtcdSync) collectPeers(revision *int64) error {
 	ctx, cancel := context.WithTimeout(e.ctx, etcdTimeout)
 	defer cancel()
 
-	resp, err := e.client.Get(ctx, rootKey, etcd.WithPrefix())
+	resp, err := e.client.Get(ctx, e.rootKey, etcd.WithPrefix())
 	if err != nil {
-		return errors.Wrapf(err, "while fetching peer listing from '%s'", rootKey)
+		return errors.Wrapf(err, "while fetching peer listing from '%s'", e.rootKey)
 	}
 
 	// Collect all the peers
@@ -166,7 +169,7 @@ func (e *EtcdSync) watch() error {
 }
 
 func (e *EtcdSync) register(name string) error {
-	instanceKey := rootKey + name
+	instanceKey := e.rootKey + name
 	e.log.Infof("Registering peer '%s' with etcd", name)
 
 	var keepAlive <-chan *etcd.LeaseKeepAliveResponse
@@ -263,7 +266,7 @@ func (e *EtcdSync) Stop() {
 }
 
 func (e *EtcdSync) RegisterOnUpdate(fn gubernator.UpdateFunc) {
-	e.callBack = fn
+	e.callBacks = append(e.callBacks, fn)
 }
 
 func (e *EtcdSync) callOnUpdate() {
@@ -273,5 +276,7 @@ func (e *EtcdSync) callOnUpdate() {
 		conf.Peers = append(conf.Peers, k)
 	}
 
-	e.callBack(&conf)
+	for _, fn := range e.callBacks {
+		fn(&conf)
+	}
 }

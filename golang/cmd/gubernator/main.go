@@ -28,7 +28,7 @@ type Config struct {
 type Service struct {
 	service.BasicService
 
-	grpcSrv *gubernator.GRPCServer
+	grpcSrv *gubernator.Instance
 	cancel  context.CancelFunc
 	conf    Config
 }
@@ -40,13 +40,19 @@ func (s *Service) Start(ctx context.Context) error {
 	// If not provided in the config, the advertise address should be the hostname:9091 port
 	holster.SetDefault(&s.conf.GRPCAdvertiseAddress, fmt.Sprintf("%s:%d", s.Meta.FQDN, s.conf.GRPCPort))
 
-	s.grpcSrv, err = gubernator.NewGRPCServer(gubernator.ServerConfig{
-		Metrics:              metrics.NewStatsdMetrics(metrics.NewClientAdaptor(service.Metrics())),
-		Picker:               gubernator.NewConsistantHash(nil),
-		Cache:                cache.NewLRUCache(s.conf.LRUCache),
-		PeerSyncer:           sync.NewEtcdSync(service.Etcd()),
-		GRPCAdvertiseAddress: s.conf.GRPCAdvertiseAddress,
-		GRPCListenAddress:    grpcAddress,
+	// TODO: Make Picker optional
+	// TODO: Make PeerSyncer optional
+	// TODO: Make metrics optional
+	// TODO: Separate the library config from the server config
+	// TODO: Rename `Namespace` to 'name' or 'ratelimit'
+
+	s.grpcSrv, err = gubernator.New(gubernator.Config{
+		Metrics:          metrics.NewStatsdMetrics(metrics.NewClientAdaptor(service.Metrics())),
+		Picker:           gubernator.NewConsistantHash(nil),
+		Cache:            cache.NewLRUCache(s.conf.LRUCache),
+		PeerSyncer:       sync.NewEtcdSync("", service.Etcd()),
+		AdvertiseAddress: s.conf.GRPCAdvertiseAddress,
+		ListenAddress:    grpcAddress,
 	})
 	if err != nil {
 		return errors.Wrap(err, "while initializing GRPC server")

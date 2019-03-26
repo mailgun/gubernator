@@ -12,7 +12,7 @@ import (
 func BenchmarkServer_GetPeerRateLimitNoBatching(b *testing.B) {
 	conf := guber.Config{}
 	if err := guber.ApplyConfigDefaults(&conf); err != nil {
-		b.Errorf("ApplyConfigDefaults err: %s", err)
+		b.Errorf("SetDefaults err: %s", err)
 	}
 
 	client, err := guber.NewPeerClient(conf.Behaviors, cluster.GetPeer())
@@ -23,7 +23,7 @@ func BenchmarkServer_GetPeerRateLimitNoBatching(b *testing.B) {
 	b.Run("GetPeerRateLimitNoBatching", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
 			_, err := client.GetPeerRateLimit(context.Background(), &guber.Request{
-				Namespace: "get_peer_rate_limits_benchmark",
+				Name:      "get_peer_rate_limits_benchmark",
 				UniqueKey: guber.RandomString(10),
 				Behavior:  guber.Behavior_NO_BATCHING,
 				Limit:     10,
@@ -48,7 +48,7 @@ func BenchmarkServer_GetRateLimit(b *testing.B) {
 			_, err := client.GetRateLimits(context.Background(), &guber.Requests{
 				Requests: []*guber.Request{
 					{
-						Namespace: "get_rate_limit_benchmark",
+						Name:      "get_rate_limit_benchmark",
 						UniqueKey: guber.RandomString(10),
 						Limit:     10,
 						Duration:  guber.Second * 5,
@@ -104,7 +104,7 @@ func BenchmarkServer_ThunderingHeard(b *testing.B) {
 				_, err := client.GetRateLimits(context.Background(), &guber.Requests{
 					Requests: []*guber.Request{
 						{
-							Namespace: "get_rate_limit_benchmark",
+							Name:      "get_rate_limit_benchmark",
 							UniqueKey: guber.RandomString(10),
 							Limit:     10,
 							Duration:  guber.Second * 5,

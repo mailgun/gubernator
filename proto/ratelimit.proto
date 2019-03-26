@@ -81,10 +81,10 @@ enum Behavior {
 }
 
 message Request {
-  // The namespace scopes the unique_key to avoid collisions with other services or applications.
-  string namespace = 1;
+  // The name of the rate limit IE: 'requests_per_second', 'gets_per_minute`
+  string name = 1;
 
-  // Uniquely identifies this rate limit within a namespace.
+  // Uniquely identifies this rate limit IE: 'ip:10.2.10.7' or 'account:123445'
   string unique_key = 2;
 
   // Rate limit requests optionally specify the number of hits a request adds to the matched limit. If Hit

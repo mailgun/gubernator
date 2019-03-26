@@ -31,7 +31,7 @@ func main() {
 
 	for i := 0; i < 2000; i++ {
 		rateLimits = append(rateLimits, &guber.Request{
-			Namespace: fmt.Sprintf("ID-%d", i),
+			Name:      fmt.Sprintf("ID-%d", i),
 			UniqueKey: guber.RandomString(10),
 			Hits:      1,
 			Limit:     randInt(1, 10),

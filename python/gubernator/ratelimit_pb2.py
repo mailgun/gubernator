@@ -21,7 +21,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='pb.gubernator',
   syntax='proto3',
   serialized_options=_b('Z\ngubernator\200\001\001'),
-  serialized_pb=_b('\n\x0fratelimit.proto\x12\rpb.gubernator\x1a\x1cgoogle/api/annotations.proto\"4\n\x08Requests\x12(\n\x08requests\x18\x01 \x03(\x0b\x32\x16.pb.gubernator.Request\";\n\nRateLimits\x12-\n\x0brate_limits\x18\x01 \x03(\x0b\x32\x18.pb.gubernator.RateLimit\"\xb7\x01\n\x07Request\x12\x11\n\tnamespace\x18\x01 \x01(\t\x12\x12\n\nunique_key\x18\x02 \x01(\t\x12\x0c\n\x04hits\x18\x03 \x01(\x03\x12\r\n\x05limit\x18\x04 \x01(\x03\x12\x10\n\x08\x64uration\x18\x05 \x01(\x03\x12+\n\talgorithm\x18\x06 \x01(\x0e\x32\x18.pb.gubernator.Algorithm\x12)\n\x08\x62\x65havior\x18\x07 \x01(\x0e\x32\x17.pb.gubernator.Behavior\"\xf0\x01\n\tRateLimit\x12%\n\x06status\x18\x01 \x01(\x0e\x32\x15.pb.gubernator.Status\x12\x15\n\rcurrent_limit\x18\x02 \x01(\x03\x12\x17\n\x0flimit_remaining\x18\x03 \x01(\x03\x12\x12\n\nreset_time\x18\x04 \x01(\x03\x12\r\n\x05\x65rror\x18\x05 \x01(\t\x12\x38\n\x08metadata\x18\x06 \x03(\x0b\x32&.pb.gubernator.RateLimit.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x10\n\x0eHealthCheckReq\"F\n\x0fHealthCheckResp\x12\x0e\n\x06status\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x12\n\npeer_count\x18\x03 \x01(\x05*/\n\tAlgorithm\x12\x10\n\x0cTOKEN_BUCKET\x10\x00\x12\x10\n\x0cLEAKY_BUCKET\x10\x01*5\n\x08\x42\x65havior\x12\x0c\n\x08\x42\x41TCHING\x10\x00\x12\x0f\n\x0bNO_BATCHING\x10\x01\x12\n\n\x06GLOBAL\x10\x02*)\n\x06Status\x12\x0f\n\x0bUNDER_LIMIT\x10\x00\x12\x0e\n\nOVER_LIMIT\x10\x01\x32\xde\x01\n\x12RateLimitServiceV1\x12\x61\n\rGetRateLimits\x12\x17.pb.gubernator.Requests\x1a\x19.pb.gubernator.RateLimits\"\x1c\x82\xd3\xe4\x93\x02\x16\"\x11/v1/GetRateLimits:\x01*\x12\x65\n\x0bHealthCheck\x12\x1d.pb.gubernator.HealthCheckReq\x1a\x1e.pb.gubernator.HealthCheckResp\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/HealthCheckB\x0fZ\ngubernator\x80\x01\x01\x62\x06proto3')
+  serialized_pb=_b('\n\x0fratelimit.proto\x12\rpb.gubernator\x1a\x1cgoogle/api/annotations.proto\"4\n\x08Requests\x12(\n\x08requests\x18\x01 \x03(\x0b\x32\x16.pb.gubernator.Request\";\n\nRateLimits\x12-\n\x0brate_limits\x18\x01 \x03(\x0b\x32\x18.pb.gubernator.RateLimit\"\xb2\x01\n\x07Request\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x12\n\nunique_key\x18\x02 \x01(\t\x12\x0c\n\x04hits\x18\x03 \x01(\x03\x12\r\n\x05limit\x18\x04 \x01(\x03\x12\x10\n\x08\x64uration\x18\x05 \x01(\x03\x12+\n\talgorithm\x18\x06 \x01(\x0e\x32\x18.pb.gubernator.Algorithm\x12)\n\x08\x62\x65havior\x18\x07 \x01(\x0e\x32\x17.pb.gubernator.Behavior\"\xf0\x01\n\tRateLimit\x12%\n\x06status\x18\x01 \x01(\x0e\x32\x15.pb.gubernator.Status\x12\x15\n\rcurrent_limit\x18\x02 \x01(\x03\x12\x17\n\x0flimit_remaining\x18\x03 \x01(\x03\x12\x12\n\nreset_time\x18\x04 \x01(\x03\x12\r\n\x05\x65rror\x18\x05 \x01(\t\x12\x38\n\x08metadata\x18\x06 \x03(\x0b\x32&.pb.gubernator.RateLimit.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x10\n\x0eHealthCheckReq\"F\n\x0fHealthCheckResp\x12\x0e\n\x06status\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x12\n\npeer_count\x18\x03 \x01(\x05*/\n\tAlgorithm\x12\x10\n\x0cTOKEN_BUCKET\x10\x00\x12\x10\n\x0cLEAKY_BUCKET\x10\x01*5\n\x08\x42\x65havior\x12\x0c\n\x08\x42\x41TCHING\x10\x00\x12\x0f\n\x0bNO_BATCHING\x10\x01\x12\n\n\x06GLOBAL\x10\x02*)\n\x06Status\x12\x0f\n\x0bUNDER_LIMIT\x10\x00\x12\x0e\n\nOVER_LIMIT\x10\x01\x32\xde\x01\n\x12RateLimitServiceV1\x12\x61\n\rGetRateLimits\x12\x17.pb.gubernator.Requests\x1a\x19.pb.gubernator.RateLimits\"\x1c\x82\xd3\xe4\x93\x02\x16\"\x11/v1/GetRateLimits:\x01*\x12\x65\n\x0bHealthCheck\x12\x1d.pb.gubernator.HealthCheckReq\x1a\x1e.pb.gubernator.HealthCheckResp\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/HealthCheckB\x0fZ\ngubernator\x80\x01\x01\x62\x06proto3')
   ,
   dependencies=[google_dot_api_dot_annotations__pb2.DESCRIPTOR,])
 
@@ -42,8 +42,8 @@ _ALGORITHM = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=698,
-  serialized_end=745,
+  serialized_start=693,
+  serialized_end=740,
 )
 _sym_db.RegisterEnumDescriptor(_ALGORITHM)
 
@@ -69,8 +69,8 @@ _BEHAVIOR = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=747,
-  serialized_end=800,
+  serialized_start=742,
+  serialized_end=795,
 )
 _sym_db.RegisterEnumDescriptor(_BEHAVIOR)
 
@@ -92,8 +92,8 @@ _STATUS = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=802,
-  serialized_end=843,
+  serialized_start=797,
+  serialized_end=838,
 )
 _sym_db.RegisterEnumDescriptor(_STATUS)
 
@@ -178,7 +178,7 @@ _REQUEST = _descriptor.Descriptor(
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='namespace', full_name='pb.gubernator.Request.namespace', index=0,
+      name='name', full_name='pb.gubernator.Request.name', index=0,
       number=1, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
@@ -239,7 +239,7 @@ _REQUEST = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=180,
-  serialized_end=363,
+  serialized_end=358,
 )
 
 
@@ -276,8 +276,8 @@ _RATELIMIT_METADATAENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=559,
-  serialized_end=606,
+  serialized_start=554,
+  serialized_end=601,
 )
 
 _RATELIMIT = _descriptor.Descriptor(
@@ -341,8 +341,8 @@ _RATELIMIT = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=366,
-  serialized_end=606,
+  serialized_start=361,
+  serialized_end=601,
 )
 
 
@@ -365,8 +365,8 @@ _HEALTHCHECKREQ = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=608,
-  serialized_end=624,
+  serialized_start=603,
+  serialized_end=619,
 )
 
 
@@ -410,8 +410,8 @@ _HEALTHCHECKRESP = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=626,
-  serialized_end=696,
+  serialized_start=621,
+  serialized_end=691,
 )
 
 _REQUESTS.fields_by_name['requests'].message_type = _REQUEST
@@ -492,8 +492,8 @@ _RATELIMITSERVICEV1 = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=846,
-  serialized_end=1068,
+  serialized_start=841,
+  serialized_end=1063,
   methods=[
   _descriptor.MethodDescriptor(
     name='GetRateLimits',

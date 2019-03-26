@@ -1,60 +1,10 @@
 package logging
 
 import (
-	"context"
 	"encoding/json"
-	"io/ioutil"
-	"log/syslog"
-
-	"github.com/mailgun/holster"
-	"github.com/mailgun/logrus-hooks/kafkahook"
-	"github.com/mailgun/logrus-hooks/levelfilter"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	logrus_syslog "github.com/sirupsen/logrus/hooks/syslog"
 )
-
-type Config struct {
-	NoStdout bool                  `json:"no_stdout"`
-	LogLevel LogLevelJSON          `json:"log_level"`
-	Handlers map[string]HandlerCfg `json:"handlers"`
-}
-
-type HandlerCfg struct {
-	LogLevel LogLevelJSON `json:"log_level"`
-	Topic    string       `json:"topic"`
-	Nodes    []string     `json:"nodes"`
-}
-
-func Init(ctx context.Context, cfg Config) error {
-	for name, handler := range cfg.Handlers {
-		holster.SetDefault(&handler.LogLevel.Level, logrus.DebugLevel)
-		switch name {
-		case "syslog":
-			h, err := logrus_syslog.NewSyslogHook(
-				"udp", "127.0.0.1:514", syslog.LOG_INFO|syslog.LOG_MAIL, "gubernator")
-			if err != nil {
-				continue
-			}
-			logrus.AddHook(levelfilter.New(h, handler.LogLevel.Level))
-		case "kafka":
-			h, err := kafkahook.NewWithContext(ctx, kafkahook.Config{
-				Endpoints: handler.Nodes,
-				Topic:     handler.Topic,
-			})
-			if err != nil {
-				continue
-			}
-			logrus.AddHook(levelfilter.New(h, handler.LogLevel.Level))
-		}
-	}
-	if cfg.NoStdout {
-		logrus.SetOutput(ioutil.Discard)
-	}
-	holster.SetDefault(&cfg.LogLevel.Level, logrus.DebugLevel)
-	logrus.SetLevel(cfg.LogLevel.Level)
-	return nil
-}
 
 type LogLevelJSON struct {
 	Level logrus.Level

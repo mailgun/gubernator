@@ -1,9 +1,8 @@
-package metrics
+package gubernator
 
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -34,40 +33,15 @@ type StatsdMetrics struct {
 	log        *logrus.Entry
 }
 
-func NewStatsdMetrics(client StatsdClient) *StatsdMetrics {
-	sd := StatsdMetrics{
+func NewStatsdMetrics(client StatsdClient) (*StatsdMetrics, error) {
+	sd := &StatsdMetrics{
 		client: client,
 		log:    logrus.WithField("category", "metrics"),
 	}
-	return &sd
+	return sd, sd.run()
 }
 
-func NewStatsdMetricsFromConf(conf Config) Collector {
-	if conf.Host == "" || conf.Port == 0 {
-		s := NewStatsdMetrics(&NullClient{})
-		s.log.Info("Metrics config missing; metrics disabled")
-		return s
-	}
-
-	if conf.Prefix == "" {
-		hostname, _ := os.Hostname()
-		normalizedHostname := strings.Replace(hostname, ".", "_", -1)
-		conf.Prefix = fmt.Sprintf("gubernator.%v.", normalizedHostname)
-	}
-
-	log := logrus.WithField("category", "metrics")
-
-	holster.SetDefault(&conf.Period.Duration, time.Second)
-
-	client := statsd.NewClient(fmt.Sprintf("%v:%v", conf.Host, conf.Port),
-		statsd.FlushInterval(conf.Period.Duration),
-		statsd.MetricPrefix(conf.Prefix),
-		statsd.Logger(log))
-
-	return NewStatsdMetrics(client)
-}
-
-func (sd *StatsdMetrics) Start() error {
+func (sd *StatsdMetrics) run() error {
 	sd.reqChan = make(chan *RequestStats, 10000)
 	methods := make(map[string]*RequestStats)
 
@@ -115,7 +89,7 @@ func (sd *StatsdMetrics) Start() error {
 	return nil
 }
 
-func (sd *StatsdMetrics) Stop() {
+func (sd *StatsdMetrics) Close() {
 	sd.wg.Stop()
 }
 

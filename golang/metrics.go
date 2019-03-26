@@ -1,6 +1,25 @@
-package metrics
+package gubernator
 
-import "context"
+import (
+	"context"
+	"time"
+
+	"github.com/mailgun/gubernator/golang/cache"
+	"google.golang.org/grpc/stats"
+)
+
+type MetricsCollector interface {
+	GRPCStatsHandler() stats.Handler
+	RegisterCacheStats(cache.CacheStats)
+	Close()
+}
+
+type RequestStats struct {
+	Method   string
+	Duration time.Duration
+	Failed   int64
+	Called   int64
+}
 
 type contextKey struct{}
 

@@ -1,11 +1,3 @@
-# mailgun/service config
-public_api_host: api.ninomail.com
-protected_api_host: localhost
-protected_api_url: http://localhost:9001
-vulcand_namespace: /vulcand
-http_port: 9040
-grpc_port: 9041
-
 logging:
   # Skip logging to stdout
   no_stdout: false
@@ -17,16 +9,21 @@ logging:
 #      nodes:
 #        - localhost:9092
 
-statsd:
-  # How often the client emits metrics
-  period: 5s
-  # The statsd host
-  host: 127.0.0.1
-  # The statsd port
-  port: 8125
+#statsd:
+#  # How often the client emits metrics
+#  period: 5s
+#  # The statsd host
+#  host: 127.0.0.1
+#  # The statsd port
+#  port: 8125
 
+# The address HTTP requests will listen on
+http-listen-address: localhost:9040
 
-# Should be the same as grpc_port unless you are running behind
+# The address GRPC requests will listen on
+grpc-listen-address: localhost:9041
+
+# Should be the same as grpc-listen-address unless you are running behind
 # a NAT or running in a docker container without host networking
 grpc-advertise-address: localhost:9041
 
@@ -44,4 +41,8 @@ lru-cache:
   # make the cache more responsive to high volume bursts, raise
   # the interval to conserve more memory during bursts.
   inspect-interval: 30s
+
+etcd:
+  # Endpoints
+  endpoints: [localhost:2379]
 

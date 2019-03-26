@@ -15,7 +15,7 @@ const (
 )
 
 func (m *Request) HashKey() string {
-	return m.Namespace + "_" + m.UniqueKey
+	return m.Name + "_" + m.UniqueKey
 }
 
 // Create a new connection to the server

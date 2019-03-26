@@ -20,37 +20,16 @@ package cache
 
 import (
 	"container/list"
+	"github.com/mailgun/holster"
 	"sync"
 	"time"
 
-	"github.com/mailgun/holster"
-	"github.com/mailgun/holster/clock"
 	"github.com/sirupsen/logrus"
 )
-
-type LRUCacheConfig struct {
-	// Max size of the internal cache, The actual size of the cache could change during normal
-	// operation, but the cache will never exceed this number of rate limits in the cache.
-	// Default: 50,000
-	//
-	// Cache Memory Usage
-	// The size of the struct stored in the cache is 40 bytes, not including any additional metadata
-	// that might be attached. The key which is formatted `domain_<key_value>_<key_value>` will also
-	// effect the cache size.
-	MaxCacheSize int `json:"max-cache-size"`
-
-	// The initial cache size. If not provided defaults to 30% of the max cache size.
-	InitialCacheSize int `json:"initial-cache-size"`
-
-	// Interval at which the cache should check if it needs to shrink or grow
-	InspectInterval clock.DurationJSON `json:"inspect-interval"`
-}
 
 // Cache is an thread unsafe LRU cache that supports expiration
 type LRUCache struct {
 	cache     map[interface{}]*list.Element
-	wg        holster.WaitGroup
-	conf      LRUCacheConfig
 	log       *logrus.Entry
 	mutex     sync.Mutex
 	ll        *list.List
@@ -64,105 +43,16 @@ type cacheRecord struct {
 	expireAt int64
 }
 
-// New creates a new Cache.
-func NewLRUCache(conf LRUCacheConfig) *LRUCache {
-	holster.SetDefault(&conf.MaxCacheSize, 50000)
-	// If not provided init cache with 30 percent of the max cache size
-	holster.SetDefault(&conf.InitialCacheSize, int(float32(conf.MaxCacheSize)*0.30))
-	// Inspect the cache for possible resize every 30 seconds
-	holster.SetDefault(&conf.InspectInterval.Duration, time.Second*30)
+// New creates a new Cache with a maximum size
+func NewLRUCache(maxSize int) *LRUCache {
+	holster.SetDefault(&maxSize, 50000)
 
 	return &LRUCache{
-		log:       logrus.WithField("category", "lru-cache"),
+		log:       logrus.WithField("category", "gubernator-cache"),
 		cache:     make(map[interface{}]*list.Element),
-		cacheSize: conf.InitialCacheSize,
-		conf:      conf,
 		ll:        list.New(),
+		cacheSize: maxSize,
 	}
-}
-
-// Inspect old entries at the bottom of the cache and decided if we
-// should expand the size of the cache.
-func (c *LRUCache) inspectAndResize() {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	// Inspect the bottom 20% of the cache for expired items
-	inspectSize := int(float32(c.cacheSize) * 0.20)
-	ele := c.ll.Back()
-	if ele == nil {
-		// return if the cache is empty
-		return
-	}
-
-	var prev *list.Element
-	var count, expired = 0, 0
-	for {
-		if count == inspectSize || ele == nil {
-			break
-		}
-
-		count++
-		entry := ele.Value.(*cacheRecord)
-		// Remove the entry if expired
-		if entry.expireAt < MillisecondNow() {
-			prev = ele.Prev()
-			c.removeElement(ele)
-			ele = prev
-			expired++
-			continue
-		}
-		ele = ele.Prev()
-	}
-
-	c.log.Debugf("Inspected cache [Size: %d, Cap: %d, Expired: %d, Inspected: %d]", c.Size(), c.cacheSize, expired, inspectSize)
-
-	// If all the elements expired, we can shrink the cache size
-	if expired == inspectSize {
-		// Decrease the cache size by 30%
-		newSize := c.cacheSize - int(float32(c.cacheSize)*0.30)
-		// Don't shrink beyond the initial cache size
-		if newSize < c.conf.InitialCacheSize {
-			c.cacheSize = c.conf.InitialCacheSize
-			return
-		}
-		c.log.Debugf("Shrinking cache from '%d' to '%d'", c.cacheSize, newSize)
-		c.cacheSize = newSize
-		return
-	}
-
-	// If less than 50% of the inspected elements expired
-	if expired < int(float32(inspectSize)*0.50) {
-		// Increase the cache size by 30%
-		newSize := c.cacheSize + int(float32(c.cacheSize)*0.30)
-		// Until we reach max size
-		if newSize > c.conf.MaxCacheSize {
-			c.cacheSize = c.conf.MaxCacheSize
-			return
-		}
-		c.log.Debugf("Growing cache from '%d' to '%d'", c.cacheSize, newSize)
-		c.cacheSize = newSize
-		return
-	}
-}
-
-func (c *LRUCache) Start() error {
-	tick := time.NewTicker(c.conf.InspectInterval.Duration)
-	c.wg.Until(func(done chan struct{}) bool {
-		select {
-		case <-tick.C:
-			c.inspectAndResize()
-		case <-done:
-			tick.Stop()
-			return false
-		}
-		return true
-	})
-	return nil
-}
-
-func (c *LRUCache) Stop() {
-	c.wg.Stop()
 }
 
 func (c *LRUCache) Lock() {

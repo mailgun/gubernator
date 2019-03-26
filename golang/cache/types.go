@@ -13,10 +13,6 @@ type Cache interface {
 	Get(key Key) (value interface{}, ok bool)
 	Remove(key Key)
 
-	// Controls init and shutdown of the cache
-	Start() error
-	Stop()
-
 	// If the cache is exclusive, this will control access to the cache
 	Unlock()
 	Lock()

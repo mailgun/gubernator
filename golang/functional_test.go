@@ -49,7 +49,7 @@ func TestOverTheLimit(t *testing.T) {
 		resp, err := client.GetRateLimits(context.Background(), &guber.Requests{
 			Requests: []*guber.Request{
 				{
-					Namespace: "test_over_limit",
+					Name:      "test_over_limit",
 					UniqueKey: "account:1234",
 					Algorithm: guber.Algorithm_TOKEN_BUCKET,
 					Duration:  guber.Second,
@@ -99,7 +99,7 @@ func TestTokenBucket(t *testing.T) {
 		resp, err := client.GetRateLimits(context.Background(), &guber.Requests{
 			Requests: []*guber.Request{
 				{
-					Namespace: "test_token_bucket",
+					Name:      "test_token_bucket",
 					UniqueKey: "account:1234",
 					Algorithm: guber.Algorithm_TOKEN_BUCKET,
 					Duration:  guber.Millisecond * 5,
@@ -160,7 +160,7 @@ func TestLeakyBucket(t *testing.T) {
 		resp, err := client.GetRateLimits(context.Background(), &guber.Requests{
 			Requests: []*guber.Request{
 				{
-					Namespace: "test_leaky_bucket",
+					Name:      "test_leaky_bucket",
 					UniqueKey: "account:1234",
 					Algorithm: guber.Algorithm_LEAKY_BUCKET,
 					Duration:  guber.Millisecond * 50,
@@ -191,7 +191,7 @@ func TestMissingFields(t *testing.T) {
 	}{
 		{
 			Req: guber.Request{
-				Namespace: "test_missing_fields",
+				Name:      "test_missing_fields",
 				UniqueKey: "account:1234",
 				Hits:      1,
 				Limit:     10,
@@ -202,7 +202,7 @@ func TestMissingFields(t *testing.T) {
 		},
 		{
 			Req: guber.Request{
-				Namespace: "test_missing_fields",
+				Name:      "test_missing_fields",
 				UniqueKey: "account:12345",
 				Hits:      1,
 				Duration:  10000,
@@ -223,10 +223,10 @@ func TestMissingFields(t *testing.T) {
 		},
 		{
 			Req: guber.Request{
-				Namespace: "test_missing_fields",
-				Hits:      1,
-				Duration:  10000,
-				Limit:     5,
+				Name:     "test_missing_fields",
+				Hits:     1,
+				Duration: 10000,
+				Limit:    5,
 			},
 			Error:  "field 'unique_key' cannot be empty",
 			Status: guber.Status_UNDER_LIMIT,

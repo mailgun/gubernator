@@ -1,53 +1,73 @@
-package sync
+package gubernator
 
 import (
 	"context"
 	"time"
 
 	etcd "github.com/coreos/etcd/clientv3"
-	"github.com/mailgun/gubernator/golang"
 	"github.com/mailgun/holster"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
+type PeerInfo struct {
+	Address string
+	IsOwner bool
+}
+
+type UpdateFunc func([]PeerInfo)
+
 const (
 	etcdTimeout    = time.Second * 10
 	backOffTimeout = time.Second * 5
 	leaseTTL       = 30
-	defaultRootKey = "/gubernator/peers/"
+	defaultBaseKey = "/gubernator/peers/"
 )
 
-type EtcdSync struct {
-	callBacks []gubernator.UpdateFunc
+type EtcdPool struct {
 	peers     map[string]struct{}
 	wg        holster.WaitGroup
 	ctx       context.Context
 	cancelCtx context.CancelFunc
 	watchChan etcd.WatchChan
 	log       *logrus.Entry
-	client    *etcd.Client
 	watcher   etcd.Watcher
-	rootKey   string
+	conf      EtcdPoolConfig
 }
 
-func NewEtcdSync(rootKey string, client *etcd.Client) *EtcdSync {
-	holster.SetDefault(&rootKey, defaultRootKey)
+type EtcdPoolConfig struct {
+	AdvertiseAddress string
+	BaseKey          string
+	Client           *etcd.Client
+	OnUpdate         UpdateFunc
+}
+
+func NewEtcdPool(conf EtcdPoolConfig) (*EtcdPool, error) {
+	holster.SetDefault(&conf.BaseKey, defaultBaseKey)
+
+	if conf.AdvertiseAddress == "" {
+		return nil, errors.New("AdvertiseAddress is required")
+	}
+
+	if conf.Client == nil {
+		return nil, errors.New("Client is required")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
-	return &EtcdSync{
-		log:       logrus.WithField("category", "etcd-sync"),
+	pool := &EtcdPool{
+		log:       logrus.WithField("category", "gubernator-etcd-pool"),
 		peers:     make(map[string]struct{}),
-		rootKey:   rootKey,
 		cancelCtx: cancel,
-		client:    client,
+		conf:      conf,
 		ctx:       ctx,
 	}
+	return pool, pool.run(conf.AdvertiseAddress)
 }
 
-func (e *EtcdSync) Start(name string) error {
+func (e *EtcdPool) run(addr string) error {
 
 	// Register our instance with etcd
-	if err := e.register(name); err != nil {
+	if err := e.register(addr); err != nil {
 		return err
 	}
 
@@ -58,7 +78,7 @@ func (e *EtcdSync) Start(name string) error {
 	return nil
 }
 
-func (e *EtcdSync) watchPeers() error {
+func (e *EtcdPool) watchPeers() error {
 	var revision int64
 
 	// Update our list of peers
@@ -71,11 +91,11 @@ func (e *EtcdSync) watchPeers() error {
 		e.watcher.Close()
 	}
 
-	e.watcher = etcd.NewWatcher(e.client)
+	e.watcher = etcd.NewWatcher(e.conf.Client)
 
 	ready := make(chan struct{})
 	go func() {
-		e.watchChan = e.watcher.Watch(etcd.WithRequireLeader(e.ctx), e.rootKey,
+		e.watchChan = e.watcher.Watch(etcd.WithRequireLeader(e.ctx), e.conf.BaseKey,
 			etcd.WithRev(revision), etcd.WithPrefix(), etcd.WithPrevKV())
 		close(ready)
 	}()
@@ -89,13 +109,13 @@ func (e *EtcdSync) watchPeers() error {
 	return nil
 }
 
-func (e *EtcdSync) collectPeers(revision *int64) error {
+func (e *EtcdPool) collectPeers(revision *int64) error {
 	ctx, cancel := context.WithTimeout(e.ctx, etcdTimeout)
 	defer cancel()
 
-	resp, err := e.client.Get(ctx, e.rootKey, etcd.WithPrefix())
+	resp, err := e.conf.Client.Get(ctx, e.conf.BaseKey, etcd.WithPrefix())
 	if err != nil {
-		return errors.Wrapf(err, "while fetching peer listing from '%s'", e.rootKey)
+		return errors.Wrapf(err, "while fetching peer listing from '%s'", e.conf.BaseKey)
 	}
 
 	// Collect all the peers
@@ -107,7 +127,7 @@ func (e *EtcdSync) collectPeers(revision *int64) error {
 	return nil
 }
 
-func (e *EtcdSync) watch() error {
+func (e *EtcdPool) watch() error {
 	// Initialize watcher
 	if err := e.watchPeers(); err != nil {
 		return errors.Wrap(err, "while attempting to start watch")
@@ -168,8 +188,8 @@ func (e *EtcdSync) watch() error {
 	return nil
 }
 
-func (e *EtcdSync) register(name string) error {
-	instanceKey := e.rootKey + name
+func (e *EtcdPool) register(name string) error {
+	instanceKey := e.conf.BaseKey + name
 	e.log.Infof("Registering peer '%s' with etcd", name)
 
 	var keepAlive <-chan *etcd.LeaseKeepAliveResponse
@@ -180,17 +200,17 @@ func (e *EtcdSync) register(name string) error {
 		defer cancel()
 		var err error
 
-		lease, err = e.client.Grant(ctx, leaseTTL)
+		lease, err = e.conf.Client.Grant(ctx, leaseTTL)
 		if err != nil {
 			return errors.Wrapf(err, "during grant lease")
 		}
 
-		_, err = e.client.Put(ctx, instanceKey, name, etcd.WithLease(lease.ID))
+		_, err = e.conf.Client.Put(ctx, instanceKey, name, etcd.WithLease(lease.ID))
 		if err != nil {
 			return errors.Wrap(err, "during put")
 		}
 
-		if keepAlive, err = e.client.KeepAlive(e.ctx, lease.ID); err != nil {
+		if keepAlive, err = e.conf.Client.KeepAlive(e.ctx, lease.ID); err != nil {
 			return err
 		}
 		return nil
@@ -242,12 +262,12 @@ func (e *EtcdSync) register(name string) error {
 			lastKeepAlive = time.Now()
 		case <-done:
 			ctx, cancel := context.WithTimeout(context.Background(), etcdTimeout)
-			if _, err := e.client.Delete(ctx, instanceKey); err != nil {
+			if _, err := e.conf.Client.Delete(ctx, instanceKey); err != nil {
 				e.log.WithError(err).
 					Warn("during etcd delete")
 			}
 
-			if _, err := e.client.Revoke(ctx, lease.ID); err != nil {
+			if _, err := e.conf.Client.Revoke(ctx, lease.ID); err != nil {
 				e.log.WithError(err).
 					Warn("during lease revoke ")
 			}
@@ -260,23 +280,17 @@ func (e *EtcdSync) register(name string) error {
 	return nil
 }
 
-func (e *EtcdSync) Stop() {
+func (e *EtcdPool) Close() {
 	e.cancelCtx()
 	e.wg.Stop()
 }
 
-func (e *EtcdSync) RegisterOnUpdate(fn gubernator.UpdateFunc) {
-	e.callBacks = append(e.callBacks, fn)
-}
-
-func (e *EtcdSync) callOnUpdate() {
-	conf := gubernator.PeerConfig{}
+func (e *EtcdPool) callOnUpdate() {
+	var peers []PeerInfo
 
 	for k := range e.peers {
-		conf.Peers = append(conf.Peers, k)
+		peers = append(peers, PeerInfo{Address: k})
 	}
 
-	for _, fn := range e.callBacks {
-		fn(&conf)
-	}
+	e.conf.OnUpdate(peers)
 }

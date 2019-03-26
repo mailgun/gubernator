@@ -32,7 +32,7 @@ func Start(numInstances int) error {
 
 // Start a local cluster with specific addresses
 func StartWith(addresses []string, httpAddress string) error {
-	syncer := gubernator.LocalPeerSyncer{}
+	syncer := gubernator.MockPool{}
 	var err error
 
 	for _, address := range addresses {
@@ -41,7 +41,7 @@ func StartWith(addresses []string, httpAddress string) error {
 			Cache:         cache.NewLRUCache(cache.LRUCacheConfig{}),
 			Picker:        gubernator.NewConsistantHash(nil),
 			ListenAddress: address,
-			PeerSyncer:    &syncer,
+			Pool:          &syncer,
 		})
 		if err != nil {
 			return errors.Wrap(err, "NewGRPCServer()")

@@ -56,21 +56,19 @@ An example rate limit request sent via GRPC might look like the following
 rate_limits:
     # Scopes the unique_key to your application to avoid collisions with 
     # other applications that might also use the same unique_key
-    namespace: my-app
+    name: requests_per_sec
     # A unique_key that identifies this rate limit request
     unique_key: account_id=24b00c590856900ee961b275asdfd|source_ip=172.0.0.1
     # The number of hits we are requesting
     hits: 1
-    # The rate limit config to be applied to this rate limit
-    rate_limit_config:
-      # The total number of requests allowed for this rate limit
-      limit: 100
-      # The duration of the rate limit in milliseconds
-      duration: 1000
-      # The algorithm used to calculate the rate limit  
-      # 0 = Token Bucket
-      # 1 = Leaky Bucket
-      algorithm: 0
+    # The total number of requests allowed for this rate limit
+    limit: 100
+    # The duration of the rate limit in milliseconds
+    duration: 1000
+    # The algorithm used to calculate the rate limit  
+    # 0 = Token Bucket
+    # 1 = Leaky Bucket
+    algorithm: 0
 ```
 
 And example response would be
@@ -80,9 +78,9 @@ rate_limits:
       # The status of the rate limit.  OK = 0, OVER_LIMIT = 1
       status: 0,
       # The current configured limit
-      current_limit: 10,
+      limit: 10,
       # The number of requests remaining
-      limit_remaining: 7,
+      remaining: 7,
       # A unix timestamp in milliseconds of when the bucket will reset, or if 
       # OVER_LIMIT is set it is the time at which the rate limit will no 
       # longer return OVER_LIMIT.
@@ -141,10 +139,8 @@ Example Payload
             "hits": 1,
             "namespace": "my-app",
             "unique_key": "domain.id=1234",
-            "rate_limit_config": {
-                "duration": 60000,
-                "limit": 10
-            }
+            "duration": 60000,
+            "limit": 10
         }
     ]
 }
@@ -156,8 +152,8 @@ Example response:
 {
   "rate_limits": [
     {
-      "current_limit": "10",
-      "limit_remaining": "7",
+      "limit": "10",
+      "remaining": "7",
       "reset_time": "1551309219226",
     }
   ]

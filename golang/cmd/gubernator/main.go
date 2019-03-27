@@ -120,7 +120,7 @@ func main() {
 			log.Info("caught interrupt; user requested premature exit")
 			pool.Close()
 			httpSrv.Shutdown(ctx)
-			grpcSrv.Stop()
+			grpcSrv.GracefulStop()
 			wg.Stop()
 			metrics.Close()
 			os.Exit(0)

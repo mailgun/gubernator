@@ -5,13 +5,12 @@ import (
 	guber "github.com/mailgun/gubernator/golang"
 	"github.com/mailgun/gubernator/golang/cluster"
 	"github.com/mailgun/holster"
-	"net/http"
 	"testing"
 )
 
 func BenchmarkServer_GetPeerRateLimitNoBatching(b *testing.B) {
 	conf := guber.Config{}
-	if err := guber.ApplyConfigDefaults(&conf); err != nil {
+	if err := conf.SetDefaults(); err != nil {
 		b.Errorf("SetDefaults err: %s", err)
 	}
 
@@ -82,14 +81,14 @@ func BenchmarkServer_Ping(b *testing.B) {
 	})
 }
 
-func BenchmarkServer_GRPCGateway(b *testing.B) {
+/*func BenchmarkServer_GRPCGateway(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		_, err := http.Get("http://" + cluster.GetHTTPAddress() + "/v1/HealthCheck")
 		if err != nil {
 			b.Errorf("GRPCGateway() err: %s", err)
 		}
 	}
-}
+}*/
 
 func BenchmarkServer_ThunderingHeard(b *testing.B) {
 	client, err := guber.NewV1Client(cluster.GetPeer())

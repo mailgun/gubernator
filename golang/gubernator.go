@@ -42,8 +42,8 @@ func New(conf Config) (*Instance, error) {
 	}
 
 	// Register our server with GRPC
-	RegisterRateLimitServiceV1Server(conf.GRPCServer, &s)
-	RegisterPeersServiceV1Server(conf.GRPCServer, &s)
+	RegisterGubernatorV1Server(conf.GRPCServer, &s)
+	RegisterGubernatorPeersV1Server(conf.GRPCServer, &s)
 
 	if s.conf.Metrics != nil {
 		s.conf.Metrics.RegisterCacheStats(s.conf.Cache)
@@ -52,8 +52,8 @@ func New(conf Config) (*Instance, error) {
 	return &s, nil
 }
 
-func (s *Instance) GetRateLimits(ctx context.Context, r *Requests) (*RateLimits, error) {
-	var resp RateLimits
+func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*GetRateLimitsResp, error) {
+	var resp GetRateLimitsResp
 
 	if len(r.Requests) > maxBatchSize {
 		return nil, status.Errorf(codes.OutOfRange,
@@ -63,17 +63,17 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *Requests) (*RateLimits,
 	// TODO: Support getting multiple keys in an async manner (FanOut)
 	for _, req := range r.Requests {
 		globalKey := req.Name + "_" + req.UniqueKey
-		var rl *RateLimit
+		var rl *RateLimitResp
 		var peer *PeerClient
 		var err error
 
 		if len(req.UniqueKey) == 0 {
-			rl = &RateLimit{Error: "field 'unique_key' cannot be empty"}
+			rl = &RateLimitResp{Error: "field 'unique_key' cannot be empty"}
 			goto NextRateLimit
 		}
 
 		if len(req.Name) == 0 {
-			rl = &RateLimit{Error: "field 'namespace' cannot be empty"}
+			rl = &RateLimitResp{Error: "field 'namespace' cannot be empty"}
 			goto NextRateLimit
 		}
 
@@ -81,7 +81,7 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *Requests) (*RateLimits,
 		peer, err = s.conf.Picker.Get(globalKey)
 		if err != nil {
 			s.peerMutex.RUnlock()
-			rl = &RateLimit{
+			rl = &RateLimitResp{
 				Error: fmt.Sprintf("while finding peer that owns rate limit '%s' - '%s'", globalKey, err),
 			}
 			goto NextRateLimit
@@ -93,7 +93,7 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *Requests) (*RateLimits,
 			// Apply our rate limit algorithm to the request
 			rl, err = s.getRateLimit(req)
 			if err != nil {
-				rl = &RateLimit{
+				rl = &RateLimitResp{
 					Error: fmt.Sprintf("while applying rate limit for '%s' - '%s'", globalKey, err),
 				}
 				goto NextRateLimit
@@ -102,7 +102,7 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *Requests) (*RateLimits,
 			// Make an RPC call to the peer that owns this rate limit
 			rl, err = peer.GetPeerRateLimit(ctx, req)
 			if err != nil {
-				rl = &RateLimit{
+				rl = &RateLimitResp{
 					Error: fmt.Sprintf("while fetching rate limit '%s' from peer - '%s'", globalKey, err),
 				}
 			}
@@ -111,7 +111,7 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *Requests) (*RateLimits,
 			rl.Metadata = map[string]string{"owner": peer.host}
 		}
 	NextRateLimit:
-		resp.RateLimits = append(resp.RateLimits, rl)
+		resp.Responses = append(resp.Responses, rl)
 	}
 	return &resp, nil
 }
@@ -134,7 +134,7 @@ func (s *Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsRe
 		rl, err := s.getRateLimit(req)
 		if err != nil {
 			// Return the error for this request
-			rl = &RateLimit{Error: err.Error()}
+			rl = &RateLimitResp{Error: err.Error()}
 		}
 		resp.RateLimits = append(resp.RateLimits, rl)
 	}
@@ -148,7 +148,7 @@ func (s *Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*HealthC
 	return &s.health, nil
 }
 
-func (s *Instance) getRateLimit(r *Request) (*RateLimit, error) {
+func (s *Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
 	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
 

@@ -100,7 +100,7 @@ func main() {
 	defer cancel()
 
 	gateway := runtime.NewServeMux()
-	err = gubernator.RegisterRateLimitServiceV1HandlerFromEndpoint(ctx, gateway,
+	err = gubernator.RegisterGubernatorV1HandlerFromEndpoint(ctx, gateway,
 		conf.AdvertiseAddress, []grpc.DialOption{grpc.WithInsecure()})
 	checkErr(err, "while registering GRPC gateway handler")
 

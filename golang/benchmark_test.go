@@ -21,7 +21,7 @@ func BenchmarkServer_GetPeerRateLimitNoBatching(b *testing.B) {
 
 	b.Run("GetPeerRateLimitNoBatching", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
-			_, err := client.GetPeerRateLimit(context.Background(), &guber.Request{
+			_, err := client.GetPeerRateLimit(context.Background(), &guber.RateLimitReq{
 				Name:      "get_peer_rate_limits_benchmark",
 				UniqueKey: guber.RandomString(10),
 				Behavior:  guber.Behavior_NO_BATCHING,
@@ -44,8 +44,8 @@ func BenchmarkServer_GetRateLimit(b *testing.B) {
 
 	b.Run("GetRateLimit", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
-			_, err := client.GetRateLimits(context.Background(), &guber.Requests{
-				Requests: []*guber.Request{
+			_, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+				Requests: []*guber.RateLimitReq{
 					{
 						Name:      "get_rate_limit_benchmark",
 						UniqueKey: guber.RandomString(10),
@@ -100,8 +100,8 @@ func BenchmarkServer_ThunderingHeard(b *testing.B) {
 		fan := holster.NewFanOut(100)
 		for n := 0; n < b.N; n++ {
 			fan.Run(func(o interface{}) error {
-				_, err := client.GetRateLimits(context.Background(), &guber.Requests{
-					Requests: []*guber.Request{
+				_, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+					Requests: []*guber.RateLimitReq{
 						{
 							Name:      "get_rate_limit_benchmark",
 							UniqueKey: guber.RandomString(10),

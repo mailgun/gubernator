@@ -17,7 +17,7 @@ type PeerPicker interface {
 }
 
 type PeerClient struct {
-	client  PeersServiceV1Client
+	client  GubernatorPeersV1Client
 	conn    *grpc.ClientConn
 	conf    BehaviorConfig
 	queue   chan *request
@@ -27,12 +27,12 @@ type PeerClient struct {
 }
 
 type response struct {
-	rl  *RateLimit
+	rl  *RateLimitResp
 	err error
 }
 
 type request struct {
-	request *Request
+	request *RateLimitReq
 	resp    chan *response
 }
 
@@ -54,7 +54,7 @@ func NewPeerClient(conf BehaviorConfig, host string) (*PeerClient, error) {
 
 // GetPeerRateLimit forwards a rate limit request to a peer. If the rate limit has `behavior == BATCHING` configured
 // this method will attempt to batch the rate limits
-func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *Request) (*RateLimit, error) {
+func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
 
 	// TODO: remove batching for global if we end up implementing a HIT aggregator
 	// If config asked for batching or is global rate limit
@@ -65,7 +65,7 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *Request) (*RateLim
 
 	// Send a single low latency rate limit request
 	resp, err := c.getPeerRateLimits(ctx, &GetPeerRateLimitsReq{
-		Requests: []*Request{r},
+		Requests: []*RateLimitReq{r},
 	})
 	if err != nil {
 		return nil, err
@@ -86,7 +86,7 @@ func (c *PeerClient) getPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	return resp, nil
 }
 
-func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *Request) (*RateLimit, error) {
+func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
 	req := request{request: r, resp: make(chan *response, 1)}
 
 	// Enqueue the request to be sent
@@ -112,7 +112,7 @@ func (c *PeerClient) dialPeer() error {
 		return errors.Wrapf(err, "failed to dial peer %s", c.host)
 	}
 
-	c.client = NewPeersServiceV1Client(c.conn)
+	c.client = NewGubernatorPeersV1Client(c.conn)
 	return nil
 }
 

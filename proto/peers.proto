@@ -6,10 +6,10 @@ option cc_generic_services = true;
 
 package pb.gubernator;
 
-import "ratelimit.proto";
+import "gubernator.proto";
 
 // NOTE: For use by gubernator peers only
-service PeersServiceV1 {
+service GubernatorPeersV1 {
     // Used by peers to relay batches of requests to an authoritative peer
     rpc GetPeerRateLimits (GetPeerRateLimitsReq) returns (GetPeerRateLimitsResp) {}
 
@@ -20,17 +20,17 @@ service PeersServiceV1 {
 message GetPeerRateLimitsReq {
     // Must specify at least one RateLimit. The peer that recives this request MUST be authoritative for
     // each rate_limit[x].unique_key provided, as the peer will not forward the request to any other peers
-    repeated Request requests = 1;
+    repeated RateLimitReq requests = 1;
 }
 
 message GetPeerRateLimitsResp {
     // Responses are in the same order as they appeared in the PeerRateLimitRequests
-    repeated RateLimit rate_limits = 1;
+    repeated RateLimitResp rate_limits = 1;
 }
 
 message UpdatePeerGlobalsReq {
     // Must specify at least one RateLimit
-    repeated RateLimit rate_limits = 1;
+    repeated RateLimitResp rate_limits = 1;
 }
 
 message UpdatePeerGlobalsResp {}

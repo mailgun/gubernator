@@ -5,14 +5,13 @@ import (
 	guber "github.com/mailgun/gubernator/golang"
 	"github.com/mailgun/gubernator/golang/cluster"
 	"github.com/mailgun/holster"
-	"net/http"
 	"testing"
 )
 
 func BenchmarkServer_GetPeerRateLimitNoBatching(b *testing.B) {
 	conf := guber.Config{}
-	if err := guber.ApplyConfigDefaults(&conf); err != nil {
-		b.Errorf("ApplyConfigDefaults err: %s", err)
+	if err := conf.SetDefaults(); err != nil {
+		b.Errorf("SetDefaults err: %s", err)
 	}
 
 	client, err := guber.NewPeerClient(conf.Behaviors, cluster.GetPeer())
@@ -22,8 +21,8 @@ func BenchmarkServer_GetPeerRateLimitNoBatching(b *testing.B) {
 
 	b.Run("GetPeerRateLimitNoBatching", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
-			_, err := client.GetPeerRateLimit(context.Background(), &guber.Request{
-				Namespace: "get_peer_rate_limits_benchmark",
+			_, err := client.GetPeerRateLimit(context.Background(), &guber.RateLimitReq{
+				Name:      "get_peer_rate_limits_benchmark",
 				UniqueKey: guber.RandomString(10),
 				Behavior:  guber.Behavior_NO_BATCHING,
 				Limit:     10,
@@ -45,10 +44,10 @@ func BenchmarkServer_GetRateLimit(b *testing.B) {
 
 	b.Run("GetRateLimit", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
-			_, err := client.GetRateLimits(context.Background(), &guber.Requests{
-				Requests: []*guber.Request{
+			_, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+				Requests: []*guber.RateLimitReq{
 					{
-						Namespace: "get_rate_limit_benchmark",
+						Name:      "get_rate_limit_benchmark",
 						UniqueKey: guber.RandomString(10),
 						Limit:     10,
 						Duration:  guber.Second * 5,
@@ -82,14 +81,14 @@ func BenchmarkServer_Ping(b *testing.B) {
 	})
 }
 
-func BenchmarkServer_GRPCGateway(b *testing.B) {
+/*func BenchmarkServer_GRPCGateway(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		_, err := http.Get("http://" + cluster.GetHTTPAddress() + "/v1/HealthCheck")
 		if err != nil {
 			b.Errorf("GRPCGateway() err: %s", err)
 		}
 	}
-}
+}*/
 
 func BenchmarkServer_ThunderingHeard(b *testing.B) {
 	client, err := guber.NewV1Client(cluster.GetPeer())
@@ -101,10 +100,10 @@ func BenchmarkServer_ThunderingHeard(b *testing.B) {
 		fan := holster.NewFanOut(100)
 		for n := 0; n < b.N; n++ {
 			fan.Run(func(o interface{}) error {
-				_, err := client.GetRateLimits(context.Background(), &guber.Requests{
-					Requests: []*guber.Request{
+				_, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+					Requests: []*guber.RateLimitReq{
 						{
-							Namespace: "get_rate_limit_benchmark",
+							Name:      "get_rate_limit_benchmark",
 							UniqueKey: guber.RandomString(10),
 							Limit:     10,
 							Duration:  guber.Second * 5,

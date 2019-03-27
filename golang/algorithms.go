@@ -5,7 +5,7 @@ import (
 )
 
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket
-func tokenBucket(c cache.Cache, r *Request) (*RateLimit, error) {
+func tokenBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 	item, ok := c.Get(r.HashKey())
 	if ok {
 		// The following semantic allows for requests of more than the limit to be rejected, but subsequent
@@ -14,7 +14,7 @@ func tokenBucket(c cache.Cache, r *Request) (*RateLimit, error) {
 		// don't store OVER_LIMIT in the cache the client can retry within the same rate limit duration with
 		// 100 emails and the request will succeed.
 
-		rl, ok := item.(*RateLimit)
+		rl, ok := item.(*RateLimitResp)
 		if !ok {
 			// Client switched algorithms; perhaps due to a migration?
 			c.Remove(r.HashKey())
@@ -22,7 +22,7 @@ func tokenBucket(c cache.Cache, r *Request) (*RateLimit, error) {
 		}
 
 		// If we are already at the limit
-		if rl.LimitRemaining == 0 {
+		if rl.Remaining == 0 {
 			rl.Status = Status_OVER_LIMIT
 			return rl, nil
 		}
@@ -33,35 +33,35 @@ func tokenBucket(c cache.Cache, r *Request) (*RateLimit, error) {
 		}
 
 		// If requested hits takes the remainder
-		if rl.LimitRemaining == r.Hits {
-			rl.LimitRemaining = 0
+		if rl.Remaining == r.Hits {
+			rl.Remaining = 0
 			return rl, nil
 		}
 
 		// If requested is more than available, then return over the limit without updating the cache.
-		if r.Hits > rl.LimitRemaining {
+		if r.Hits > rl.Remaining {
 			retStatus := *rl
 			retStatus.Status = Status_OVER_LIMIT
 			return &retStatus, nil
 		}
 
-		rl.LimitRemaining -= r.Hits
+		rl.Remaining -= r.Hits
 		return rl, nil
 	}
 
 	// Add a new rate limit to the cache
 	expire := cache.MillisecondNow() + r.Duration
-	status := &RateLimit{
-		Status:         Status_UNDER_LIMIT,
-		CurrentLimit:   r.Limit,
-		LimitRemaining: r.Limit - r.Hits,
-		ResetTime:      expire,
+	status := &RateLimitResp{
+		Status:    Status_UNDER_LIMIT,
+		Limit:     r.Limit,
+		Remaining: r.Limit - r.Hits,
+		ResetTime: expire,
 	}
 
 	// Client could be requesting that we always return OVER_LIMIT
 	if r.Hits > r.Limit {
 		status.Status = Status_OVER_LIMIT
-		status.LimitRemaining = 0
+		status.Remaining = 0
 	}
 
 	c.Add(r.HashKey(), status, expire)
@@ -69,7 +69,7 @@ func tokenBucket(c cache.Cache, r *Request) (*RateLimit, error) {
 }
 
 // Implements leaky bucket algorithm for rate limiting https://en.wikipedia.org/wiki/Leaky_bucket
-func leakyBucket(c cache.Cache, r *Request) (*RateLimit, error) {
+func leakyBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 	type LeakyBucket struct {
 		Limit          int64
 		Duration       int64
@@ -100,10 +100,10 @@ func leakyBucket(c cache.Cache, r *Request) (*RateLimit, error) {
 		}
 
 		b.TimeStamp = now
-		rl := &RateLimit{
-			CurrentLimit:   b.Limit,
-			LimitRemaining: b.LimitRemaining,
-			Status:         Status_UNDER_LIMIT,
+		rl := &RateLimitResp{
+			Limit:     b.Limit,
+			Remaining: b.LimitRemaining,
+			Status:    Status_UNDER_LIMIT,
 		}
 
 		// If we are already at the limit
@@ -116,7 +116,7 @@ func leakyBucket(c cache.Cache, r *Request) (*RateLimit, error) {
 		// If requested hits takes the remainder
 		if b.LimitRemaining == r.Hits {
 			b.LimitRemaining = 0
-			rl.LimitRemaining = 0
+			rl.Remaining = 0
 			return rl, nil
 		}
 
@@ -128,7 +128,7 @@ func leakyBucket(c cache.Cache, r *Request) (*RateLimit, error) {
 		}
 
 		b.LimitRemaining -= r.Hits
-		rl.LimitRemaining = b.LimitRemaining
+		rl.Remaining = b.LimitRemaining
 		c.UpdateExpiration(r.HashKey(), now*r.Duration)
 		return rl, nil
 	}
@@ -141,17 +141,17 @@ func leakyBucket(c cache.Cache, r *Request) (*RateLimit, error) {
 		TimeStamp:      now,
 	}
 
-	rl := RateLimit{
-		Status:         Status_UNDER_LIMIT,
-		CurrentLimit:   r.Limit,
-		LimitRemaining: r.Limit - r.Hits,
-		ResetTime:      0,
+	rl := RateLimitResp{
+		Status:    Status_UNDER_LIMIT,
+		Limit:     r.Limit,
+		Remaining: r.Limit - r.Hits,
+		ResetTime: 0,
 	}
 
 	// Client could be requesting that we start with the bucket OVER_LIMIT
 	if r.Hits > r.Limit {
 		rl.Status = Status_OVER_LIMIT
-		rl.LimitRemaining = 0
+		rl.Remaining = 0
 		b.LimitRemaining = 0
 	}
 

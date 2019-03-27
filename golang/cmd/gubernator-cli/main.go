@@ -27,11 +27,11 @@ func main() {
 	checkErr(err)
 
 	// Generate a selection of rate limits with random limits
-	var rateLimits []*guber.Request
+	var rateLimits []*guber.RateLimitReq
 
 	for i := 0; i < 2000; i++ {
-		rateLimits = append(rateLimits, &guber.Request{
-			Namespace: fmt.Sprintf("ID-%d", i),
+		rateLimits = append(rateLimits, &guber.RateLimitReq{
+			Name:      fmt.Sprintf("ID-%d", i),
 			UniqueKey: guber.RandomString(10),
 			Hits:      1,
 			Limit:     randInt(1, 10),
@@ -44,10 +44,10 @@ func main() {
 	for {
 		for _, rateLimit := range rateLimits {
 			fan.Run(func(obj interface{}) error {
-				r := obj.(*guber.Request)
+				r := obj.(*guber.RateLimitReq)
 				// Now hit our cluster with the rate limits
-				_, err := client.GetRateLimits(context.Background(), &guber.Requests{
-					Requests: []*guber.Request{r},
+				_, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+					Requests: []*guber.RateLimitReq{r},
 				})
 				checkErr(err)
 

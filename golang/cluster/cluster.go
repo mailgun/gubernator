@@ -1,24 +1,42 @@
 package cluster
 
 import (
+	"fmt"
 	"github.com/mailgun/gubernator/golang"
-	"github.com/mailgun/gubernator/golang/cache"
-	"github.com/mailgun/gubernator/golang/metrics"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
+	"net"
 )
 
+type instance struct {
+	GRPC    *grpc.Server
+	Guber   *gubernator.Instance
+	Address string
+}
+
+func (i *instance) Peers() []gubernator.PeerInfo {
+	var result []gubernator.PeerInfo
+	for _, peer := range peers {
+		info := gubernator.PeerInfo{Address: peer}
+		if peer == i.Address {
+			info.IsOwner = true
+		}
+		result = append(result, info)
+	}
+	return result
+}
+
+func (i *instance) Stop() {
+	i.GRPC.GracefulStop()
+}
+
+var instances []*instance
 var peers []string
-var grpcServers []*gubernator.Instance
-var httpServer *gubernator.HTTPServer
 
 // Returns a random peer from the cluster
 func GetPeer() string {
 	return gubernator.RandomPeer(peers)
-}
-
-// Return the HTTP address for the clusters GRPC gateway
-func GetHTTPAddress() string {
-	return httpServer.Address()
 }
 
 // Start a local cluster of gubernator servers
@@ -27,54 +45,47 @@ func Start(numInstances int) error {
 	for i := 0; i < numInstances; i++ {
 		addresses = append(addresses, "")
 	}
-	return StartWith(addresses, "")
+	return StartWith(addresses)
 }
 
 // Start a local cluster with specific addresses
-func StartWith(addresses []string, httpAddress string) error {
-	syncer := gubernator.LocalPeerSyncer{}
-	var err error
-
+func StartWith(addresses []string) error {
 	for _, address := range addresses {
-		srv, err := gubernator.New(gubernator.Config{
-			Metrics:       metrics.NewStatsdMetrics(&metrics.NullClient{}),
-			Cache:         cache.NewLRUCache(cache.LRUCacheConfig{}),
-			Picker:        gubernator.NewConsistantHash(nil),
-			ListenAddress: address,
-			PeerSyncer:    &syncer,
-		})
+		srv := grpc.NewServer()
+
+		guber, err := gubernator.New(gubernator.Config{GRPCServer: srv})
 		if err != nil {
-			return errors.Wrap(err, "NewGRPCServer()")
+			return errors.Wrap(err, "while creating new gubernator instance")
 		}
-		peers = append(peers, srv.Address())
-		if err := srv.Start(); err != nil {
-			return errors.Wrap(err, "GRPCServer.Start()")
+
+		listener, err := net.Listen("tcp", address)
+		if err != nil {
+			return errors.Wrap(err, "while listening on random interface")
 		}
-		grpcServers = append(grpcServers, srv)
+
+		go func() {
+			logrus.Infof("Listening on %s", listener.Addr().String())
+			if err := srv.Serve(listener); err != nil {
+				fmt.Printf("while serving: %s\n", err)
+			}
+		}()
+
+		peers = append(peers, listener.Addr().String())
+		instances = append(instances, &instance{
+			Address: listener.Addr().String(),
+			Guber:   guber,
+			GRPC:    srv,
+		})
 	}
 
-	httpServer, err = gubernator.NewHTTPServer(gubernator.HTTPConfig{
-		GubernatorAddress: grpcServers[0].Address(),
-		ListenAddress:     httpAddress,
-	})
-	if err != nil {
-		return errors.Wrap(err, "NewHTTPServer()")
+	for _, ins := range instances {
+		ins.Guber.SetPeers(ins.Peers())
 	}
-
-	if err := httpServer.Start(); err != nil {
-		return errors.Wrap(err, "HTTPServer.Start()")
-	}
-
-	syncer.Update(gubernator.PeerConfig{
-		Peers: peers,
-	})
-
 	return nil
 }
 
 func Stop() {
-	httpServer.Stop()
-	for _, srv := range grpcServers {
-		srv.Stop()
+	for _, ins := range instances {
+		ins.Stop()
 	}
 }

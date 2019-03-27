@@ -8,10 +8,10 @@ package pb.gubernator;
 
 import "google/api/annotations.proto";
 
-service RateLimitServiceV1 {
+service GubernatorV1 {
 
   // Given a list of rate limit requests, return the rate limits of each.
-  rpc GetRateLimits (Requests) returns (RateLimits) {
+  rpc GetRateLimits (GetRateLimitsReq) returns (GetRateLimitsResp) {
     option (google.api.http) = {
       post: "/v1/GetRateLimits"
       body: "*"
@@ -29,13 +29,13 @@ service RateLimitServiceV1 {
 }
 
 // Must specify at least one Request
-message Requests {
-  repeated Request requests = 1;
+message GetRateLimitsReq {
+  repeated RateLimitReq requests = 1;
 }
 
 // RateLimits returned are in the same order as the Requests
-message RateLimits {
-  repeated RateLimit rate_limits = 1;
+message GetRateLimitsResp {
+  repeated RateLimitResp responses = 1;
 }
 
 enum Algorithm {
@@ -80,11 +80,11 @@ enum Behavior {
   // TODO: Make a golang CLI to retrive a rate limit value
 }
 
-message Request {
-  // The namespace scopes the unique_key to avoid collisions with other services or applications.
-  string namespace = 1;
+message RateLimitReq {
+  // The name of the rate limit IE: 'requests_per_second', 'gets_per_minute`
+  string name = 1;
 
-  // Uniquely identifies this rate limit within a namespace.
+  // Uniquely identifies this rate limit IE: 'ip:10.2.10.7' or 'account:123445'
   string unique_key = 2;
 
   // Rate limit requests optionally specify the number of hits a request adds to the matched limit. If Hit
@@ -113,13 +113,13 @@ enum Status {
   OVER_LIMIT = 1;
 }
 
-message RateLimit {
+message RateLimitResp {
   // The status of the rate limit.
   Status status = 1;
   // The currently configured request limit (Identical to RateLimitRequest.rate_limit_config.limit).
-  int64 current_limit = 2;
+  int64 limit = 2;
   // This is the number of requests remaining before the limit is hit.
-  int64 limit_remaining = 3;
+  int64 remaining = 3;
   // This is the time when the rate limit span will be reset, provided as a unix timestamp in milliseconds.
   int64 reset_time = 4;
   // Contains the error; If set all other values should be ignored

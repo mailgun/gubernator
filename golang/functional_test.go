@@ -46,10 +46,10 @@ func TestOverTheLimit(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		resp, err := client.GetRateLimits(context.Background(), &guber.Requests{
-			Requests: []*guber.Request{
+		resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+			Requests: []*guber.RateLimitReq{
 				{
-					Namespace: "test_over_limit",
+					Name:      "test_over_limit",
 					UniqueKey: "account:1234",
 					Algorithm: guber.Algorithm_TOKEN_BUCKET,
 					Duration:  guber.Second,
@@ -60,11 +60,11 @@ func TestOverTheLimit(t *testing.T) {
 		})
 		require.Nil(t, err)
 
-		rl := resp.RateLimits[0]
+		rl := resp.Responses[0]
 
 		assert.Equal(t, test.Status, rl.Status)
-		assert.Equal(t, test.Remaining, rl.LimitRemaining)
-		assert.Equal(t, int64(2), rl.CurrentLimit)
+		assert.Equal(t, test.Remaining, rl.Remaining)
+		assert.Equal(t, int64(2), rl.Limit)
 		assert.True(t, rl.ResetTime != 0)
 	}
 }
@@ -96,10 +96,10 @@ func TestTokenBucket(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		resp, err := client.GetRateLimits(context.Background(), &guber.Requests{
-			Requests: []*guber.Request{
+		resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+			Requests: []*guber.RateLimitReq{
 				{
-					Namespace: "test_token_bucket",
+					Name:      "test_token_bucket",
 					UniqueKey: "account:1234",
 					Algorithm: guber.Algorithm_TOKEN_BUCKET,
 					Duration:  guber.Millisecond * 5,
@@ -110,11 +110,11 @@ func TestTokenBucket(t *testing.T) {
 		})
 		require.Nil(t, err)
 
-		rl := resp.RateLimits[0]
+		rl := resp.Responses[0]
 
 		assert.Equal(t, test.Status, rl.Status)
-		assert.Equal(t, test.Remaining, rl.LimitRemaining)
-		assert.Equal(t, int64(2), rl.CurrentLimit)
+		assert.Equal(t, test.Remaining, rl.Remaining)
+		assert.Equal(t, int64(2), rl.Limit)
 		assert.True(t, rl.ResetTime != 0)
 		time.Sleep(test.Sleep)
 	}
@@ -157,10 +157,10 @@ func TestLeakyBucket(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		resp, err := client.GetRateLimits(context.Background(), &guber.Requests{
-			Requests: []*guber.Request{
+		resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+			Requests: []*guber.RateLimitReq{
 				{
-					Namespace: "test_leaky_bucket",
+					Name:      "test_leaky_bucket",
 					UniqueKey: "account:1234",
 					Algorithm: guber.Algorithm_LEAKY_BUCKET,
 					Duration:  guber.Millisecond * 50,
@@ -171,11 +171,11 @@ func TestLeakyBucket(t *testing.T) {
 		})
 		require.Nil(t, err)
 
-		rl := resp.RateLimits[0]
+		rl := resp.Responses[0]
 
 		assert.Equal(t, test.Status, rl.Status)
-		assert.Equal(t, test.Remaining, rl.LimitRemaining)
-		assert.Equal(t, int64(5), rl.CurrentLimit)
+		assert.Equal(t, test.Remaining, rl.Remaining)
+		assert.Equal(t, int64(5), rl.Limit)
 		time.Sleep(test.Sleep)
 	}
 }
@@ -185,13 +185,13 @@ func TestMissingFields(t *testing.T) {
 	require.Nil(t, errs)
 
 	tests := []struct {
-		Req    guber.Request
+		Req    guber.RateLimitReq
 		Status guber.Status
 		Error  string
 	}{
 		{
-			Req: guber.Request{
-				Namespace: "test_missing_fields",
+			Req: guber.RateLimitReq{
+				Name:      "test_missing_fields",
 				UniqueKey: "account:1234",
 				Hits:      1,
 				Limit:     10,
@@ -201,8 +201,8 @@ func TestMissingFields(t *testing.T) {
 			Status: guber.Status_UNDER_LIMIT,
 		},
 		{
-			Req: guber.Request{
-				Namespace: "test_missing_fields",
+			Req: guber.RateLimitReq{
+				Name:      "test_missing_fields",
 				UniqueKey: "account:12345",
 				Hits:      1,
 				Duration:  10000,
@@ -212,7 +212,7 @@ func TestMissingFields(t *testing.T) {
 			Status: guber.Status_OVER_LIMIT,
 		},
 		{
-			Req: guber.Request{
+			Req: guber.RateLimitReq{
 				UniqueKey: "account:1234",
 				Hits:      1,
 				Duration:  10000,
@@ -222,11 +222,11 @@ func TestMissingFields(t *testing.T) {
 			Status: guber.Status_UNDER_LIMIT,
 		},
 		{
-			Req: guber.Request{
-				Namespace: "test_missing_fields",
-				Hits:      1,
-				Duration:  10000,
-				Limit:     5,
+			Req: guber.RateLimitReq{
+				Name:     "test_missing_fields",
+				Hits:     1,
+				Duration: 10000,
+				Limit:    5,
 			},
 			Error:  "field 'unique_key' cannot be empty",
 			Status: guber.Status_UNDER_LIMIT,
@@ -234,13 +234,13 @@ func TestMissingFields(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		resp, err := client.GetRateLimits(context.Background(), &guber.Requests{
-			Requests: []*guber.Request{&test.Req},
+		resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+			Requests: []*guber.RateLimitReq{&test.Req},
 		})
 		require.Nil(t, err)
-		assert.Equal(t, test.Error, resp.RateLimits[0].Error, i)
-		assert.Equal(t, test.Status, resp.RateLimits[0].Status, i)
+		assert.Equal(t, test.Error, resp.Responses[0].Error, i)
+		assert.Equal(t, test.Status, resp.Responses[0].Status, i)
 	}
 }
 
-// TODO: Add a test for sending no rate limits RequestList.RateLimits = nil
+// TODO: Add a test for sending no rate limits RateLimitReqList.RateLimits = nil

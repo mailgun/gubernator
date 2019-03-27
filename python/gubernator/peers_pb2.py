@@ -12,7 +12,7 @@ from google.protobuf import symbol_database as _symbol_database
 _sym_db = _symbol_database.Default()
 
 
-import ratelimit_pb2 as ratelimit__pb2
+import gubernator_pb2 as gubernator__pb2
 
 
 DESCRIPTOR = _descriptor.FileDescriptor(
@@ -20,9 +20,9 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='pb.gubernator',
   syntax='proto3',
   serialized_options=_b('Z\ngubernator\200\001\001'),
-  serialized_pb=_b('\n\x0bpeers.proto\x12\rpb.gubernator\x1a\x0fratelimit.proto\"@\n\x14GetPeerRateLimitsReq\x12(\n\x08requests\x18\x01 \x03(\x0b\x32\x16.pb.gubernator.Request\"F\n\x15GetPeerRateLimitsResp\x12-\n\x0brate_limits\x18\x01 \x03(\x0b\x32\x18.pb.gubernator.RateLimit\"E\n\x14UpdatePeerGlobalsReq\x12-\n\x0brate_limits\x18\x01 \x03(\x0b\x32\x18.pb.gubernator.RateLimit\"\x17\n\x15UpdatePeerGlobalsResp2\xd4\x01\n\x0ePeersServiceV1\x12`\n\x11GetPeerRateLimits\x12#.pb.gubernator.GetPeerRateLimitsReq\x1a$.pb.gubernator.GetPeerRateLimitsResp\"\x00\x12`\n\x11UpdatePeerGlobals\x12#.pb.gubernator.UpdatePeerGlobalsReq\x1a$.pb.gubernator.UpdatePeerGlobalsResp\"\x00\x42\x0fZ\ngubernator\x80\x01\x01\x62\x06proto3')
+  serialized_pb=_b('\n\x0bpeers.proto\x12\rpb.gubernator\x1a\x10gubernator.proto\"E\n\x14GetPeerRateLimitsReq\x12-\n\x08requests\x18\x01 \x03(\x0b\x32\x1b.pb.gubernator.RateLimitReq\"J\n\x15GetPeerRateLimitsResp\x12\x31\n\x0brate_limits\x18\x01 \x03(\x0b\x32\x1c.pb.gubernator.RateLimitResp\"I\n\x14UpdatePeerGlobalsReq\x12\x31\n\x0brate_limits\x18\x01 \x03(\x0b\x32\x1c.pb.gubernator.RateLimitResp\"\x17\n\x15UpdatePeerGlobalsResp2\xd7\x01\n\x11GubernatorPeersV1\x12`\n\x11GetPeerRateLimits\x12#.pb.gubernator.GetPeerRateLimitsReq\x1a$.pb.gubernator.GetPeerRateLimitsResp\"\x00\x12`\n\x11UpdatePeerGlobals\x12#.pb.gubernator.UpdatePeerGlobalsReq\x1a$.pb.gubernator.UpdatePeerGlobalsResp\"\x00\x42\x0fZ\ngubernator\x80\x01\x01\x62\x06proto3')
   ,
-  dependencies=[ratelimit__pb2.DESCRIPTOR,])
+  dependencies=[gubernator__pb2.DESCRIPTOR,])
 
 
 
@@ -53,8 +53,8 @@ _GETPEERRATELIMITSREQ = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=47,
-  serialized_end=111,
+  serialized_start=48,
+  serialized_end=117,
 )
 
 
@@ -84,8 +84,8 @@ _GETPEERRATELIMITSRESP = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=113,
-  serialized_end=183,
+  serialized_start=119,
+  serialized_end=193,
 )
 
 
@@ -115,8 +115,8 @@ _UPDATEPEERGLOBALSREQ = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=185,
-  serialized_end=254,
+  serialized_start=195,
+  serialized_end=268,
 )
 
 
@@ -139,13 +139,13 @@ _UPDATEPEERGLOBALSRESP = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=256,
-  serialized_end=279,
+  serialized_start=270,
+  serialized_end=293,
 )
 
-_GETPEERRATELIMITSREQ.fields_by_name['requests'].message_type = ratelimit__pb2._REQUEST
-_GETPEERRATELIMITSRESP.fields_by_name['rate_limits'].message_type = ratelimit__pb2._RATELIMIT
-_UPDATEPEERGLOBALSREQ.fields_by_name['rate_limits'].message_type = ratelimit__pb2._RATELIMIT
+_GETPEERRATELIMITSREQ.fields_by_name['requests'].message_type = gubernator__pb2._RATELIMITREQ
+_GETPEERRATELIMITSRESP.fields_by_name['rate_limits'].message_type = gubernator__pb2._RATELIMITRESP
+_UPDATEPEERGLOBALSREQ.fields_by_name['rate_limits'].message_type = gubernator__pb2._RATELIMITRESP
 DESCRIPTOR.message_types_by_name['GetPeerRateLimitsReq'] = _GETPEERRATELIMITSREQ
 DESCRIPTOR.message_types_by_name['GetPeerRateLimitsResp'] = _GETPEERRATELIMITSRESP
 DESCRIPTOR.message_types_by_name['UpdatePeerGlobalsReq'] = _UPDATEPEERGLOBALSREQ
@@ -183,18 +183,18 @@ _sym_db.RegisterMessage(UpdatePeerGlobalsResp)
 
 DESCRIPTOR._options = None
 
-_PEERSSERVICEV1 = _descriptor.ServiceDescriptor(
-  name='PeersServiceV1',
-  full_name='pb.gubernator.PeersServiceV1',
+_GUBERNATORPEERSV1 = _descriptor.ServiceDescriptor(
+  name='GubernatorPeersV1',
+  full_name='pb.gubernator.GubernatorPeersV1',
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=282,
-  serialized_end=494,
+  serialized_start=296,
+  serialized_end=511,
   methods=[
   _descriptor.MethodDescriptor(
     name='GetPeerRateLimits',
-    full_name='pb.gubernator.PeersServiceV1.GetPeerRateLimits',
+    full_name='pb.gubernator.GubernatorPeersV1.GetPeerRateLimits',
     index=0,
     containing_service=None,
     input_type=_GETPEERRATELIMITSREQ,
@@ -203,7 +203,7 @@ _PEERSSERVICEV1 = _descriptor.ServiceDescriptor(
   ),
   _descriptor.MethodDescriptor(
     name='UpdatePeerGlobals',
-    full_name='pb.gubernator.PeersServiceV1.UpdatePeerGlobals',
+    full_name='pb.gubernator.GubernatorPeersV1.UpdatePeerGlobals',
     index=1,
     containing_service=None,
     input_type=_UPDATEPEERGLOBALSREQ,
@@ -211,8 +211,8 @@ _PEERSSERVICEV1 = _descriptor.ServiceDescriptor(
     serialized_options=None,
   ),
 ])
-_sym_db.RegisterServiceDescriptor(_PEERSSERVICEV1)
+_sym_db.RegisterServiceDescriptor(_GUBERNATORPEERSV1)
 
-DESCRIPTOR.services_by_name['PeersServiceV1'] = _PEERSSERVICEV1
+DESCRIPTOR.services_by_name['GubernatorPeersV1'] = _GUBERNATORPEERSV1
 
 # @@protoc_insertion_point(module_scope)

@@ -3,28 +3,26 @@ package gubernator
 import (
 	"context"
 	"fmt"
-	"strings"
-	"sync"
-	"time"
-
 	"github.com/mailgun/holster"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"strings"
+	"sync"
 )
 
 const (
-	maxRequestSize = 1 * 1024 * 1024 // 1Mb
-	maxBatchSize   = 1000
-	Healthy        = "healthy"
-	UnHealthy      = "unhealthy"
+	maxBatchSize = 1000
+	Healthy      = "healthy"
+	UnHealthy    = "unhealthy"
 )
+
+var log *logrus.Entry
 
 type Instance struct {
 	health    HealthCheckResp
 	wg        holster.WaitGroup
-	log       *logrus.Entry
 	conf      Config
 	peerMutex sync.RWMutex
 }
@@ -34,12 +32,12 @@ func New(conf Config) (*Instance, error) {
 		return nil, errors.New("GRPCServer instance is required")
 	}
 
+	log = logrus.WithField("category", "gubernator")
 	if err := conf.SetDefaults(); err != nil {
 		return nil, err
 	}
 
 	s := Instance{
-		log:  logrus.WithField("category", "gubernator"),
 		conf: conf,
 	}
 
@@ -53,110 +51,6 @@ func New(conf Config) (*Instance, error) {
 
 	return &s, nil
 }
-
-// New creates a new gubernator instance.
-/*func New(conf Config) (*Instance, error) {
-	var err error
-
-	if err := conf.SetDefaults(); err != nil {
-		return nil, err
-	}
-
-	if conf.Listener == nil {
-		conf.Listener, err = net.Listen("tcp", conf.ListenAddress)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to listen on %s", conf.ListenAddress)
-		}
-	}
-
-	if conf.GRPCServer == nil {
-		conf.GRPCServer = grpc.NewServer(
-			grpc.MaxRecvMsgSize(maxRequestSize),
-			grpc.StatsHandler(conf.Metrics.GRPCStatsHandler()))
-	}
-
-	s := Instance{
-		log:  logrus.WithField("category", "gubernator"),
-		conf: conf,
-	}
-
-	// Register our server with GRPC
-	RegisterRateLimitServiceV1Server(conf.GRPCServer, &s)
-	RegisterPeersServiceV1Server(conf.GRPCServer, &s)
-
-	// Register our peer update callback
-	s.conf.PeerPool.RegisterOnUpdate(s.SetPeers)
-
-	// Register cache stats with out metrics collector
-	s.conf.Metrics.RegisterCacheStats(s.conf.Cache)
-
-	// Advertise address is our listen address if not specified
-	holster.SetDefault(&s.conf.AdvertiseAddress, s.Address())
-
-	return &s, nil
-}*/
-
-// Runs the gRPC server; returns when the server starts
-/*func (s *Instance) Start() error {
-	// Start the cache
-	if err := s.conf.Cache.Start(); err != nil {
-		return errors.Wrap(err, "failed to start cache")
-	}
-
-	// Start the metrics collector
-	if err := s.conf.Metrics.Start(); err != nil {
-		return errors.Wrap(err, "failed to start metrics collector")
-	}
-
-	// Start the GRPC server
-	errs := make(chan error, 1)
-	s.wg.Go(func() {
-		// Serve will return a non-nil error unless Stop or GracefulStop is called.
-		errs <- s.conf.GRPCServer.Serve(s.conf.Listener)
-	})
-
-	// Ensure the server is running before we return
-	go func() {
-		errs <- retry(2, time.Millisecond*500, func() error {
-			conn, err := grpc.Dial(s.conf.Listener.Addr().String(), grpc.WithInsecure())
-			if err != nil {
-				return err
-			}
-			client := NewRateLimitServiceV1Client(conn)
-			ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*500)
-			defer cancel()
-			_, err = client.HealthCheck(ctx, &HealthCheckReq{})
-			return err
-		})
-	}()
-
-	// Wait until the server starts or errors
-	err := <-errs
-	if err != nil {
-		return errors.Wrap(err, "while waiting for server to pass health check")
-	}
-
-	// Now that our service is up, register our server
-	if err := s.conf.PeerPool.Start(s.conf.AdvertiseAddress); err != nil {
-		return errors.Wrap(err, "failed to register our instance with other peers")
-	}
-
-	s.log.Infof("Gubernator Listening on %s ...", s.Address())
-	return nil
-}*/
-
-/*func (s *Instance) Stop() {
-	// TODO: If GRPCServer was provided, we should not start or stop the GRPC server
-	s.conf.GRPCServer.Stop()
-	s.conf.PeerPool.Stop()
-	s.conf.Metrics.Stop()
-	s.wg.Wait()
-}
-
-// Return the address the server is listening too
-func (s *Instance) Address() string {
-	return s.conf.Listener.Addr().String()
-}*/
 
 func (s *Instance) GetRateLimits(ctx context.Context, r *Requests) (*RateLimits, error) {
 	var resp RateLimits
@@ -305,16 +199,5 @@ func (s *Instance) SetPeers(peers []PeerInfo) {
 		s.health.Message = strings.Join(errs, "|")
 	}
 	s.health.PeerCount = int32(picker.Size())
-	s.log.WithField("peers", peers).Debug("Peers updated")
-}
-
-func retry(attempts int, d time.Duration, callback func() error) (err error) {
-	for i := 0; i < attempts; i++ {
-		err = callback()
-		if err == nil {
-			return nil
-		}
-		time.Sleep(d)
-	}
-	return err
+	log.WithField("peers", peers).Debug("Peers updated")
 }

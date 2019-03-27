@@ -55,7 +55,7 @@ func NewEtcdPool(conf EtcdPoolConfig) (*EtcdPool, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	pool := &EtcdPool{
-		log:       logrus.WithField("category", "gubernator-etcd-pool"),
+		log:       logrus.WithField("category", "gubernator-pool"),
 		peers:     make(map[string]struct{}),
 		cancelCtx: cancel,
 		conf:      conf,

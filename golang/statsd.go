@@ -8,7 +8,6 @@ import (
 
 	"github.com/mailgun/gubernator/golang/cache"
 	"github.com/mailgun/holster"
-	"github.com/sirupsen/logrus"
 	"github.com/smira/go-statsd"
 	"google.golang.org/grpc/stats"
 )
@@ -30,13 +29,11 @@ type StatsdMetrics struct {
 	cacheStats cache.CacheStats
 	wg         holster.WaitGroup
 	client     StatsdClient
-	log        *logrus.Entry
 }
 
 func NewStatsdMetrics(client StatsdClient) (*StatsdMetrics, error) {
 	sd := &StatsdMetrics{
 		client: client,
-		log:    logrus.WithField("category", "metrics"),
 	}
 	return sd, sd.run()
 }

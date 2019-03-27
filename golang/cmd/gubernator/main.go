@@ -25,7 +25,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-var log = logrus.WithField("category", "gubernator")
+var log = logrus.WithField("category", "server")
 var Version = "dev-build"
 
 type ServerConfig struct {

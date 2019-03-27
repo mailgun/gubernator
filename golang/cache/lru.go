@@ -23,14 +23,11 @@ import (
 	"github.com/mailgun/holster"
 	"sync"
 	"time"
-
-	"github.com/sirupsen/logrus"
 )
 
 // Cache is an thread unsafe LRU cache that supports expiration
 type LRUCache struct {
 	cache     map[interface{}]*list.Element
-	log       *logrus.Entry
 	mutex     sync.Mutex
 	ll        *list.List
 	stats     Stats
@@ -48,7 +45,6 @@ func NewLRUCache(maxSize int) *LRUCache {
 	holster.SetDefault(&maxSize, 50000)
 
 	return &LRUCache{
-		log:       logrus.WithField("category", "gubernator-cache"),
 		cache:     make(map[interface{}]*list.Element),
 		ll:        list.New(),
 		cacheSize: maxSize,

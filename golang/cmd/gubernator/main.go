@@ -5,7 +5,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -16,7 +15,9 @@ import (
 
 	etcd "github.com/coreos/etcd/clientv3"
 	"github.com/ghodss/yaml"
+	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/mailgun/gubernator/golang"
+	"github.com/mailgun/gubernator/golang/cache"
 	"github.com/mailgun/holster"
 	"github.com/mailgun/holster/clock"
 	"github.com/mailgun/holster/etcdutil"
@@ -29,12 +30,10 @@ var log = logrus.WithField("category", "server")
 var Version = "dev-build"
 
 type ServerConfig struct {
-	// The address gubernator will listen too for incoming GRPC peer and client requests (Default: 0.0.0.0:81)
-	ListenAddress string
-	// The address gubernator will advertise to other peers so they can connect
-	AdvertiseAddress string
-	// The address HTTP gateway will use to listen for HTTP requests
-	HTTPListenAddress string
+	GRPCListenAddress string `json:"grpc-listen-address"`
+	AdvertiseAddress  string `json:"advertise-address"`
+	HTTPListenAddress string `json:"http-listen-address"`
+	CacheSize         int    `json:"cache-size"`
 
 	// Statsd metric configuration
 	StatsdConfig struct {
@@ -57,7 +56,7 @@ func main() {
 	conf, err = loadConfig()
 	checkErr(err, "while getting config")
 
-	holster.SetDefault(&conf.ListenAddress, "0.0.0.0:81")
+	holster.SetDefault(&conf.GRPCListenAddress, "0.0.0.0:81")
 	holster.SetDefault(&conf.AdvertiseAddress, "127.0.0.1:81")
 	opts = []grpc.ServerOption{
 		grpc.MaxRecvMsgSize(1024 * 1024),
@@ -72,14 +71,18 @@ func main() {
 
 	grpcSrv := grpc.NewServer(opts...)
 
-	guber, err := gubernator.New(gubernator.Config{GRPCServer: grpcSrv})
+	guber, err := gubernator.New(gubernator.Config{
+		Cache:      cache.NewLRUCache(conf.CacheSize),
+		GRPCServer: grpcSrv,
+	})
+
 	checkErr(err, "while creating new gubernator instance")
 
 	wg.Go(func() {
-		listener, err := net.Listen("tcp", conf.ListenAddress)
+		listener, err := net.Listen("tcp", conf.GRPCListenAddress)
 		checkErr(err, "while starting GRPC listener")
 
-		log.Infof("Gubernator Listening on %s ...", conf.ListenAddress)
+		log.Infof("Gubernator Listening on %s ...", conf.GRPCListenAddress)
 		checkErr(grpcSrv.Serve(listener), "while starting GRPC server")
 	})
 
@@ -103,7 +106,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/", gateway)
-	httpSrv := &http.Server{Addr: conf.ListenAddress, Handler: mux}
+	httpSrv := &http.Server{Addr: conf.GRPCListenAddress, Handler: mux}
 
 	wg.Go(func() {
 		listener, err := net.Listen("tcp", conf.HTTPListenAddress)

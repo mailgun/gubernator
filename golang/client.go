@@ -19,7 +19,7 @@ func (m *RateLimitReq) HashKey() string {
 }
 
 // Create a new connection to the server
-func NewV1Client(server string) (GubernatorV1Client, error) {
+func DialV1Server(server string) (V1Client, error) {
 	if len(server) == 0 {
 		return nil, errors.New("server is empty; must provide a server")
 	}
@@ -29,7 +29,7 @@ func NewV1Client(server string) (GubernatorV1Client, error) {
 		return nil, errors.Wrapf(err, "failed to dial peer %s", server)
 	}
 
-	return NewGubernatorV1Client(conn), nil
+	return NewV1Client(conn), nil
 }
 
 // Convert a time.Duration to a unix millisecond timestamp

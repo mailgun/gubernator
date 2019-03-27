@@ -92,101 +92,101 @@ var _ grpc.ClientConn
 // is compatible with the grpc package it is being compiled against.
 const _ = grpc.SupportPackageIsVersion4
 
-// Client API for GubernatorPeersV1 service
+// Client API for PeersV1 service
 
-type GubernatorPeersV1Client interface {
+type PeersV1Client interface {
 	// Used by peers to relay batches of requests to an authoritative peer
 	GetPeerRateLimits(ctx context.Context, in *GetPeerRateLimitsReq, opts ...grpc.CallOption) (*GetPeerRateLimitsResp, error)
 	// Used by peers send global rate limit updates to other peers
 	UpdatePeerGlobals(ctx context.Context, in *UpdatePeerGlobalsReq, opts ...grpc.CallOption) (*UpdatePeerGlobalsResp, error)
 }
 
-type gubernatorPeersV1Client struct {
+type peersV1Client struct {
 	cc *grpc.ClientConn
 }
 
-func NewGubernatorPeersV1Client(cc *grpc.ClientConn) GubernatorPeersV1Client {
-	return &gubernatorPeersV1Client{cc}
+func NewPeersV1Client(cc *grpc.ClientConn) PeersV1Client {
+	return &peersV1Client{cc}
 }
 
-func (c *gubernatorPeersV1Client) GetPeerRateLimits(ctx context.Context, in *GetPeerRateLimitsReq, opts ...grpc.CallOption) (*GetPeerRateLimitsResp, error) {
+func (c *peersV1Client) GetPeerRateLimits(ctx context.Context, in *GetPeerRateLimitsReq, opts ...grpc.CallOption) (*GetPeerRateLimitsResp, error) {
 	out := new(GetPeerRateLimitsResp)
-	err := grpc.Invoke(ctx, "/pb.gubernator.GubernatorPeersV1/GetPeerRateLimits", in, out, c.cc, opts...)
+	err := grpc.Invoke(ctx, "/pb.gubernator.PeersV1/GetPeerRateLimits", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *gubernatorPeersV1Client) UpdatePeerGlobals(ctx context.Context, in *UpdatePeerGlobalsReq, opts ...grpc.CallOption) (*UpdatePeerGlobalsResp, error) {
+func (c *peersV1Client) UpdatePeerGlobals(ctx context.Context, in *UpdatePeerGlobalsReq, opts ...grpc.CallOption) (*UpdatePeerGlobalsResp, error) {
 	out := new(UpdatePeerGlobalsResp)
-	err := grpc.Invoke(ctx, "/pb.gubernator.GubernatorPeersV1/UpdatePeerGlobals", in, out, c.cc, opts...)
+	err := grpc.Invoke(ctx, "/pb.gubernator.PeersV1/UpdatePeerGlobals", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// Server API for GubernatorPeersV1 service
+// Server API for PeersV1 service
 
-type GubernatorPeersV1Server interface {
+type PeersV1Server interface {
 	// Used by peers to relay batches of requests to an authoritative peer
 	GetPeerRateLimits(context.Context, *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error)
 	// Used by peers send global rate limit updates to other peers
 	UpdatePeerGlobals(context.Context, *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error)
 }
 
-func RegisterGubernatorPeersV1Server(s *grpc.Server, srv GubernatorPeersV1Server) {
-	s.RegisterService(&_GubernatorPeersV1_serviceDesc, srv)
+func RegisterPeersV1Server(s *grpc.Server, srv PeersV1Server) {
+	s.RegisterService(&_PeersV1_serviceDesc, srv)
 }
 
-func _GubernatorPeersV1_GetPeerRateLimits_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _PeersV1_GetPeerRateLimits_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetPeerRateLimitsReq)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GubernatorPeersV1Server).GetPeerRateLimits(ctx, in)
+		return srv.(PeersV1Server).GetPeerRateLimits(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/pb.gubernator.GubernatorPeersV1/GetPeerRateLimits",
+		FullMethod: "/pb.gubernator.PeersV1/GetPeerRateLimits",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GubernatorPeersV1Server).GetPeerRateLimits(ctx, req.(*GetPeerRateLimitsReq))
+		return srv.(PeersV1Server).GetPeerRateLimits(ctx, req.(*GetPeerRateLimitsReq))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _GubernatorPeersV1_UpdatePeerGlobals_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _PeersV1_UpdatePeerGlobals_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UpdatePeerGlobalsReq)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GubernatorPeersV1Server).UpdatePeerGlobals(ctx, in)
+		return srv.(PeersV1Server).UpdatePeerGlobals(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/pb.gubernator.GubernatorPeersV1/UpdatePeerGlobals",
+		FullMethod: "/pb.gubernator.PeersV1/UpdatePeerGlobals",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GubernatorPeersV1Server).UpdatePeerGlobals(ctx, req.(*UpdatePeerGlobalsReq))
+		return srv.(PeersV1Server).UpdatePeerGlobals(ctx, req.(*UpdatePeerGlobalsReq))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-var _GubernatorPeersV1_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "pb.gubernator.GubernatorPeersV1",
-	HandlerType: (*GubernatorPeersV1Server)(nil),
+var _PeersV1_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "pb.gubernator.PeersV1",
+	HandlerType: (*PeersV1Server)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "GetPeerRateLimits",
-			Handler:    _GubernatorPeersV1_GetPeerRateLimits_Handler,
+			Handler:    _PeersV1_GetPeerRateLimits_Handler,
 		},
 		{
 			MethodName: "UpdatePeerGlobals",
-			Handler:    _GubernatorPeersV1_UpdatePeerGlobals_Handler,
+			Handler:    _PeersV1_UpdatePeerGlobals_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -196,7 +196,7 @@ var _GubernatorPeersV1_serviceDesc = grpc.ServiceDesc{
 func init() { proto.RegisterFile("peers.proto", fileDescriptor1) }
 
 var fileDescriptor1 = []byte{
-	// 242 bytes of a gzipped FileDescriptorProto
+	// 239 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xe2, 0x2e, 0x48, 0x4d, 0x2d,
 	0x2a, 0xd6, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0xe2, 0x2d, 0x48, 0xd2, 0x4b, 0x2f, 0x4d, 0x4a,
 	0x2d, 0xca, 0x4b, 0x2c, 0xc9, 0x2f, 0x92, 0x12, 0x40, 0xb0, 0x21, 0x0a, 0x94, 0xfc, 0xb9, 0x44,
@@ -207,10 +207,9 @@ var fileDescriptor1 = []byte{
 	0x77, 0x51, 0x62, 0x49, 0x6a, 0x7c, 0x0e, 0x58, 0x08, 0x6a, 0xa8, 0x0c, 0x6e, 0x43, 0x8b, 0x0b,
 	0x82, 0xb8, 0x8a, 0xe0, 0x46, 0x28, 0x85, 0x72, 0x89, 0x84, 0x16, 0xa4, 0x24, 0x96, 0xa4, 0x82,
 	0x8c, 0x76, 0xcf, 0xc9, 0x4f, 0x4a, 0xcc, 0x01, 0x3b, 0x94, 0x42, 0x63, 0xc5, 0xb9, 0x44, 0xb1,
-	0x18, 0x5b, 0x5c, 0x60, 0x74, 0x9d, 0x91, 0x4b, 0xd0, 0x1d, 0x6e, 0x02, 0x48, 0xb6, 0x38, 0xcc,
-	0x50, 0x28, 0x81, 0x4b, 0x10, 0xc3, 0x77, 0x42, 0xca, 0x68, 0xb6, 0x61, 0x0b, 0x50, 0x29, 0x15,
-	0xc2, 0x8a, 0x8a, 0x0b, 0x94, 0x18, 0x40, 0x36, 0x60, 0x38, 0x08, 0xc3, 0x06, 0x6c, 0x21, 0x81,
-	0x61, 0x03, 0x56, 0x7f, 0x29, 0x31, 0x38, 0xf1, 0x47, 0x71, 0x21, 0x54, 0x35, 0x30, 0x32, 0x26,
-	0xb1, 0x81, 0x93, 0x82, 0x31, 0x20, 0x00, 0x00, 0xff, 0xff, 0x37, 0x8c, 0x66, 0x6e, 0x3a, 0x02,
-	0x00, 0x00,
+	0x18, 0x5b, 0x5c, 0x60, 0x74, 0x96, 0x91, 0x8b, 0x1d, 0x24, 0x56, 0x1c, 0x66, 0x28, 0x94, 0xc0,
+	0x25, 0x88, 0xe1, 0x27, 0x21, 0x65, 0x34, 0x3b, 0xb0, 0x05, 0xa3, 0x94, 0x0a, 0x61, 0x45, 0xc5,
+	0x05, 0x4a, 0x0c, 0x20, 0x1b, 0x30, 0x9c, 0x81, 0x61, 0x03, 0x36, 0xff, 0x63, 0xd8, 0x80, 0xd5,
+	0x37, 0x4a, 0x0c, 0x4e, 0xfc, 0x51, 0x5c, 0x08, 0x55, 0x0d, 0x8c, 0x8c, 0x49, 0x6c, 0xe0, 0x04,
+	0x60, 0x0c, 0x08, 0x00, 0x00, 0xff, 0xff, 0xe4, 0xdb, 0x0d, 0xc5, 0x30, 0x02, 0x00, 0x00,
 }

@@ -9,7 +9,7 @@ package pb.gubernator;
 import "gubernator.proto";
 
 // NOTE: For use by gubernator peers only
-service GubernatorPeersV1 {
+service PeersV1 {
     // Used by peers to relay batches of requests to an authoritative peer
     rpc GetPeerRateLimits (GetPeerRateLimitsReq) returns (GetPeerRateLimitsResp) {}
 

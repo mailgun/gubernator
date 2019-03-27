@@ -8,7 +8,7 @@ package pb.gubernator;
 
 import "google/api/annotations.proto";
 
-service GubernatorV1 {
+service V1 {
 
   // Given a list of rate limit requests, return the rate limits of each.
   rpc GetRateLimits (GetRateLimitsReq) returns (GetRateLimitsResp) {

@@ -28,7 +28,7 @@ var _ status.Status
 var _ = runtime.String
 var _ = utilities.NewDoubleArray
 
-func request_GubernatorV1_GetRateLimits_0(ctx context.Context, marshaler runtime.Marshaler, client GubernatorV1Client, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_V1_GetRateLimits_0(ctx context.Context, marshaler runtime.Marshaler, client V1Client, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq GetRateLimitsReq
 	var metadata runtime.ServerMetadata
 
@@ -45,7 +45,7 @@ func request_GubernatorV1_GetRateLimits_0(ctx context.Context, marshaler runtime
 
 }
 
-func request_GubernatorV1_HealthCheck_0(ctx context.Context, marshaler runtime.Marshaler, client GubernatorV1Client, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_V1_HealthCheck_0(ctx context.Context, marshaler runtime.Marshaler, client V1Client, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq HealthCheckReq
 	var metadata runtime.ServerMetadata
 
@@ -54,9 +54,9 @@ func request_GubernatorV1_HealthCheck_0(ctx context.Context, marshaler runtime.M
 
 }
 
-// RegisterGubernatorV1HandlerFromEndpoint is same as RegisterGubernatorV1Handler but
+// RegisterV1HandlerFromEndpoint is same as RegisterV1Handler but
 // automatically dials to "endpoint" and closes the connection when "ctx" gets done.
-func RegisterGubernatorV1HandlerFromEndpoint(ctx context.Context, mux *runtime.ServeMux, endpoint string, opts []grpc.DialOption) (err error) {
+func RegisterV1HandlerFromEndpoint(ctx context.Context, mux *runtime.ServeMux, endpoint string, opts []grpc.DialOption) (err error) {
 	conn, err := grpc.Dial(endpoint, opts...)
 	if err != nil {
 		return err
@@ -76,23 +76,23 @@ func RegisterGubernatorV1HandlerFromEndpoint(ctx context.Context, mux *runtime.S
 		}()
 	}()
 
-	return RegisterGubernatorV1Handler(ctx, mux, conn)
+	return RegisterV1Handler(ctx, mux, conn)
 }
 
-// RegisterGubernatorV1Handler registers the http handlers for service GubernatorV1 to "mux".
+// RegisterV1Handler registers the http handlers for service V1 to "mux".
 // The handlers forward requests to the grpc endpoint over "conn".
-func RegisterGubernatorV1Handler(ctx context.Context, mux *runtime.ServeMux, conn *grpc.ClientConn) error {
-	return RegisterGubernatorV1HandlerClient(ctx, mux, NewGubernatorV1Client(conn))
+func RegisterV1Handler(ctx context.Context, mux *runtime.ServeMux, conn *grpc.ClientConn) error {
+	return RegisterV1HandlerClient(ctx, mux, NewV1Client(conn))
 }
 
-// RegisterGubernatorV1HandlerClient registers the http handlers for service GubernatorV1
-// to "mux". The handlers forward requests to the grpc endpoint over the given implementation of "GubernatorV1Client".
-// Note: the gRPC framework executes interceptors within the gRPC handler. If the passed in "GubernatorV1Client"
+// RegisterV1HandlerClient registers the http handlers for service V1
+// to "mux". The handlers forward requests to the grpc endpoint over the given implementation of "V1Client".
+// Note: the gRPC framework executes interceptors within the gRPC handler. If the passed in "V1Client"
 // doesn't go through the normal gRPC flow (creating a gRPC client etc.) then it will be up to the passed in
-// "GubernatorV1Client" to call the correct interceptors.
-func RegisterGubernatorV1HandlerClient(ctx context.Context, mux *runtime.ServeMux, client GubernatorV1Client) error {
+// "V1Client" to call the correct interceptors.
+func RegisterV1HandlerClient(ctx context.Context, mux *runtime.ServeMux, client V1Client) error {
 
-	mux.Handle("POST", pattern_GubernatorV1_GetRateLimits_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+	mux.Handle("POST", pattern_V1_GetRateLimits_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
@@ -101,18 +101,18 @@ func RegisterGubernatorV1HandlerClient(ctx context.Context, mux *runtime.ServeMu
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := request_GubernatorV1_GetRateLimits_0(rctx, inboundMarshaler, client, req, pathParams)
+		resp, md, err := request_V1_GetRateLimits_0(rctx, inboundMarshaler, client, req, pathParams)
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
 
-		forward_GubernatorV1_GetRateLimits_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+		forward_V1_GetRateLimits_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 
 	})
 
-	mux.Handle("GET", pattern_GubernatorV1_HealthCheck_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+	mux.Handle("GET", pattern_V1_HealthCheck_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
 		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
@@ -121,14 +121,14 @@ func RegisterGubernatorV1HandlerClient(ctx context.Context, mux *runtime.ServeMu
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
-		resp, md, err := request_GubernatorV1_HealthCheck_0(rctx, inboundMarshaler, client, req, pathParams)
+		resp, md, err := request_V1_HealthCheck_0(rctx, inboundMarshaler, client, req, pathParams)
 		ctx = runtime.NewServerMetadataContext(ctx, md)
 		if err != nil {
 			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 			return
 		}
 
-		forward_GubernatorV1_HealthCheck_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+		forward_V1_HealthCheck_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 
 	})
 
@@ -136,13 +136,13 @@ func RegisterGubernatorV1HandlerClient(ctx context.Context, mux *runtime.ServeMu
 }
 
 var (
-	pattern_GubernatorV1_GetRateLimits_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "GetRateLimits"}, ""))
+	pattern_V1_GetRateLimits_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "GetRateLimits"}, ""))
 
-	pattern_GubernatorV1_HealthCheck_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "HealthCheck"}, ""))
+	pattern_V1_HealthCheck_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "HealthCheck"}, ""))
 )
 
 var (
-	forward_GubernatorV1_GetRateLimits_0 = runtime.ForwardResponseMessage
+	forward_V1_GetRateLimits_0 = runtime.ForwardResponseMessage
 
-	forward_GubernatorV1_HealthCheck_0 = runtime.ForwardResponseMessage
+	forward_V1_HealthCheck_0 = runtime.ForwardResponseMessage
 )

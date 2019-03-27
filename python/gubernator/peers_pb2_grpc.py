@@ -4,7 +4,7 @@ import grpc
 import peers_pb2 as peers__pb2
 
 
-class GubernatorPeersV1Stub(object):
+class PeersV1Stub(object):
   """NOTE: For use by gubernator peers only
   """
 
@@ -15,18 +15,18 @@ class GubernatorPeersV1Stub(object):
       channel: A grpc.Channel.
     """
     self.GetPeerRateLimits = channel.unary_unary(
-        '/pb.gubernator.GubernatorPeersV1/GetPeerRateLimits',
+        '/pb.gubernator.PeersV1/GetPeerRateLimits',
         request_serializer=peers__pb2.GetPeerRateLimitsReq.SerializeToString,
         response_deserializer=peers__pb2.GetPeerRateLimitsResp.FromString,
         )
     self.UpdatePeerGlobals = channel.unary_unary(
-        '/pb.gubernator.GubernatorPeersV1/UpdatePeerGlobals',
+        '/pb.gubernator.PeersV1/UpdatePeerGlobals',
         request_serializer=peers__pb2.UpdatePeerGlobalsReq.SerializeToString,
         response_deserializer=peers__pb2.UpdatePeerGlobalsResp.FromString,
         )
 
 
-class GubernatorPeersV1Servicer(object):
+class PeersV1Servicer(object):
   """NOTE: For use by gubernator peers only
   """
 
@@ -45,7 +45,7 @@ class GubernatorPeersV1Servicer(object):
     raise NotImplementedError('Method not implemented!')
 
 
-def add_GubernatorPeersV1Servicer_to_server(servicer, server):
+def add_PeersV1Servicer_to_server(servicer, server):
   rpc_method_handlers = {
       'GetPeerRateLimits': grpc.unary_unary_rpc_method_handler(
           servicer.GetPeerRateLimits,
@@ -59,5 +59,5 @@ def add_GubernatorPeersV1Servicer_to_server(servicer, server):
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(
-      'pb.gubernator.GubernatorPeersV1', rpc_method_handlers)
+      'pb.gubernator.PeersV1', rpc_method_handlers)
   server.add_generic_rpc_handlers((generic_handler,))

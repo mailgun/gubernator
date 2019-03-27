@@ -22,9 +22,6 @@ type Config struct {
 	// (Optional) This is the peer picker algorithm the server will use decide which peer in the cluster
 	// will coordinate a rate limit
 	Picker PeerPicker
-
-	// (Optional) Metrics collector
-	Metrics MetricsCollector
 }
 
 type BehaviorConfig struct {

@@ -42,12 +42,8 @@ func New(conf Config) (*Instance, error) {
 	}
 
 	// Register our server with GRPC
-	RegisterGubernatorV1Server(conf.GRPCServer, &s)
-	RegisterGubernatorPeersV1Server(conf.GRPCServer, &s)
-
-	if s.conf.Metrics != nil {
-		s.conf.Metrics.RegisterCacheStats(s.conf.Cache)
-	}
+	RegisterV1Server(conf.GRPCServer, &s)
+	RegisterPeersV1Server(conf.GRPCServer, &s)
 
 	return &s, nil
 }

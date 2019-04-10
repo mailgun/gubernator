@@ -62,18 +62,21 @@ func main() {
 		grpc.MaxRecvMsgSize(1024 * 1024),
 	}
 
+	cache := cache.NewLRUCache(conf.CacheSize)
+
 	sClient := newStatsdClient(conf)
 	if sClient != nil {
 		metrics, err = gubernator.NewStatsdMetrics(sClient)
 		checkErr(err, "while starting statsd metrics")
 		opts = append(opts, grpc.StatsHandler(metrics.GRPCStatsHandler()))
+		metrics.RegisterCacheStats(cache)
 	}
 
 	grpcSrv := grpc.NewServer(opts...)
 
 	guber, err := gubernator.New(gubernator.Config{
-		Cache:      cache.NewLRUCache(conf.CacheSize),
 		GRPCServer: grpcSrv,
+		Cache:      cache,
 	})
 
 	checkErr(err, "while creating new gubernator instance")
@@ -100,7 +103,7 @@ func main() {
 	defer cancel()
 
 	gateway := runtime.NewServeMux()
-	err = gubernator.RegisterGubernatorV1HandlerFromEndpoint(ctx, gateway,
+	err = gubernator.RegisterV1HandlerFromEndpoint(ctx, gateway,
 		conf.AdvertiseAddress, []grpc.DialOption{grpc.WithInsecure()})
 	checkErr(err, "while registering GRPC gateway handler")
 

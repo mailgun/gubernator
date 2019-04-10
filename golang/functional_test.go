@@ -24,7 +24,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestOverTheLimit(t *testing.T) {
-	client, errs := guber.NewV1Client(cluster.GetPeer())
+	client, errs := guber.DialV1Server(cluster.GetPeer())
 	require.Nil(t, errs)
 
 	tests := []struct {
@@ -70,7 +70,7 @@ func TestOverTheLimit(t *testing.T) {
 }
 
 func TestTokenBucket(t *testing.T) {
-	client, errs := guber.NewV1Client(cluster.GetPeer())
+	client, errs := guber.DialV1Server(cluster.GetPeer())
 	require.Nil(t, errs)
 
 	tests := []struct {
@@ -121,7 +121,7 @@ func TestTokenBucket(t *testing.T) {
 }
 
 func TestLeakyBucket(t *testing.T) {
-	client, errs := guber.NewV1Client(cluster.GetPeer())
+	client, errs := guber.DialV1Server(cluster.GetPeer())
 	require.Nil(t, errs)
 
 	tests := []struct {
@@ -181,7 +181,7 @@ func TestLeakyBucket(t *testing.T) {
 }
 
 func TestMissingFields(t *testing.T) {
-	client, errs := guber.NewV1Client(cluster.GetPeer())
+	client, errs := guber.DialV1Server(cluster.GetPeer())
 	require.Nil(t, errs)
 
 	tests := []struct {

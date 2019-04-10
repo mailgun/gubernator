@@ -21,7 +21,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='pb.gubernator',
   syntax='proto3',
   serialized_options=_b('Z\ngubernator\200\001\001'),
-  serialized_pb=_b('\n\x10gubernator.proto\x12\rpb.gubernator\x1a\x1cgoogle/api/annotations.proto\"A\n\x10GetRateLimitsReq\x12-\n\x08requests\x18\x01 \x03(\x0b\x32\x1b.pb.gubernator.RateLimitReq\"D\n\x11GetRateLimitsResp\x12/\n\tresponses\x18\x01 \x03(\x0b\x32\x1c.pb.gubernator.RateLimitResp\"\xb7\x01\n\x0cRateLimitReq\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x12\n\nunique_key\x18\x02 \x01(\t\x12\x0c\n\x04hits\x18\x03 \x01(\x03\x12\r\n\x05limit\x18\x04 \x01(\x03\x12\x10\n\x08\x64uration\x18\x05 \x01(\x03\x12+\n\talgorithm\x18\x06 \x01(\x0e\x32\x18.pb.gubernator.Algorithm\x12)\n\x08\x62\x65havior\x18\x07 \x01(\x0e\x32\x17.pb.gubernator.Behavior\"\xea\x01\n\rRateLimitResp\x12%\n\x06status\x18\x01 \x01(\x0e\x32\x15.pb.gubernator.Status\x12\r\n\x05limit\x18\x02 \x01(\x03\x12\x11\n\tremaining\x18\x03 \x01(\x03\x12\x12\n\nreset_time\x18\x04 \x01(\x03\x12\r\n\x05\x65rror\x18\x05 \x01(\t\x12<\n\x08metadata\x18\x06 \x03(\x0b\x32*.pb.gubernator.RateLimitResp.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x10\n\x0eHealthCheckReq\"F\n\x0fHealthCheckResp\x12\x0e\n\x06status\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x12\n\npeer_count\x18\x03 \x01(\x05*/\n\tAlgorithm\x12\x10\n\x0cTOKEN_BUCKET\x10\x00\x12\x10\n\x0cLEAKY_BUCKET\x10\x01*5\n\x08\x42\x65havior\x12\x0c\n\x08\x42\x41TCHING\x10\x00\x12\x0f\n\x0bNO_BATCHING\x10\x01\x12\n\n\x06GLOBAL\x10\x02*)\n\x06Status\x12\x0f\n\x0bUNDER_LIMIT\x10\x00\x12\x0e\n\nOVER_LIMIT\x10\x01\x32\xe7\x01\n\x0cGubernatorV1\x12p\n\rGetRateLimits\x12\x1f.pb.gubernator.GetRateLimitsReq\x1a .pb.gubernator.GetRateLimitsResp\"\x1c\x82\xd3\xe4\x93\x02\x16\"\x11/v1/GetRateLimits:\x01*\x12\x65\n\x0bHealthCheck\x12\x1d.pb.gubernator.HealthCheckReq\x1a\x1e.pb.gubernator.HealthCheckResp\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/HealthCheckB\x0fZ\ngubernator\x80\x01\x01\x62\x06proto3')
+  serialized_pb=_b('\n\x10gubernator.proto\x12\rpb.gubernator\x1a\x1cgoogle/api/annotations.proto\"A\n\x10GetRateLimitsReq\x12-\n\x08requests\x18\x01 \x03(\x0b\x32\x1b.pb.gubernator.RateLimitReq\"D\n\x11GetRateLimitsResp\x12/\n\tresponses\x18\x01 \x03(\x0b\x32\x1c.pb.gubernator.RateLimitResp\"\xb7\x01\n\x0cRateLimitReq\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x12\n\nunique_key\x18\x02 \x01(\t\x12\x0c\n\x04hits\x18\x03 \x01(\x03\x12\r\n\x05limit\x18\x04 \x01(\x03\x12\x10\n\x08\x64uration\x18\x05 \x01(\x03\x12+\n\talgorithm\x18\x06 \x01(\x0e\x32\x18.pb.gubernator.Algorithm\x12)\n\x08\x62\x65havior\x18\x07 \x01(\x0e\x32\x17.pb.gubernator.Behavior\"\xea\x01\n\rRateLimitResp\x12%\n\x06status\x18\x01 \x01(\x0e\x32\x15.pb.gubernator.Status\x12\r\n\x05limit\x18\x02 \x01(\x03\x12\x11\n\tremaining\x18\x03 \x01(\x03\x12\x12\n\nreset_time\x18\x04 \x01(\x03\x12\r\n\x05\x65rror\x18\x05 \x01(\t\x12<\n\x08metadata\x18\x06 \x03(\x0b\x32*.pb.gubernator.RateLimitResp.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x10\n\x0eHealthCheckReq\"F\n\x0fHealthCheckResp\x12\x0e\n\x06status\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x12\n\npeer_count\x18\x03 \x01(\x05*/\n\tAlgorithm\x12\x10\n\x0cTOKEN_BUCKET\x10\x00\x12\x10\n\x0cLEAKY_BUCKET\x10\x01*5\n\x08\x42\x65havior\x12\x0c\n\x08\x42\x41TCHING\x10\x00\x12\x0f\n\x0bNO_BATCHING\x10\x01\x12\n\n\x06GLOBAL\x10\x02*)\n\x06Status\x12\x0f\n\x0bUNDER_LIMIT\x10\x00\x12\x0e\n\nOVER_LIMIT\x10\x01\x32\xdd\x01\n\x02V1\x12p\n\rGetRateLimits\x12\x1f.pb.gubernator.GetRateLimitsReq\x1a .pb.gubernator.GetRateLimitsResp\"\x1c\x82\xd3\xe4\x93\x02\x16\"\x11/v1/GetRateLimits:\x01*\x12\x65\n\x0bHealthCheck\x12\x1d.pb.gubernator.HealthCheckReq\x1a\x1e.pb.gubernator.HealthCheckResp\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/HealthCheckB\x0fZ\ngubernator\x80\x01\x01\x62\x06proto3')
   ,
   dependencies=[google_dot_api_dot_annotations__pb2.DESCRIPTOR,])
 
@@ -486,18 +486,18 @@ _sym_db.RegisterMessage(HealthCheckResp)
 DESCRIPTOR._options = None
 _RATELIMITRESP_METADATAENTRY._options = None
 
-_GUBERNATORV1 = _descriptor.ServiceDescriptor(
-  name='GubernatorV1',
-  full_name='pb.gubernator.GubernatorV1',
+_V1 = _descriptor.ServiceDescriptor(
+  name='V1',
+  full_name='pb.gubernator.V1',
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
   serialized_start=863,
-  serialized_end=1094,
+  serialized_end=1084,
   methods=[
   _descriptor.MethodDescriptor(
     name='GetRateLimits',
-    full_name='pb.gubernator.GubernatorV1.GetRateLimits',
+    full_name='pb.gubernator.V1.GetRateLimits',
     index=0,
     containing_service=None,
     input_type=_GETRATELIMITSREQ,
@@ -506,7 +506,7 @@ _GUBERNATORV1 = _descriptor.ServiceDescriptor(
   ),
   _descriptor.MethodDescriptor(
     name='HealthCheck',
-    full_name='pb.gubernator.GubernatorV1.HealthCheck',
+    full_name='pb.gubernator.V1.HealthCheck',
     index=1,
     containing_service=None,
     input_type=_HEALTHCHECKREQ,
@@ -514,8 +514,8 @@ _GUBERNATORV1 = _descriptor.ServiceDescriptor(
     serialized_options=_b('\202\323\344\223\002\021\022\017/v1/HealthCheck'),
   ),
 ])
-_sym_db.RegisterServiceDescriptor(_GUBERNATORV1)
+_sym_db.RegisterServiceDescriptor(_V1)
 
-DESCRIPTOR.services_by_name['GubernatorV1'] = _GUBERNATORV1
+DESCRIPTOR.services_by_name['V1'] = _V1
 
 # @@protoc_insertion_point(module_scope)

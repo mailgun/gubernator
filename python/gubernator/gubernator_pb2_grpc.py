@@ -4,7 +4,7 @@ import grpc
 import gubernator_pb2 as gubernator__pb2
 
 
-class GubernatorV1Stub(object):
+class V1Stub(object):
   # missing associated documentation comment in .proto file
   pass
 
@@ -15,18 +15,18 @@ class GubernatorV1Stub(object):
       channel: A grpc.Channel.
     """
     self.GetRateLimits = channel.unary_unary(
-        '/pb.gubernator.GubernatorV1/GetRateLimits',
+        '/pb.gubernator.V1/GetRateLimits',
         request_serializer=gubernator__pb2.GetRateLimitsReq.SerializeToString,
         response_deserializer=gubernator__pb2.GetRateLimitsResp.FromString,
         )
     self.HealthCheck = channel.unary_unary(
-        '/pb.gubernator.GubernatorV1/HealthCheck',
+        '/pb.gubernator.V1/HealthCheck',
         request_serializer=gubernator__pb2.HealthCheckReq.SerializeToString,
         response_deserializer=gubernator__pb2.HealthCheckResp.FromString,
         )
 
 
-class GubernatorV1Servicer(object):
+class V1Servicer(object):
   # missing associated documentation comment in .proto file
   pass
 
@@ -46,7 +46,7 @@ class GubernatorV1Servicer(object):
     raise NotImplementedError('Method not implemented!')
 
 
-def add_GubernatorV1Servicer_to_server(servicer, server):
+def add_V1Servicer_to_server(servicer, server):
   rpc_method_handlers = {
       'GetRateLimits': grpc.unary_unary_rpc_method_handler(
           servicer.GetRateLimits,
@@ -60,5 +60,5 @@ def add_GubernatorV1Servicer_to_server(servicer, server):
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(
-      'pb.gubernator.GubernatorV1', rpc_method_handlers)
+      'pb.gubernator.V1', rpc_method_handlers)
   server.add_generic_rpc_handlers((generic_handler,))

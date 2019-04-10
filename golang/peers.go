@@ -17,7 +17,7 @@ type PeerPicker interface {
 }
 
 type PeerClient struct {
-	client  GubernatorPeersV1Client
+	client  PeersV1Client
 	conn    *grpc.ClientConn
 	conf    BehaviorConfig
 	queue   chan *request
@@ -112,7 +112,7 @@ func (c *PeerClient) dialPeer() error {
 		return errors.Wrapf(err, "failed to dial peer %s", c.host)
 	}
 
-	c.client = NewGubernatorPeersV1Client(c.conn)
+	c.client = NewPeersV1Client(c.conn)
 	return nil
 }
 

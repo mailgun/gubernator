@@ -1,7 +1,3 @@
-# github.com/DataDog/zstd v1.3.5
-github.com/DataDog/zstd
-# github.com/Shopify/sarama v1.20.1
-github.com/Shopify/sarama
 # github.com/coreos/etcd v3.3.11+incompatible
 github.com/coreos/etcd/clientv3
 github.com/coreos/etcd/auth/authpb
@@ -12,12 +8,6 @@ github.com/coreos/etcd/pkg/types
 github.com/coreos/etcd/clientv3/concurrency
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
-# github.com/eapache/go-resiliency v1.1.0
-github.com/eapache/go-resiliency/breaker
-# github.com/eapache/go-xerial-snappy v0.0.0-20180814174437-776d5712da21
-github.com/eapache/go-xerial-snappy
-# github.com/eapache/queue v1.1.0
-github.com/eapache/queue
 # github.com/fatih/structs v1.1.0
 github.com/fatih/structs
 # github.com/ghodss/yaml v1.0.0
@@ -39,10 +29,6 @@ github.com/golang/protobuf/ptypes
 github.com/golang/protobuf/ptypes/struct
 github.com/golang/protobuf/protoc-gen-go/generator/internal/remap
 github.com/golang/protobuf/protoc-gen-go/plugin
-# github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db
-github.com/golang/snappy
-# github.com/gorilla/mux v1.7.0
-github.com/gorilla/mux
 # github.com/grpc-ecosystem/grpc-gateway v1.7.0
 github.com/grpc-ecosystem/grpc-gateway/runtime
 github.com/grpc-ecosystem/grpc-gateway/utilities
@@ -53,40 +39,12 @@ github.com/konsorten/go-windows-terminal-sequences
 github.com/mailgun/holster
 github.com/mailgun/holster/clock
 github.com/mailgun/holster/etcdutil
-github.com/mailgun/holster/errors
-github.com/mailgun/holster/stack
-# github.com/mailgun/iptools v0.0.0-20170310010557-ba8d5743f678
-github.com/mailgun/iptools
-# github.com/mailgun/logrus-hooks v1.2.1
-github.com/mailgun/logrus-hooks/kafkahook
-github.com/mailgun/logrus-hooks/levelfilter
-github.com/mailgun/logrus-hooks/common
-# github.com/mailgun/service v1.3.2-0.20190214034514-38a9fb32dabc
-github.com/mailgun/service
-github.com/mailgun/service/httpapi
-github.com/mailgun/service/internal/debug
-github.com/mailgun/service/internal/logging
-github.com/mailgun/service/internal/metrics
-github.com/mailgun/service/internal/vulcand
-github.com/mailgun/service/testutils
-github.com/mailgun/service/vulcand
-# github.com/mailru/easyjson v0.0.0-20180823135443-60711f1a8329
-github.com/mailru/easyjson/jwriter
-github.com/mailru/easyjson
-github.com/mailru/easyjson/jlexer
-github.com/mailru/easyjson/buffer
-# github.com/pierrec/lz4 v2.0.5+incompatible
-github.com/pierrec/lz4
-github.com/pierrec/lz4/internal/xxh32
 # github.com/pkg/errors v0.8.1
 github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0
 github.com/pmezard/go-difflib/difflib
-# github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a
-github.com/rcrowley/go-metrics
 # github.com/sirupsen/logrus v1.3.0
 github.com/sirupsen/logrus
-github.com/sirupsen/logrus/hooks/syslog
 # github.com/smira/go-statsd v1.2.1
 github.com/smira/go-statsd
 # github.com/stretchr/testify v1.3.0
@@ -116,15 +74,17 @@ google.golang.org/genproto/protobuf/field_mask
 google.golang.org/genproto/googleapis/rpc/status
 # google.golang.org/grpc v1.18.0
 google.golang.org/grpc
-google.golang.org/grpc/stats
 google.golang.org/grpc/codes
 google.golang.org/grpc/grpclog
+google.golang.org/grpc/stats
 google.golang.org/grpc/status
+google.golang.org/grpc/credentials
+google.golang.org/grpc/health/grpc_health_v1
+google.golang.org/grpc/keepalive
 google.golang.org/grpc/metadata
 google.golang.org/grpc/balancer
 google.golang.org/grpc/balancer/roundrobin
 google.golang.org/grpc/connectivity
-google.golang.org/grpc/credentials
 google.golang.org/grpc/encoding
 google.golang.org/grpc/encoding/proto
 google.golang.org/grpc/internal
@@ -135,16 +95,14 @@ google.golang.org/grpc/internal/envconfig
 google.golang.org/grpc/internal/grpcrand
 google.golang.org/grpc/internal/grpcsync
 google.golang.org/grpc/internal/transport
-google.golang.org/grpc/keepalive
 google.golang.org/grpc/naming
 google.golang.org/grpc/peer
 google.golang.org/grpc/resolver
 google.golang.org/grpc/resolver/dns
 google.golang.org/grpc/resolver/passthrough
 google.golang.org/grpc/tap
-google.golang.org/grpc/health/grpc_health_v1
-google.golang.org/grpc/balancer/base
 google.golang.org/grpc/credentials/internal
+google.golang.org/grpc/balancer/base
 google.golang.org/grpc/binarylog/grpc_binarylog_v1
 google.golang.org/grpc/internal/syscall
 # gopkg.in/yaml.v2 v2.2.2

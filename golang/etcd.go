@@ -102,7 +102,7 @@ func (e *EtcdPool) watchPeers() error {
 
 	select {
 	case <-ready:
-		e.log.Infof("watching for peer changes @ ETCD revision %d", revision)
+		e.log.Infof("watching for peer changes '%s' at revision %d", e.conf.BaseKey, revision)
 	case <-time.After(etcdTimeout):
 		return errors.New("timed out while waiting for watcher.Watch() to start")
 	}

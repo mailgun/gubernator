@@ -128,7 +128,7 @@ func (c *PeerClient) run() {
 			queue = append(queue, r)
 
 			// Send the queue if we reached our batch limit
-			if len(queue) > c.conf.BatchLimit {
+			if len(queue) == c.conf.BatchLimit {
 				c.sendQueue(queue)
 				queue = nil
 				continue

@@ -48,6 +48,9 @@ func New(conf Config) (*Instance, error) {
 	return &s, nil
 }
 
+// GetRateLimits is the public interface used by clients to request rate limits from the system. If the
+// rate limit `Name` and `UniqueKey` is not owned by this instance then we forward the request to the
+// peer that does.
 func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*GetRateLimitsResp, error) {
 	var resp GetRateLimitsResp
 
@@ -112,12 +115,13 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*Get
 	return &resp, nil
 }
 
-// TO
+// TODO: Support Global rate limits
 func (s *Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
 	// NOT IMPLEMENTED
 	return nil, nil
 }
 
+// GetPeerRateLimits is called by other peers to get the rate limits owned by this peer.
 func (s *Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
 	var resp GetPeerRateLimitsResp
 
@@ -137,7 +141,7 @@ func (s *Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsRe
 	return &resp, nil
 }
 
-// Returns the health of the peer.
+// HealthCheck Returns the health of our instance.
 func (s *Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*HealthCheckResp, error) {
 	s.peerMutex.RLock()
 	defer s.peerMutex.RUnlock()

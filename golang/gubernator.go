@@ -3,13 +3,14 @@ package gubernator
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
+
 	"github.com/mailgun/holster"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"strings"
-	"sync"
 )
 
 const (
@@ -21,10 +22,11 @@ const (
 var log *logrus.Entry
 
 type Instance struct {
-	health    HealthCheckResp
 	wg        holster.WaitGroup
-	conf      Config
+	health    HealthCheckResp
+	global    *globalManager
 	peerMutex sync.RWMutex
+	conf      Config
 }
 
 func New(conf Config) (*Instance, error) {
@@ -40,6 +42,8 @@ func New(conf Config) (*Instance, error) {
 	s := Instance{
 		conf: conf,
 	}
+
+	s.global = newGlobalManager(conf.Behaviors, &s)
 
 	// Register our server with GRPC
 	RegisterV1Server(conf.GRPCServer, &s)
@@ -76,16 +80,13 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*Get
 			goto NextRateLimit
 		}
 
-		s.peerMutex.RLock()
-		peer, err = s.conf.Picker.Get(globalKey)
+		peer, err = s.GetPeer(globalKey)
 		if err != nil {
-			s.peerMutex.RUnlock()
 			rl = &RateLimitResp{
 				Error: fmt.Sprintf("while finding peer that owns rate limit '%s' - '%s'", globalKey, err),
 			}
 			goto NextRateLimit
 		}
-		s.peerMutex.RUnlock()
 
 		// If our server instance is the owner of this rate limit
 		if peer.isOwner {
@@ -126,7 +127,8 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*Get
 // getGlobalRateLimit handles rate limits that are marked as `Behavior = GLOBAL`. Rate limit responses
 // are returned from the local cache and the hits are queued to be sent to the owning peer.
 func (s *Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, error) {
-	// TODO: Queue for async hit update
+	// Queue the hit for async update
+	s.global.QueueHit(req)
 
 	s.conf.Cache.Lock()
 	item, ok := s.conf.Cache.Get(req.HashKey())
@@ -153,7 +155,7 @@ func (s *Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsRe
 	defer s.conf.Cache.Unlock()
 
 	for _, g := range r.Globals {
-		s.conf.Cache.Add(g.Key, g.RateLimitResp, g.RateLimitResp.ResetTime)
+		s.conf.Cache.Add(g.Key, g.Status, g.Status.ResetTime)
 	}
 	return &UpdatePeerGlobalsResp{}, nil
 }
@@ -189,6 +191,10 @@ func (s *Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
 	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
 
+	if r.Behavior == Behavior_GLOBAL {
+		s.global.QueueUpdate(r)
+	}
+
 	switch r.Algorithm {
 	case Algorithm_TOKEN_BUCKET:
 		return tokenBucket(s.conf.Cache, r)
@@ -198,7 +204,7 @@ func (s *Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
 	return nil, errors.Errorf("invalid rate limit algorithm '%d'", r.Algorithm)
 }
 
-// Called when the pool of peers changes
+// SetPeers is called when the pool of peers changes
 func (s *Instance) SetPeers(peers []PeerInfo) {
 	picker := s.conf.Picker.New()
 	var errs []string
@@ -211,7 +217,7 @@ func (s *Instance) SetPeers(peers []PeerInfo) {
 			continue
 		}
 
-		if info := s.conf.Picker.GetPeer(peer.Address); info != nil {
+		if info := s.conf.Picker.GetPeerByHost(peer.Address); info != nil {
 			peerInfo = info
 		}
 
@@ -237,4 +243,22 @@ func (s *Instance) SetPeers(peers []PeerInfo) {
 	}
 	s.health.PeerCount = int32(picker.Size())
 	log.WithField("peers", peers).Debug("Peers updated")
+}
+
+// GetPeers returns a peer client for the hash key provided
+func (s *Instance) GetPeer(key string) (*PeerClient, error) {
+	s.peerMutex.RLock()
+	peer, err := s.conf.Picker.Get(key)
+	if err != nil {
+		s.peerMutex.RUnlock()
+		return nil, err
+	}
+	s.peerMutex.RUnlock()
+	return peer, nil
+}
+
+func (s *Instance) GetPeerList() []*PeerClient {
+	s.peerMutex.RLock()
+	defer s.peerMutex.RUnlock()
+	return s.conf.Picker.Peers()
 }

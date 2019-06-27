@@ -35,6 +35,6 @@ message UpdatePeerGlobalsReq {
 
 message UpdatePeerGlobal {
     string key = 1;
-    RateLimitResp rate_limit_resp = 2;
+    RateLimitResp status = 2;
 }
 message UpdatePeerGlobalsResp {}

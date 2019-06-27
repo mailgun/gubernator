@@ -31,12 +31,24 @@ type BehaviorConfig struct {
 	BatchWait time.Duration
 	// The max number of requests we can batch into a single peer request
 	BatchLimit int
+
+	// How long a non-owning peer should wait before syncing hits to the owning peer
+	GlobalSyncWait time.Duration
+	// How long we should wait for a global sync responses from peers
+	GlobalTimeout time.Duration
+	// The max number of global updates we can batch into a single peer request
+	GlobalBatchLimit int
 }
 
 func (c *Config) SetDefaults() error {
 	holster.SetDefault(&c.Behaviors.BatchTimeout, time.Millisecond*500)
 	holster.SetDefault(&c.Behaviors.BatchLimit, maxBatchSize)
 	holster.SetDefault(&c.Behaviors.BatchWait, time.Microsecond*500)
+
+	holster.SetDefault(&c.Behaviors.GlobalTimeout, time.Millisecond*500)
+	holster.SetDefault(&c.Behaviors.GlobalBatchLimit, maxBatchSize)
+	holster.SetDefault(&c.Behaviors.GlobalSyncWait, time.Microsecond*500)
+
 	holster.SetDefault(&c.Picker, NewConsistantHash(nil))
 	holster.SetDefault(&c.Cache, cache.NewLRUCache(0))
 

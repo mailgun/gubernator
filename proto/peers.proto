@@ -30,7 +30,11 @@ message GetPeerRateLimitsResp {
 
 message UpdatePeerGlobalsReq {
     // Must specify at least one RateLimit
-    repeated RateLimitResp rate_limits = 1;
+    repeated UpdatePeerGlobal globals = 1;
 }
 
+message UpdatePeerGlobal {
+    string key = 1;
+    RateLimitResp rate_limit_resp = 2;
+}
 message UpdatePeerGlobalsResp {}

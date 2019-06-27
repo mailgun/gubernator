@@ -18,6 +18,7 @@ It has these top-level messages:
 	GetPeerRateLimitsReq
 	GetPeerRateLimitsResp
 	UpdatePeerGlobalsReq
+	UpdatePeerGlobal
 	UpdatePeerGlobalsResp
 */
 package gubernator

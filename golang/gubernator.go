@@ -98,6 +98,14 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*Get
 				goto NextRateLimit
 			}
 		} else {
+			if req.Behavior == Behavior_GLOBAL {
+				rl, err = s.getGlobalRateLimit(req)
+				if err != nil {
+					rl = &RateLimitResp{Error: err.Error()}
+				}
+				goto NextRateLimit
+			}
+
 			// Make an RPC call to the peer that owns this rate limit
 			rl, err = peer.GetPeerRateLimit(ctx, req)
 			if err != nil {
@@ -115,10 +123,39 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*Get
 	return &resp, nil
 }
 
-// TODO: Support Global rate limits
-func (s *Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
-	// NOT IMPLEMENTED
+// getGlobalRateLimit handles rate limits that are marked as `Behavior = GLOBAL`. Rate limit responses
+// are returned from the local cache and the hits are queued to be sent to the owning peer.
+func (s *Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, error) {
+	// TODO: Queue for async hit update
+
+	s.conf.Cache.Lock()
+	item, ok := s.conf.Cache.Get(req.HashKey())
+	s.conf.Cache.Unlock()
+	if ok {
+		rl, ok := item.(*RateLimitResp)
+		if !ok {
+			// Perhaps the rate limit is no longer a global or the algorithm was changed by the user.
+			s.conf.Cache.Remove(req.HashKey())
+			return s.getGlobalRateLimit(req)
+		}
+		return rl, nil
+	} else {
+		// Process the rate limit like we own it since we have no data on the rate limit
+		return s.getRateLimit(req)
+	}
 	return nil, nil
+}
+
+// UpdatePeerGlobals updates the local cache with a list of global rate limits. This method should only
+// be called by a peer who is the owner of a global rate limit.
+func (s *Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
+	s.conf.Cache.Lock()
+	defer s.conf.Cache.Unlock()
+
+	for _, g := range r.Globals {
+		s.conf.Cache.Add(g.Key, g.RateLimitResp, g.RateLimitResp.ResetTime)
+	}
+	return &UpdatePeerGlobalsResp{}, nil
 }
 
 // GetPeerRateLimits is called by other peers to get the rate limits owned by this peer.

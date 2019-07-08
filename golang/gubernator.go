@@ -145,7 +145,6 @@ func (s *Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, error)
 		// Process the rate limit like we own it since we have no data on the rate limit
 		return s.getRateLimit(req)
 	}
-	return nil, nil
 }
 
 // UpdatePeerGlobals updates the local cache with a list of global rate limits. This method should only

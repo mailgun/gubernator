@@ -99,6 +99,11 @@ func leakyBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 			b.LimitRemaining = b.Limit
 		}
 
+		// Only update the TS if client is incrementing the hit
+		if r.Hits != 0 {
+			b.TimeStamp = now
+		}
+
 		rl := &RateLimitResp{
 			Limit:     b.Limit,
 			Remaining: b.LimitRemaining,
@@ -131,7 +136,6 @@ func leakyBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 			return rl, nil
 		}
 
-		b.TimeStamp = now
 		b.LimitRemaining -= r.Hits
 		rl.Remaining = b.LimitRemaining
 		c.UpdateExpiration(r.HashKey(), now*r.Duration)

@@ -10,8 +10,20 @@ import (
 
 type MetricsCollector interface {
 	GRPCStatsHandler() stats.Handler
-	RegisterCacheStats(cache.CacheStats)
+	RegisterCacheStats(cache.Stater)
+	RegisterServerStats(ServerStater)
 	Close()
+}
+
+type ServerStater interface {
+	Stats(bool) ServerStats
+}
+
+type ServerStats struct {
+	// How long a Broadcast took to complete
+	BroadcastDuration int64
+	// How many async globals were handled by the manager
+	AsyncGlobalsCount int64
 }
 
 type RequestStats struct {

@@ -25,10 +25,11 @@ func (n *NullClient) Incr(string, int64, ...statsd.Tag)  {}
 func (n *NullClient) Close() error                       { return nil }
 
 type StatsdMetrics struct {
-	reqChan    chan *RequestStats
-	cacheStats cache.CacheStats
-	wg         holster.WaitGroup
-	client     StatsdClient
+	reqChan     chan *RequestStats
+	cacheStats  cache.Stater
+	serverStats ServerStater
+	wg          holster.WaitGroup
+	client      StatsdClient
 }
 
 func NewStatsdMetrics(client StatsdClient) (*StatsdMetrics, error) {
@@ -76,6 +77,13 @@ func (sd *StatsdMetrics) run() error {
 				sd.client.Incr("cache.hit", stats.Hit)
 				sd.client.Incr("cache.miss", stats.Miss)
 			}
+
+			// Emit stats about our global manager
+			if sd.serverStats != nil {
+				stats := sd.serverStats.Stats(true)
+				sd.client.Gauge("global-manager.broadcast-duration", stats.BroadcastDuration)
+				sd.client.Incr("global-manager.async-count", stats.AsyncGlobalsCount)
+			}
 		case <-done:
 			tick.Stop()
 			sd.client.Close()
@@ -115,7 +123,8 @@ func (sd *StatsdMetrics) HandleRPC(ctx context.Context, s stats.RPCStats) {
 
 func (sd *StatsdMetrics) GRPCStatsHandler() stats.Handler                   { return sd }
 func (sd *StatsdMetrics) HandleConn(ctx context.Context, s stats.ConnStats) {}
-func (sd *StatsdMetrics) RegisterCacheStats(c cache.CacheStats)             { sd.cacheStats = c }
+func (sd *StatsdMetrics) RegisterCacheStats(c cache.Stater)                 { sd.cacheStats = c }
+func (sd *StatsdMetrics) RegisterServerStats(c ServerStater)                { sd.serverStats = c }
 
 func (sd *StatsdMetrics) TagConn(ctx context.Context, _ *stats.ConnTagInfo) context.Context {
 	return ctx

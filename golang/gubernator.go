@@ -136,14 +136,17 @@ func (s *Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, error)
 	if ok {
 		rl, ok := item.(*RateLimitResp)
 		if !ok {
-			// Perhaps the rate limit is no longer a global or the algorithm was changed by the user.
+			// Perhaps the rate limit algorithm was changed by the user.
 			s.conf.Cache.Remove(req.HashKey())
 			return s.getGlobalRateLimit(req)
 		}
 		return rl, nil
 	} else {
+		cpy := *req
+		cpy.Behavior = Behavior_NO_BATCHING
 		// Process the rate limit like we own it since we have no data on the rate limit
-		return s.getRateLimit(req)
+		resp, err := s.getRateLimit(&cpy)
+		return resp, err
 	}
 }
 
@@ -260,4 +263,8 @@ func (s *Instance) GetPeerList() []*PeerClient {
 	s.peerMutex.RLock()
 	defer s.peerMutex.RUnlock()
 	return s.conf.Picker.Peers()
+}
+
+func (s *Instance) Stats(clear bool) ServerStats {
+	return s.global.Stats(clear)
 }

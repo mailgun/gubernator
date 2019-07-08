@@ -4,28 +4,32 @@ import (
 	"context"
 	"github.com/mailgun/holster"
 	"github.com/sirupsen/logrus"
+	"sync/atomic"
+	"time"
 )
 
 // globalManager manages async hit queue and updates peers in
 // the cluster periodically when a global rate limit we own updates.
 type globalManager struct {
-	asyncQueue  chan *RateLimitReq
-	updateQueue chan *RateLimitReq
-	wg          holster.WaitGroup
-	conf        BehaviorConfig
-	log         *logrus.Entry
-	instance    *Instance
+	stats          ServerStats
+	asyncQueue     chan *RateLimitReq
+	broadcastQueue chan *RateLimitReq
+	wg             holster.WaitGroup
+	conf           BehaviorConfig
+	log            *logrus.Entry
+	instance       *Instance
 }
 
 func newGlobalManager(conf BehaviorConfig, instance *Instance) *globalManager {
 	gm := globalManager{
-		log:        log.WithField("category", "global-manager"),
-		asyncQueue: make(chan *RateLimitReq, 1000),
-		instance:   instance,
-		conf:       conf,
+		log:            log.WithField("category", "global-manager"),
+		asyncQueue:     make(chan *RateLimitReq, 0),
+		broadcastQueue: make(chan *RateLimitReq, 0),
+		instance:       instance,
+		conf:           conf,
 	}
 	gm.runAsyncHits()
-	gm.runUpdates()
+	gm.runBroadcasts()
 	return &gm
 }
 
@@ -34,7 +38,20 @@ func (gm *globalManager) QueueHit(r *RateLimitReq) {
 }
 
 func (gm *globalManager) QueueUpdate(r *RateLimitReq) {
-	gm.updateQueue <- r
+	gm.broadcastQueue <- r
+}
+
+func (gm *globalManager) Stats(clear bool) ServerStats {
+	if clear {
+		defer func() {
+			atomic.StoreInt64(&gm.stats.AsyncGlobalsCount, 0)
+			atomic.StoreInt64(&gm.stats.BroadcastDuration, 0)
+		}()
+	}
+	return ServerStats{
+		AsyncGlobalsCount: atomic.LoadInt64(&gm.stats.AsyncGlobalsCount),
+		BroadcastDuration: atomic.LoadInt64(&gm.stats.BroadcastDuration),
+	}
 }
 
 // runAsyncHits collects async hit requests and queues them to
@@ -48,9 +65,9 @@ func (gm *globalManager) runAsyncHits() {
 		case r := <-gm.asyncQueue:
 			// Aggregate the hits into a single request
 			key := r.HashKey()
-			i, ok := hits[key]
+			_, ok := hits[key]
 			if ok {
-				i.Hits += r.Hits
+				hits[key].Hits += r.Hits
 			} else {
 				hits[key] = r
 			}
@@ -115,25 +132,27 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 		cancel()
 
 		if err != nil {
-			gm.log.Errorf("error sending global hits to '%s'", p.client.host)
+			gm.log.WithError(err).
+				Errorf("error sending global hits to '%s'", p.client.host)
 			continue
 		}
 	}
+	atomic.AddInt64(&gm.stats.AsyncGlobalsCount, int64(len(hits)))
 }
 
-// runUpdates collects updates to global rate limits and sends updates to each peer in the cluster.
-func (gm *globalManager) runUpdates() {
+// runBroadcasts collects status changes for global rate limits and broadcasts the changes to each peer in the cluster.
+func (gm *globalManager) runBroadcasts() {
 	var interval = NewInterval(gm.conf.GlobalSyncWait)
 	updates := make(map[string]*RateLimitReq)
 
 	gm.wg.Until(func(done chan struct{}) bool {
 		select {
-		case r := <-gm.asyncQueue:
+		case r := <-gm.broadcastQueue:
 			updates[r.HashKey()] = r
 
 			// Send the hits if we reached our batch limit
 			if len(updates) == gm.conf.GlobalBatchLimit {
-				gm.sendUpdates(updates)
+				gm.updatePeers(updates)
 				updates = make(map[string]*RateLimitReq)
 				return true
 			}
@@ -146,7 +165,7 @@ func (gm *globalManager) runUpdates() {
 
 		case <-interval.C:
 			if len(updates) != 0 {
-				gm.sendHits(updates)
+				gm.updatePeers(updates)
 				updates = make(map[string]*RateLimitReq)
 			}
 		case <-done:
@@ -156,11 +175,13 @@ func (gm *globalManager) runUpdates() {
 	})
 }
 
-func (gm *globalManager) sendUpdates(updates map[string]*RateLimitReq) {
+// updatePeers broadcasts global rate limit statuses to all other peers
+func (gm *globalManager) updatePeers(updates map[string]*RateLimitReq) {
 	var req UpdatePeerGlobalsReq
+	start := time.Now()
 
 	for _, rl := range updates {
-		// We are only interested in the status of the rate limit and
+		// We are only sending the status of the rate limit so
 		// we clear the behavior flag so we don't get queued for update again.
 		rl.Behavior = 0
 		rl.Hits = 0
@@ -178,13 +199,23 @@ func (gm *globalManager) sendUpdates(updates map[string]*RateLimitReq) {
 	}
 
 	for _, peer := range gm.instance.GetPeerList() {
+		// Exclude ourselves from the update
+		if peer.isOwner {
+			continue
+		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), gm.conf.GlobalTimeout)
 		_, err := peer.UpdatePeerGlobals(ctx, &req)
 		cancel()
 
 		if err != nil {
-			gm.log.Errorf("error sending global updates to '%s'", peer.host)
+			gm.log.WithError(err).Errorf("error sending global updates to '%s'", peer.host)
 			continue
 		}
+	}
+
+	duration := int64(time.Now().Sub(start))
+	if atomic.LoadInt64(&gm.stats.BroadcastDuration) < duration {
+		atomic.StoreInt64(&gm.stats.BroadcastDuration, duration)
 	}
 }

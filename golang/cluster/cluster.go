@@ -7,6 +7,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"net"
+	"time"
 )
 
 type instance struct {
@@ -39,6 +40,16 @@ func GetPeer() string {
 	return gubernator.RandomPeer(peers)
 }
 
+// Returns a specific peer
+func PeerAt(idx int) string {
+	return peers[idx]
+}
+
+// Returns a specific instance
+func InstanceAt(idx int) *instance {
+	return instances[idx]
+}
+
 // Start a local cluster of gubernator servers
 func Start(numInstances int) error {
 	var addresses []string
@@ -53,7 +64,13 @@ func StartWith(addresses []string) error {
 	for _, address := range addresses {
 		srv := grpc.NewServer()
 
-		guber, err := gubernator.New(gubernator.Config{GRPCServer: srv})
+		guber, err := gubernator.New(gubernator.Config{
+			GRPCServer: srv,
+			Behaviors: gubernator.BehaviorConfig{
+				GlobalSyncWait: time.Millisecond * 50, // Suitable for testing but not production
+				GlobalTimeout:  time.Second,
+			},
+		})
 		if err != nil {
 			return errors.Wrap(err, "while creating new gubernator instance")
 		}

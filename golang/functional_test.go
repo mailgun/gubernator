@@ -15,7 +15,14 @@ import (
 
 // Setup and shutdown the mailgun mock server for the entire test suite
 func TestMain(m *testing.M) {
-	if err := cluster.Start(5); err != nil {
+	if err := cluster.StartWith([]string{
+		"127.0.0.1:9990",
+		"127.0.0.1:9991",
+		"127.0.0.1:9992",
+		"127.0.0.1:9993",
+		"127.0.0.1:9994",
+		"127.0.0.1:9995",
+	}); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
@@ -156,7 +163,7 @@ func TestLeakyBucket(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
+	for i, test := range tests {
 		resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
 			Requests: []*guber.RateLimitReq{
 				{
@@ -173,9 +180,9 @@ func TestLeakyBucket(t *testing.T) {
 
 		rl := resp.Responses[0]
 
-		assert.Equal(t, test.Status, rl.Status)
-		assert.Equal(t, test.Remaining, rl.Remaining)
-		assert.Equal(t, int64(5), rl.Limit)
+		assert.Equal(t, test.Status, rl.Status, i)
+		assert.Equal(t, test.Remaining, rl.Remaining, i)
+		assert.Equal(t, int64(5), rl.Limit, i)
 		time.Sleep(test.Sleep)
 	}
 }
@@ -241,6 +248,57 @@ func TestMissingFields(t *testing.T) {
 		assert.Equal(t, test.Error, resp.Responses[0].Error, i)
 		assert.Equal(t, test.Status, resp.Responses[0].Status, i)
 	}
+}
+
+func TestGlobalRateLimits(t *testing.T) {
+	client, errs := guber.DialV1Server(cluster.PeerAt(0))
+	require.Nil(t, errs)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+
+	sendHit := func(status guber.Status, remain int64, i int) {
+		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
+			Requests: []*guber.RateLimitReq{
+				{
+					// For this test this name/key should ensure our connected peer is NOT the owner,
+					// the peer we are connected to should forward requests asynchronously to the owner.
+					Name:      "test_global",
+					UniqueKey: "account:1234",
+					Algorithm: guber.Algorithm_TOKEN_BUCKET,
+					Behavior:  guber.Behavior_GLOBAL,
+					Duration:  guber.Second * 3,
+					Hits:      1,
+					Limit:     5,
+				},
+			},
+		})
+		require.Nil(t, err, i)
+		assert.Equal(t, "", resp.Responses[0].Error, i)
+		assert.Equal(t, status, resp.Responses[0].Status, i)
+		assert.Equal(t, remain, resp.Responses[0].Remaining, i)
+		assert.Equal(t, int64(5), resp.Responses[0].Limit, i)
+	}
+
+	// Our first hit should create the request on the peer and queue for async forward
+	sendHit(guber.Status_UNDER_LIMIT, 4, 1)
+
+	// Our second hit should return the same response as the first since the async forward hasn't occurred yet
+	sendHit(guber.Status_UNDER_LIMIT, 4, 2)
+
+	time.Sleep(time.Second)
+
+	// Our second hit should return the accurate response as the async forward should have completed and the owner
+	// will have updated us with the latest counts
+	sendHit(guber.Status_UNDER_LIMIT, 3, 3)
+
+	instance := cluster.InstanceAt(0)
+	stats := instance.Guber.Stats(false)
+	assert.Equal(t, int64(1), stats.AsyncGlobalsCount)
+
+	instance = cluster.InstanceAt(3)
+	stats = instance.Guber.Stats(false)
+	assert.True(t, stats.BroadcastDuration != 0)
 }
 
 // TODO: Add a test for sending no rate limits RateLimitReqList.RateLimits = nil

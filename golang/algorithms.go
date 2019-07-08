@@ -99,7 +99,11 @@ func leakyBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 			b.LimitRemaining = b.Limit
 		}
 
-		b.TimeStamp = now
+		// Only update the TS if client is incrementing the hit
+		if r.Hits != 0 {
+			b.TimeStamp = now
+		}
+
 		rl := &RateLimitResp{
 			Limit:     b.Limit,
 			Remaining: b.LimitRemaining,
@@ -124,6 +128,11 @@ func leakyBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 		if r.Hits > b.LimitRemaining {
 			rl.Status = Status_OVER_LIMIT
 			rl.ResetTime = now + rate
+			return rl, nil
+		}
+
+		// Client is only interested in retrieving the current status
+		if r.Hits == 0 {
 			return rl, nil
 		}
 

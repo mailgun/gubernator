@@ -3,13 +3,14 @@ package gubernator
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
+
 	"github.com/mailgun/holster"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"strings"
-	"sync"
 )
 
 const (
@@ -21,10 +22,11 @@ const (
 var log *logrus.Entry
 
 type Instance struct {
-	health    HealthCheckResp
 	wg        holster.WaitGroup
-	conf      Config
+	health    HealthCheckResp
+	global    *globalManager
 	peerMutex sync.RWMutex
+	conf      Config
 }
 
 func New(conf Config) (*Instance, error) {
@@ -41,6 +43,8 @@ func New(conf Config) (*Instance, error) {
 		conf: conf,
 	}
 
+	s.global = newGlobalManager(conf.Behaviors, &s)
+
 	// Register our server with GRPC
 	RegisterV1Server(conf.GRPCServer, &s)
 	RegisterPeersV1Server(conf.GRPCServer, &s)
@@ -48,6 +52,9 @@ func New(conf Config) (*Instance, error) {
 	return &s, nil
 }
 
+// GetRateLimits is the public interface used by clients to request rate limits from the system. If the
+// rate limit `Name` and `UniqueKey` is not owned by this instance then we forward the request to the
+// peer that does.
 func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*GetRateLimitsResp, error) {
 	var resp GetRateLimitsResp
 
@@ -73,16 +80,13 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*Get
 			goto NextRateLimit
 		}
 
-		s.peerMutex.RLock()
-		peer, err = s.conf.Picker.Get(globalKey)
+		peer, err = s.GetPeer(globalKey)
 		if err != nil {
-			s.peerMutex.RUnlock()
 			rl = &RateLimitResp{
 				Error: fmt.Sprintf("while finding peer that owns rate limit '%s' - '%s'", globalKey, err),
 			}
 			goto NextRateLimit
 		}
-		s.peerMutex.RUnlock()
 
 		// If our server instance is the owner of this rate limit
 		if peer.isOwner {
@@ -95,6 +99,14 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*Get
 				goto NextRateLimit
 			}
 		} else {
+			if req.Behavior == Behavior_GLOBAL {
+				rl, err = s.getGlobalRateLimit(req)
+				if err != nil {
+					rl = &RateLimitResp{Error: err.Error()}
+				}
+				goto NextRateLimit
+			}
+
 			// Make an RPC call to the peer that owns this rate limit
 			rl, err = peer.GetPeerRateLimit(ctx, req)
 			if err != nil {
@@ -112,12 +124,45 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*Get
 	return &resp, nil
 }
 
-// TO
-func (s *Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
-	// NOT IMPLEMENTED
-	return nil, nil
+// getGlobalRateLimit handles rate limits that are marked as `Behavior = GLOBAL`. Rate limit responses
+// are returned from the local cache and the hits are queued to be sent to the owning peer.
+func (s *Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, error) {
+	// Queue the hit for async update
+	s.global.QueueHit(req)
+
+	s.conf.Cache.Lock()
+	item, ok := s.conf.Cache.Get(req.HashKey())
+	s.conf.Cache.Unlock()
+	if ok {
+		rl, ok := item.(*RateLimitResp)
+		if !ok {
+			// Perhaps the rate limit algorithm was changed by the user.
+			s.conf.Cache.Remove(req.HashKey())
+			return s.getGlobalRateLimit(req)
+		}
+		return rl, nil
+	} else {
+		cpy := *req
+		cpy.Behavior = Behavior_NO_BATCHING
+		// Process the rate limit like we own it since we have no data on the rate limit
+		resp, err := s.getRateLimit(&cpy)
+		return resp, err
+	}
 }
 
+// UpdatePeerGlobals updates the local cache with a list of global rate limits. This method should only
+// be called by a peer who is the owner of a global rate limit.
+func (s *Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
+	s.conf.Cache.Lock()
+	defer s.conf.Cache.Unlock()
+
+	for _, g := range r.Globals {
+		s.conf.Cache.Add(g.Key, g.Status, g.Status.ResetTime)
+	}
+	return &UpdatePeerGlobalsResp{}, nil
+}
+
+// GetPeerRateLimits is called by other peers to get the rate limits owned by this peer.
 func (s *Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
 	var resp GetPeerRateLimitsResp
 
@@ -137,7 +182,7 @@ func (s *Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsRe
 	return &resp, nil
 }
 
-// Returns the health of the peer.
+// HealthCheck Returns the health of our instance.
 func (s *Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*HealthCheckResp, error) {
 	s.peerMutex.RLock()
 	defer s.peerMutex.RUnlock()
@@ -148,6 +193,10 @@ func (s *Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
 	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
 
+	if r.Behavior == Behavior_GLOBAL {
+		s.global.QueueUpdate(r)
+	}
+
 	switch r.Algorithm {
 	case Algorithm_TOKEN_BUCKET:
 		return tokenBucket(s.conf.Cache, r)
@@ -157,7 +206,7 @@ func (s *Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
 	return nil, errors.Errorf("invalid rate limit algorithm '%d'", r.Algorithm)
 }
 
-// Called when the pool of peers changes
+// SetPeers is called when the pool of peers changes
 func (s *Instance) SetPeers(peers []PeerInfo) {
 	picker := s.conf.Picker.New()
 	var errs []string
@@ -170,7 +219,7 @@ func (s *Instance) SetPeers(peers []PeerInfo) {
 			continue
 		}
 
-		if info := s.conf.Picker.GetPeer(peer.Address); info != nil {
+		if info := s.conf.Picker.GetPeerByHost(peer.Address); info != nil {
 			peerInfo = info
 		}
 
@@ -196,4 +245,26 @@ func (s *Instance) SetPeers(peers []PeerInfo) {
 	}
 	s.health.PeerCount = int32(picker.Size())
 	log.WithField("peers", peers).Debug("Peers updated")
+}
+
+// GetPeers returns a peer client for the hash key provided
+func (s *Instance) GetPeer(key string) (*PeerClient, error) {
+	s.peerMutex.RLock()
+	peer, err := s.conf.Picker.Get(key)
+	if err != nil {
+		s.peerMutex.RUnlock()
+		return nil, err
+	}
+	s.peerMutex.RUnlock()
+	return peer, nil
+}
+
+func (s *Instance) GetPeerList() []*PeerClient {
+	s.peerMutex.RLock()
+	defer s.peerMutex.RUnlock()
+	return s.conf.Picker.Peers()
+}
+
+func (s *Instance) Stats(clear bool) ServerStats {
+	return s.global.Stats(clear)
 }

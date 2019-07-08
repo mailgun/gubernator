@@ -64,20 +64,21 @@ func main() {
 
 	cache := cache.NewLRUCache(conf.CacheSize)
 
-	sClient := newStatsdClient(conf)
-	if sClient != nil {
-		metrics, err = gubernator.NewStatsdMetrics(sClient)
-		checkErr(err, "while starting statsd metrics")
-		opts = append(opts, grpc.StatsHandler(metrics.GRPCStatsHandler()))
-		metrics.RegisterCacheStats(cache)
-	}
-
 	grpcSrv := grpc.NewServer(opts...)
 
 	guber, err := gubernator.New(gubernator.Config{
 		GRPCServer: grpcSrv,
 		Cache:      cache,
 	})
+
+	sClient := newStatsdClient(conf)
+	if sClient != nil {
+		metrics, err = gubernator.NewStatsdMetrics(sClient)
+		checkErr(err, "while starting statsd metrics")
+		opts = append(opts, grpc.StatsHandler(metrics.GRPCStatsHandler()))
+		metrics.RegisterCacheStats(cache)
+		metrics.RegisterServerStats(guber)
+	}
 
 	checkErr(err, "while creating new gubernator instance")
 

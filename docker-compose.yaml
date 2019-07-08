@@ -14,9 +14,3 @@ services:
         -initial-cluster-state new
     ports:
       - "2379:2379"
-  metrics:
-    image: registry.postgun.com:5000/kubegun/metrics:latest
-    ports:
-      - "8125:8125/udp"
-      - "8081:81"
-      - "8080:80"

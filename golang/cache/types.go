@@ -1,7 +1,7 @@
 package cache
 
 // Interface accepts any cache which returns cache stats
-type CacheStats interface {
+type Stater interface {
 	Stats(bool) Stats
 }
 

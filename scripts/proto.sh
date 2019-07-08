@@ -28,6 +28,3 @@ python3 -m grpc_tools.protoc \
     $PROTO_DIR/*.proto
 
 touch $PY_DIR/__init__.py
-
-# Fix import paths because python3
-./scripts/fix-import.py

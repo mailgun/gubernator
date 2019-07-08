@@ -8,7 +8,7 @@ import (
 )
 
 type PeerPicker interface {
-	GetPeer(host string) *PeerClient
+	GetPeerByHost(host string) *PeerClient
 	Peers() []*PeerClient
 	Get(string) (*PeerClient, error)
 	New() PeerPicker
@@ -64,7 +64,7 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 	}
 
 	// Send a single low latency rate limit request
-	resp, err := c.getPeerRateLimits(ctx, &GetPeerRateLimitsReq{
+	resp, err := c.GetPeerRateLimits(ctx, &GetPeerRateLimitsReq{
 		Requests: []*RateLimitReq{r},
 	})
 	if err != nil {
@@ -73,7 +73,8 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 	return resp.RateLimits[0], nil
 }
 
-func (c *PeerClient) getPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
+// GetPeerRateLimits requests a list of rate limit statuses from a peer
+func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
 	resp, err := c.client.GetPeerRateLimits(ctx, r)
 	if err != nil {
 		return nil, err
@@ -84,6 +85,11 @@ func (c *PeerClient) getPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 		return nil, errors.New("number of rate limits in peer response does not match request")
 	}
 	return resp, nil
+}
+
+// UpdatePeerGlobals sends global rate limit status updates to a peer
+func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
+	return c.client.UpdatePeerGlobals(ctx, r)
 }
 
 func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {

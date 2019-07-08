@@ -56,7 +56,7 @@ func (ch *ConsistantHash) Size() int {
 }
 
 // Returns the peer by hostname
-func (ch *ConsistantHash) GetPeer(host string) *PeerClient {
+func (ch *ConsistantHash) GetPeerByHost(host string) *PeerClient {
 	return ch.peerMap[int(ch.hashFunc([]byte(host)))]
 }
 

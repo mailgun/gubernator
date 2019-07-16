@@ -63,64 +63,91 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*Get
 			"Requests.RateLimits list too large; max size is '%d'", maxBatchSize)
 	}
 
-	// TODO: Support getting multiple keys in an async manner (FanOut)
-	for _, req := range r.Requests {
-		globalKey := req.Name + "_" + req.UniqueKey
-		var rl *RateLimitResp
-		var peer *PeerClient
-		var err error
-
-		if len(req.UniqueKey) == 0 {
-			rl = &RateLimitResp{Error: "field 'unique_key' cannot be empty"}
-			goto NextRateLimit
-		}
-
-		if len(req.Name) == 0 {
-			rl = &RateLimitResp{Error: "field 'namespace' cannot be empty"}
-			goto NextRateLimit
-		}
-
-		peer, err = s.GetPeer(globalKey)
-		if err != nil {
-			rl = &RateLimitResp{
-				Error: fmt.Sprintf("while finding peer that owns rate limit '%s' - '%s'", globalKey, err),
-			}
-			goto NextRateLimit
-		}
-
-		// If our server instance is the owner of this rate limit
-		if peer.isOwner {
-			// Apply our rate limit algorithm to the request
-			rl, err = s.getRateLimit(req)
-			if err != nil {
-				rl = &RateLimitResp{
-					Error: fmt.Sprintf("while applying rate limit for '%s' - '%s'", globalKey, err),
-				}
-				goto NextRateLimit
-			}
-		} else {
-			if req.Behavior == Behavior_GLOBAL {
-				rl, err = s.getGlobalRateLimit(req)
-				if err != nil {
-					rl = &RateLimitResp{Error: err.Error()}
-				}
-				goto NextRateLimit
-			}
-
-			// Make an RPC call to the peer that owns this rate limit
-			rl, err = peer.GetPeerRateLimit(ctx, req)
-			if err != nil {
-				rl = &RateLimitResp{
-					Error: fmt.Sprintf("while fetching rate limit '%s' from peer - '%s'", globalKey, err),
-				}
-			}
-
-			// Inform the client of the owner key of the key
-			rl.Metadata = map[string]string{"owner": peer.host}
-		}
-	NextRateLimit:
-		resp.Responses = append(resp.Responses, rl)
+	type InOut struct {
+		In  *RateLimitReq
+		Idx int
+		Out *RateLimitResp
 	}
+
+	// Asynchronously fetch rate limits
+	out := make(chan InOut)
+	go func() {
+		fan := holster.NewFanOut(1000)
+		// For each item in the request body
+		for i, item := range r.Requests {
+			fan.Run(func(data interface{}) error {
+				inOut := data.(InOut)
+
+				globalKey := inOut.In.Name + "_" + inOut.In.UniqueKey
+				var peer *PeerClient
+				var err error
+
+				if len(inOut.In.UniqueKey) == 0 {
+					inOut.Out = &RateLimitResp{Error: "field 'unique_key' cannot be empty"}
+					out <- inOut
+					return nil
+				}
+
+				if len(inOut.In.Name) == 0 {
+					inOut.Out = &RateLimitResp{Error: "field 'namespace' cannot be empty"}
+					out <- inOut
+					return nil
+				}
+
+				peer, err = s.GetPeer(globalKey)
+				if err != nil {
+					inOut.Out = &RateLimitResp{
+						Error: fmt.Sprintf("while finding peer that owns rate limit '%s' - '%s'", globalKey, err),
+					}
+					out <- inOut
+					return nil
+				}
+
+				// If our server instance is the owner of this rate limit
+				if peer.isOwner {
+					// Apply our rate limit algorithm to the request
+					inOut.Out, err = s.getRateLimit(inOut.In)
+					if err != nil {
+						inOut.Out = &RateLimitResp{
+							Error: fmt.Sprintf("while applying rate limit for '%s' - '%s'", globalKey, err),
+						}
+					}
+				} else {
+					if inOut.In.Behavior == Behavior_GLOBAL {
+						inOut.Out, err = s.getGlobalRateLimit(inOut.In)
+						if err != nil {
+							inOut.Out = &RateLimitResp{Error: err.Error()}
+						}
+						out <- inOut
+						return nil
+					}
+
+					// Make an RPC call to the peer that owns this rate limit
+					inOut.Out, err = peer.GetPeerRateLimit(ctx, inOut.In)
+					if err != nil {
+						inOut.Out = &RateLimitResp{
+							Error: fmt.Sprintf("while fetching rate limit '%s' from peer - '%s'", globalKey, err),
+						}
+					}
+
+					// Inform the client of the owner key of the key
+					inOut.Out.Metadata = map[string]string{"owner": peer.host}
+				}
+
+				out <- inOut
+				return nil
+			}, InOut{In: item, Idx: i})
+		}
+		fan.Wait()
+		close(out)
+	}()
+
+	resp.Responses = make([]*RateLimitResp, len(r.Requests))
+	// Collect the async responses as they return
+	for i := range out {
+		resp.Responses[i.Idx] = i.Out
+	}
+
 	return &resp, nil
 }
 

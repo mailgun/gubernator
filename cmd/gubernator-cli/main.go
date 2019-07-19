@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	guber "github.com/mailgun/gubernator/golang"
+	guber "github.com/mailgun/gubernator"
 	"github.com/mailgun/holster"
 )
 

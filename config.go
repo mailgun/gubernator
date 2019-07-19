@@ -2,7 +2,7 @@ package gubernator
 
 import (
 	"fmt"
-	"github.com/mailgun/gubernator/golang/cache"
+	"github.com/mailgun/gubernator/cache"
 	"github.com/mailgun/holster"
 	"google.golang.org/grpc"
 	"time"

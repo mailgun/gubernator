@@ -2,7 +2,7 @@ package cluster
 
 import (
 	"fmt"
-	"github.com/mailgun/gubernator/golang"
+	"github.com/mailgun/gubernator"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"

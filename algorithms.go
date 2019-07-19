@@ -1,7 +1,7 @@
 package gubernator
 
 import (
-	"github.com/mailgun/gubernator/golang/cache"
+	"github.com/mailgun/gubernator/cache"
 )
 
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket

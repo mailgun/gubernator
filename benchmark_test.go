@@ -2,8 +2,8 @@ package gubernator_test
 
 import (
 	"context"
-	guber "github.com/mailgun/gubernator/golang"
-	"github.com/mailgun/gubernator/golang/cluster"
+	guber "github.com/mailgun/gubernator"
+	"github.com/mailgun/gubernator/cluster"
 	"github.com/mailgun/holster"
 	"testing"
 )

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mailgun/gubernator/golang/cache"
+	"github.com/mailgun/gubernator/cache"
 	"github.com/mailgun/holster"
 	"github.com/smira/go-statsd"
 	"google.golang.org/grpc/stats"

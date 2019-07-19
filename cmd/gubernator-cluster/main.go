@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/mailgun/gubernator/golang/cluster"
+	"github.com/mailgun/gubernator/cluster"
 	"github.com/sirupsen/logrus"
 )
 

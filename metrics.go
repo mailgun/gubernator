@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/mailgun/gubernator/golang/cache"
+	"github.com/mailgun/gubernator/cache"
 	"google.golang.org/grpc/stats"
 )
 

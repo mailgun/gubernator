@@ -1,9 +1,15 @@
 # Build image
 FROM golang:1.12 as build
 
+WORKDIR /src
+
+# This should create cached layer of our dependencies for subsequent builds to use
+COPY go.mod /src
+COPY go.sum /src
+RUN go mod download
+
 # Copy the local package files to the container
 ADD . /src
-WORKDIR /src
 ENV VERSION=dev-build
 
 # Build the bot inside the container

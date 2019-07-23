@@ -23,7 +23,7 @@ services:
       # The address peers will connect too
       # Should be the same as grpc-listen-address unless you are running behind
       # a NAT or running in a docker container without host networking
-      - GUBER_ADVERTISE_ADDRESS=gubernator-1:81
+      - GUBER_ETCD_ADVERTISE_ADDRESS=gubernator-1:81
       # Max size of the cache; The cache size will never grow beyond this size.
       - GUBER_CACHE_SIZE=50000
       # A Comma separate list of etcd nodes
@@ -42,7 +42,7 @@ services:
       # The address peers will connect too
       # Should be the same as grpc-listen-address unless you are running behind
       # a NAT or running in a docker container without host networking
-      - GUBER_ADVERTISE_ADDRESS=gubernator-2:81
+      - GUBER_ETCD_ADVERTISE_ADDRESS=gubernator-2:81
       # Max size of the cache; The cache size will never grow beyond this size.
       - GUBER_CACHE_SIZE=50000
       # A Comma separate list of etcd nodes

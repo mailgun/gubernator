@@ -63,17 +63,26 @@ func main() {
 		checkErr(grpcSrv.Serve(listener), "while starting GRPC server")
 	})
 
-	// Register ourselves with other peers via ETCD
-	etcdClient, err := etcdutil.NewClient(&conf.EtcdConf)
-	checkErr(err, "while connecting to etcd")
+	var pool gubernator.PoolInterface
 
-	pool, err := gubernator.NewEtcdPool(gubernator.EtcdPoolConfig{
-		AdvertiseAddress: conf.AdvertiseAddress,
-		OnUpdate:         guber.SetPeers,
-		Client:           etcdClient,
-		BaseKey:          conf.EtcdKeyPrefix,
-	})
-	checkErr(err, "while registering with ETCD pool")
+	if conf.K8PoolConf.Enabled {
+		// Source our list of peers from kubernetes endpoint API
+		conf.K8PoolConf.OnUpdate = guber.SetPeers
+		pool, err = gubernator.NewK8sPool(conf.K8PoolConf)
+		checkErr(err, "while querying kubernetes API")
+	} else {
+		// Register ourselves with other peers via ETCD
+		etcdClient, err := etcdutil.NewClient(&conf.EtcdConf)
+		checkErr(err, "while connecting to etcd")
+
+		pool, err = gubernator.NewEtcdPool(gubernator.EtcdPoolConfig{
+			AdvertiseAddress: conf.EtcdAdvertiseAddress,
+			OnUpdate:         guber.SetPeers,
+			Client:           etcdClient,
+			BaseKey:          conf.EtcdKeyPrefix,
+		})
+		checkErr(err, "while registering with ETCD pool")
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -81,7 +90,7 @@ func main() {
 	// Setup an JSON Gateway API for our GRPC methods
 	gateway := runtime.NewServeMux()
 	err = gubernator.RegisterV1HandlerFromEndpoint(ctx, gateway,
-		conf.AdvertiseAddress, []grpc.DialOption{grpc.WithInsecure()})
+		conf.EtcdAdvertiseAddress, []grpc.DialOption{grpc.WithInsecure()})
 	checkErr(err, "while registering GRPC gateway handler")
 
 	// Serve the JSON Gateway and metrics handlers via standard HTTP/1

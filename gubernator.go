@@ -272,7 +272,7 @@ func (s *Instance) SetPeers(peers []PeerInfo) {
 		s.health.Message = strings.Join(errs, "|")
 	}
 	s.health.PeerCount = int32(picker.Size())
-	log.WithField("peers", peers).Debug("Peers updated")
+	log.WithField("peers", peers).Info("Peers updated")
 }
 
 // GetPeers returns a peer client for the hash key provided

@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"flag"
 	"fmt"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"io/ioutil"
@@ -21,17 +22,20 @@ import (
 var debug = false
 
 type ServerConfig struct {
-	GRPCListenAddress string
-	AdvertiseAddress  string
-	HTTPListenAddress string
-	EtcdKeyPrefix     string
-	CacheSize         int
+	GRPCListenAddress    string
+	EtcdAdvertiseAddress string
+	HTTPListenAddress    string
+	EtcdKeyPrefix        string
+	CacheSize            int
 
 	// Etcd configuration used to find peers
 	EtcdConf etcd.Config
 
 	// Configure how behaviours behave
 	Behaviors gubernator.BehaviorConfig
+
+	// K8s configuration used to find peers inside a K8s cluster
+	K8PoolConf gubernator.K8sPoolConfig
 }
 
 func confFromEnv() (ServerConfig, error) {
@@ -45,8 +49,10 @@ func confFromEnv() (ServerConfig, error) {
 		return conf, err
 	}
 
-	if debug {
+	if debug || os.Getenv("GUBER_DEBUG") != "" {
 		logrus.SetLevel(logrus.DebugLevel)
+		logrus.Debug("Debug enabled")
+		debug = true
 	}
 
 	if configFile != "" {
@@ -59,9 +65,7 @@ func confFromEnv() (ServerConfig, error) {
 	// Main config
 	holster.SetDefault(&conf.GRPCListenAddress, os.Getenv("GUBER_GRPC_ADDRESS"), "0.0.0.0:81")
 	holster.SetDefault(&conf.HTTPListenAddress, os.Getenv("GUBER_HTTP_ADDRESS"), "0.0.0.0:80")
-	holster.SetDefault(&conf.AdvertiseAddress, os.Getenv("GUBER_ADVERTISE_ADDRESS"), "127.0.0.1:81")
 	holster.SetDefault(&conf.CacheSize, getEnvInteger("GUBER_CACHE_SIZE"), 50000)
-	holster.SetDefault(&conf.EtcdKeyPrefix, os.Getenv("GUBER_ETCD_KEY_PREFIX"), "/gubernator-peers")
 
 	// Behaviors
 	holster.SetDefault(&conf.Behaviors.BatchTimeout, getEnvDuration("GUBER_BATCH_TIMEOUT"))
@@ -73,10 +77,35 @@ func confFromEnv() (ServerConfig, error) {
 	holster.SetDefault(&conf.Behaviors.GlobalSyncWait, getEnvDuration("GUBER_GLOBAL_SYNC_WAIT"))
 
 	// ETCD Config
+	holster.SetDefault(&conf.EtcdAdvertiseAddress, os.Getenv("GUBER_ETCD_ADVERTISE_ADDRESS"), "127.0.0.1:81")
+	holster.SetDefault(&conf.EtcdKeyPrefix, os.Getenv("GUBER_ETCD_KEY_PREFIX"), "/gubernator-peers")
 	holster.SetDefault(&conf.EtcdConf.Endpoints, getEnvSlice("GUBER_ETCD_ENDPOINTS"), []string{"localhost:2379"})
 	holster.SetDefault(&conf.EtcdConf.DialTimeout, getEnvDuration("GUBER_ETCD_DIAL_TIMEOUT"), time.Second*5)
 	holster.SetDefault(&conf.EtcdConf.Username, os.Getenv("GUBER_ETCD_USER"))
 	holster.SetDefault(&conf.EtcdConf.Password, os.Getenv("GUBER_ETCD_PASSWORD"))
+
+	// Kubernetes Config
+	holster.SetDefault(&conf.K8PoolConf.Namespace, os.Getenv("GUBER_K8S_NAMESPACE"), "default")
+	conf.K8PoolConf.PodIP = os.Getenv("GUBER_K8S_POD_IP")
+	conf.K8PoolConf.PodPort = os.Getenv("GUBER_K8S_POD_PORT")
+	conf.K8PoolConf.Selector = os.Getenv("GUBER_K8S_ENDPOINTS_SELECTOR")
+
+	if anyHasPrefix("GUBER_K8S_", os.Environ()) {
+		logrus.Debug("K8s peer pool config found")
+		conf.K8PoolConf.Enabled = true
+		if conf.K8PoolConf.Selector == "" {
+			return conf, errors.New("when using k8s for peer discovery, you MUST provide a " +
+				"`GUBER_K8S_ENDPOINTS_SELECTOR` to select the gubernator peers from the endpoints listing")
+		}
+	}
+
+	if anyHasPrefix("GUBER_ETCD_", os.Environ()) {
+		logrus.Debug("ETCD peer pool config found")
+		if conf.K8PoolConf.Enabled {
+			return conf, errors.New("refusing to register gubernator peers with both etcd and k8s;" +
+				" remove either `GUBER_ETCD_*` or `GUBER_K8S_*` variables from the environment")
+		}
+	}
 
 	// If env contains any TLS configuration
 	if anyHasPrefix("GUBER_ETCD_TLS_", os.Environ()) {
@@ -84,6 +113,11 @@ func confFromEnv() (ServerConfig, error) {
 			return conf, err
 		}
 	}
+
+	if debug {
+		spew.Dump(conf)
+	}
+
 	return conf, nil
 }
 

@@ -73,7 +73,7 @@ func confFromEnv() (ServerConfig, error) {
 	holster.SetDefault(&conf.Behaviors.GlobalSyncWait, getEnvDuration("GUBER_GLOBAL_SYNC_WAIT"))
 
 	// ETCD Config
-	holster.SetDefault(&conf.EtcdConf.Endpoints, getEnvSlice("GUBER_ETCD_ENDPOINTS"), "localhost:2379")
+	holster.SetDefault(&conf.EtcdConf.Endpoints, getEnvSlice("GUBER_ETCD_ENDPOINTS"), []string{"localhost:2379"})
 	holster.SetDefault(&conf.EtcdConf.DialTimeout, getEnvDuration("GUBER_ETCD_DIAL_TIMEOUT"), time.Second*5)
 	holster.SetDefault(&conf.EtcdConf.Username, os.Getenv("GUBER_ETCD_USER"))
 	holster.SetDefault(&conf.EtcdConf.Password, os.Getenv("GUBER_ETCD_PASSWORD"))

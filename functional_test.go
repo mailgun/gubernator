@@ -9,6 +9,8 @@ import (
 
 	guber "github.com/mailgun/gubernator"
 	"github.com/mailgun/gubernator/cluster"
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -292,13 +294,24 @@ func TestGlobalRateLimits(t *testing.T) {
 	// will have updated us with the latest counts
 	sendHit(guber.Status_UNDER_LIMIT, 3, 3)
 
+	// Inspect our metrics, ensure they collected the counts we expected during this test
 	instance := cluster.InstanceAt(0)
-	stats := instance.Guber.Stats(false)
-	assert.Equal(t, int64(1), stats.AsyncGlobalsCount)
+	metricCh := make(chan prometheus.Metric, 5)
+	instance.Guber.Collect(metricCh)
+
+	buf := dto.Metric{}
+	m := <-metricCh // Async metric
+	assert.Nil(t, m.Write(&buf))
+	assert.Equal(t, uint64(1), *buf.Histogram.SampleCount)
 
 	instance = cluster.InstanceAt(3)
-	stats = instance.Guber.Stats(false)
-	assert.True(t, stats.BroadcastDuration != 0)
+	metricCh = make(chan prometheus.Metric, 5)
+	instance.Guber.Collect(metricCh)
+
+	m = <-metricCh // Async metric
+	m = <-metricCh // Broadcast metric
+	assert.Nil(t, m.Write(&buf))
+	assert.Equal(t, uint64(1), *buf.Histogram.SampleCount)
 }
 
 // TODO: Add a test for sending no rate limits RateLimitReqList.RateLimits = nil

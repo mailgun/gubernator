@@ -16,9 +16,6 @@ type Cache interface {
 	// If the cache is exclusive, this will control access to the cache
 	Unlock()
 	Lock()
-
-	// Returns stats collected about keys in the cache
-	Stats(bool) Stats
 }
 
 // A Key may be any value that is comparable. See http://golang.org/ref/spec#Comparison_operators

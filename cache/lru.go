@@ -21,6 +21,7 @@ package cache
 import (
 	"container/list"
 	"github.com/mailgun/holster"
+	"github.com/prometheus/client_golang/prometheus"
 	"sync"
 	"time"
 )
@@ -32,6 +33,10 @@ type LRUCache struct {
 	ll        *list.List
 	stats     Stats
 	cacheSize int
+
+	// Stats
+	sizeMetric   *prometheus.Desc
+	accessMetric *prometheus.Desc
 }
 
 type cacheRecord struct {
@@ -48,6 +53,10 @@ func NewLRUCache(maxSize int) *LRUCache {
 		cache:     make(map[interface{}]*list.Element),
 		ll:        list.New(),
 		cacheSize: maxSize,
+		sizeMetric: prometheus.NewDesc("cache_size",
+			"Size of the LRU Cache which holds the rate limits.", nil, nil),
+		accessMetric: prometheus.NewDesc("cache_access_count",
+			"Cache access counts.", []string{"type"}, nil),
 	}
 }
 
@@ -137,19 +146,6 @@ func (c *LRUCache) Size() int {
 	return c.ll.Len()
 }
 
-// Returns stats about the current state of the cache
-func (c *LRUCache) Stats(clear bool) Stats {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	if clear {
-		defer func() {
-			c.stats = Stats{}
-		}()
-	}
-	c.stats.Size = int64(len(c.cache))
-	return c.stats
-}
-
 // Update the expiration time for the key
 func (c *LRUCache) UpdateExpiration(key Key, expireAt int64) bool {
 	if ele, hit := c.cache[key]; hit {
@@ -158,4 +154,19 @@ func (c *LRUCache) UpdateExpiration(key Key, expireAt int64) bool {
 		return true
 	}
 	return false
+}
+
+// Describe fetches prometheus metrics to be registered
+func (c *LRUCache) Describe(ch chan<- *prometheus.Desc) {
+	ch <- c.sizeMetric
+	ch <- c.accessMetric
+}
+
+// Collect fetches metric counts and gauges from the cache
+func (c *LRUCache) Collect(ch chan<- prometheus.Metric) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	ch <- prometheus.MustNewConstMetric(c.accessMetric, prometheus.CounterValue, float64(c.stats.Hit), "hit")
+	ch <- prometheus.MustNewConstMetric(c.accessMetric, prometheus.CounterValue, float64(c.stats.Miss), "miss")
+	ch <- prometheus.MustNewConstMetric(c.sizeMetric, prometheus.GaugeValue, float64(len(c.cache)))
 }

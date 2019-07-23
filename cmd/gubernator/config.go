@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"io/ioutil"
 	"os"
 	"strconv"
@@ -17,10 +18,13 @@ import (
 	"github.com/mailgun/holster"
 )
 
+var debug = false
+
 type ServerConfig struct {
 	GRPCListenAddress string
 	AdvertiseAddress  string
 	HTTPListenAddress string
+	EtcdKeyPrefix     string
 	CacheSize         int
 
 	// Etcd configuration used to find peers
@@ -36,8 +40,13 @@ func confFromEnv() (ServerConfig, error) {
 
 	flags := flag.NewFlagSet("gubernator", flag.ContinueOnError)
 	flags.StringVar(&configFile, "config", "", "yaml config file")
+	flags.BoolVar(&debug, "debug", false, "enable debug")
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		return conf, err
+	}
+
+	if debug {
+		logrus.SetLevel(logrus.DebugLevel)
 	}
 
 	if configFile != "" {
@@ -52,6 +61,7 @@ func confFromEnv() (ServerConfig, error) {
 	holster.SetDefault(&conf.HTTPListenAddress, os.Getenv("GUBER_HTTP_ADDRESS"), "0.0.0.0:80")
 	holster.SetDefault(&conf.AdvertiseAddress, os.Getenv("GUBER_ADVERTISE_ADDRESS"), "127.0.0.1:81")
 	holster.SetDefault(&conf.CacheSize, getEnvInteger("GUBER_CACHE_SIZE"), 50000)
+	holster.SetDefault(&conf.EtcdKeyPrefix, os.Getenv("GUBER_ETCD_KEY_PREFIX"), "/gubernator-peers")
 
 	// Behaviors
 	holster.SetDefault(&conf.Behaviors.BatchTimeout, getEnvDuration("GUBER_BATCH_TIMEOUT"))
@@ -178,11 +188,13 @@ func fromEnvFile(configFile string) error {
 		return fmt.Errorf("while reading config file '%s': %s", configFile, err)
 	}
 	for i, line := range strings.Split(string(contents), "\n") {
-		// Skip comments
-		if strings.HasPrefix(line, "#") {
+		// Skip comments, empty lines or lines with tabs
+		if strings.HasPrefix(line, "#") || strings.HasPrefix(line, " ") ||
+			strings.HasPrefix(line, "\t") || len(line) == 0 {
 			continue
 		}
 
+		logrus.Debugf("config: [%d] '%s'", i, line)
 		parts := strings.Split(line, "=")
 		if len(parts) != 2 {
 			return errors.Errorf("malformed key=value on line '%d'", i)
@@ -192,4 +204,5 @@ func fromEnvFile(configFile string) error {
 			return errors.Wrapf(err, "while settings environ for '%s=%s'", parts[0], parts[1])
 		}
 	}
+	return nil
 }

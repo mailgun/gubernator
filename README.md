@@ -1,74 +1,38 @@
 # Gubernator
 
 Gubernator is a distributed, high performance, cloud native and stateless rate
-limiting service designed to support many different rate limiting scenarios.
+limiting service.
 
-#### Scenarios
-* Meter ingress traffic
-* Meter egress traffic
-* Limit bursts on network queues
-* Enforce capacity limits on network services
 
-## Architecture overview
+#### Features of Gubernator
+* Gubernator evenly distributes rate limit requests across the entire cluster,
+  which means you can scale the system by simply adding more nodes. 
+* Gubernator doesn’t rely on external caches like memcache or redis, as such
+  there is no deployment synchronization with a dependant service. This makes
+  dynamically growing or shrinking the cluster in an orchestration system like
+  kubernetes or nomad trivial.
+* Gubernator holds no state on disk, It’s configuration is passed to it by the
+  client on a per-request basis.
+* Gubernator provides both GRPC and HTTP access to it’s API.
+* Can be run as a sidecar to services that need rate limiting or as a separate service.
+* Can be used as a library to implement a domain specific rate limiting service.
+* Supports optional eventually consistent rate limit distribution for extremely
+  high throughput environments. (See GLOBAL behavior [architecture.md](/architecture.md))
+* Gubernator is the english pronunciation of governor in Russian, also it sounds cool.
 
-![gubernator arch image](/architecture.png)
-
-Gubernator is designed to run as a distributed cluster of peers which utilize
-an in memory cache of all the currently active rate limits, as such no data is
-ever synced to disk. Since most network based rate limit durations are held for
-only a few seconds losing the in memory cache during a reboot or scheduled
-downtime isn't a huge deal. For Gubernator we choose performance over accuracy
-as it's acceptable for a small subset of traffic to be allowed to over request
-for a short period of time (usually milliseconds) in the case of cache loss.
-
-When a rate limit request is made to Gubernator the request is keyed and a
-consistent hashing algorithm is applied to determine which of the peers will be
-the owner of the rate limit request. Choosing a single owner for a rate limit
-makes atomic increments of counts very fast and avoids the complexity and
-latency involved in distributing counts consistently across a cluster of peers.
-
-Although simple and performant this design can be susceptible to a thundering
-herd of requests since a single coordinator is responsible for possibly
-hundreds of thousands of requests to a rate limit. To combat this peers can
-take multiple requests within a specified window and batch the requests into a
-single peer request, thus reducing the total number of requests to a single
-Gubernator peer tremendously.
-
-To ensure each peer in the cluster accurately calculates the correct hash
-for a rate limit key, the list of peers in the cluster must be distributed
-to each peer in the cluster in a timely and consistent manner. Currently
-Gubernator uses Etcd to distribute the list of peers, This could be later
-expanded to a consul or a custom consistent implementation which would further
-simplify deployment.
-
-## Gubernator Operation
-
-Unlike other generic rate limit service implementations, Gubernator does not have
-the concept of pre-configured rate limit that clients make requests against.
-Instead each request to the service includes the rate limit config to be
-applied to the request. This allows clients the flexibility to govern their
-rate limit problem domain without the need to coordinate rate limit
-configuration deployments with Gubernator.
-
-When a client or service makes a request to Gubernator the rate limit config is
-provided with each request by the client. The rate limit configuration is then
-stored with the current rate limit status in the local cache of the rate limit
-owner. Rate limits and their configuration that are stored in the local cache
-will only exist for the specified duration of the rate limit configuration.
-After the duration time has expired, and if the rate limit was not requested
-again within the duration it is dropped from the cache. Subsequent requests for
-the same `name` and `unique_key` pair will recreate the config and rate limit
-in the cache and the cycle will repeat.  Subsequent requests with different
-configs will overwrite the previous config and will apply the new config
-immediately.
+### Stateless configuration
+Gubernator is stateless in that it doesn’t require disk space to operate. No
+configuration or cache data is ever synced to disk. This is because every
+request to gubernator includes the config for the rate limit. At first you
+might think this an unnecessary overhead to each request. However, In reality a
+rate limit config is made up of only 4, 64bit integers.
 
 An example rate limit request sent via GRPC might look like the following
 ```yaml
 rate_limits:
-    # Scopes the unique_key to your application to avoid collisions with 
-    # other applications that might also use the same unique_key
-    name: requests_per_sec
-    # A unique_key that identifies this rate limit request
+    # Scopes the request to a specific rate limit
+  - name: requests_per_sec
+    # A unique_key that identifies this instance of a rate limit request
     unique_key: account_id=123|source_ip=172.0.0.1
     # The number of hits we are requesting
     hits: 1
@@ -87,27 +51,27 @@ rate_limits:
     behavior: 0
 ```
 
-And example response would be
+An example response would be
 
 ```yaml
 rate_limits:
-      # The status of the rate limit.  OK = 0, OVER_LIMIT = 1
-      status: 0,
-      # The current configured limit
-      limit: 10,
-      # The number of requests remaining
-      remaining: 7,
-      # A unix timestamp in milliseconds of when the bucket will reset, or if 
-      # OVER_LIMIT is set it is the time at which the rate limit will no 
-      # longer return OVER_LIMIT.
-      reset_time: 1551309219226,
-      # Additional metadata about the request the client might find useful
-      metadata:
-        # This is the name of the coordinator that rate limited this request
-        "owner": "api-n03.staging.us-east-1.mailgun.org:9041"
+    # The status of the rate limit.  OK = 0, OVER_LIMIT = 1
+  - status: 0,
+    # The current configured limit
+    limit: 10,
+    # The number of requests remaining
+    remaining: 7,
+    # A unix timestamp in milliseconds of when the bucket will reset, or if 
+    # OVER_LIMIT is set it is the time at which the rate limit will no 
+    # longer return OVER_LIMIT.
+    reset_time: 1551309219226,
+    # Additional metadata about the request the client might find useful
+    metadata:
+      # This is the name of the coordinator that rate limited this request
+      "owner": "api-n03.staging.us-east-1.mailgun.org:9041"
 ```
 
-#### Rate limit Algorithm
+### Rate limit Algorithm
 Gubernator currently supports 2 rate limit algorithms.
 
 1. **Token Bucket** implementation starts with an empty bucket, then each `Hit`
@@ -127,47 +91,38 @@ Gubernator currently supports 2 rate limit algorithms.
    the bucket leaks allowing traffic to continue without the need to wait for
    the configured rate limit duration to reset the bucket to zero.
 
-## Global Limits
-Since Gubernator rate limits are hashed and handled by a single peer in the
-cluster. Rate limits that apply to every request in a data center would result
-in the rate limit request being handled by a single peer for the entirety of
-the data center.  For example, consider a rate limit with
-`name=requests_per_datacenter` and a `unique_id=us-east-1`. Now imagine that a
-request is made to Gubernator with this rate limit for every http request that
-enters the `us-east-1` data center. This could be hundreds of thousands,
-potentially millions of requests per second that are all hashed and handled by
-a single peer in the cluster. Because of this potential scaling issue
-Gubernator introduces a configurable `behavior` called `GLOBAL`.
+### Performance
+In our production environment, for every request to our API we send 2 rate
+limit requests to gubernator for rate limit evaluation, one to rate the HTTP
+request and the other is to rate the number of recipients a user can send an
+email too within the specific duration. Under this setup a single gubernator
+node fields over 2,000 requests a second with most batched responses returned
+in under 1 millisecond.
 
-When a rate limit is configured with `behavior=GLOBAL` the rate limit request
-that is received from a client will not be forwarded to the owning peer but
-will be answered from an internal cache handled by the peer. `Hits` toward the
-rate limit will be batched by the receiving peer and sent asynchronously to the
-owning peer where the hits will be totaled and `OVER_LIMIT` calculated.  It
-is then the responsibility of the owning peer to update each peer in the
-cluster with the current status of the rate limit, such that peer internal
-caches routinely get updated with the most current rate limit status.
+![requests graph](/images/requests-graph.png)
 
-##### Side effects of global behavior
-Since `Hits` are batched and forwarded to the owning peer asynchronously, the
-immediate response to the client will not include the most accurate `remaining`
-counts. As that count will only get updated after the async call to the owner
-peer is complete and the owning peer has had time to update all the peers in
-the cluster. As a result the use of `GLOBAL` allows for greater scale but at
-the cost of consistency. Using `GLOBAL` also  increases the amount of traffic
-per rate limit request. `GLOBAL` should only be used for extremely high volume
-rate limits that don't scale well with the traditional non `GLOBAL` behavior.
+Peer requests forwarded to owning nodes typically respond in under 30 microseconds. 
 
-## Performance
-TODO: Show some performance metrics of gubernator running in production
+![peer requests graph](/images/peer-requests-graph.png)
 
-## API
+NOTE The above graphs only report the slowest request within the 1 second sample time.
+ So you are seeing the slowest requests that gubernator fields to clients.
+
+Gubernator allows users to choose non-batching behavior which would further
+reduce latency for client rate limit requests. However because of throughput
+requirements our production environment uses Behaviour=BATCHING with the
+default 500 microsecond window. In production we have observed batch sizes of
+1,000 during peak API usage. Other users who don’t have the same high traffic
+demands could disable batching and would see lower latencies but at the cost of
+throughput.
+
+### API
 All methods are accessed via GRPC but are also exposed via HTTP using the
 [GRPC Gateway](https://github.com/grpc-ecosystem/grpc-gateway)
 
 #### Health Check
-Health check returns `unhealthy` in the event a peer is reported by etcd as `up` but the server
-instance is unable to contact the peer via it's advertised address.
+Health check returns `unhealthy` in the event a peer is reported by etcd or kubernetes
+ as `up` but the server instance is unable to contact that peer via it's advertised address.
 
 ###### GRPC
 ```grpc
@@ -233,28 +188,57 @@ Example response:
 }
 ```
 
+### Deployment
+NOTE: Gubernator uses etcd or kubernetes to discover peers and establish a cluster. If you
+don't have either, the docker-compose method is the simplest way to try gubernator out.
 
-## Installation
-TODO: Show how to run gubernator in a docker container with just environs
-
-
-## Development with Docker Compose
-Gubernator uses etcd to keep track of all it's peers. This peer list is
-used by the consistent hash to calculate which peer is the coordinator 
-for a rate limit, the docker compose file starts a single instance of
-etcd which is suitable for testing the server locally.
-
-You will need to be on the VPN to pull docker images from the repository.
-
+##### Docker with existing etcd cluster
 ```bash
-# Start the containers
-$ docker-compose up -d
-
-# Run gubernator
-$ cd golang
-$ go run ./cmd/gubernator --config config.yaml
+$ docker run -p 8081:81 -p 8080:80 -e GUBER_ETCD_ENDPOINTS=etcd1:2379,etcd2:2379 \
+   thrawn01/gubernator:latest 
+   
+# Hit the API at localhost:8080 (GRPC is at 8081)
+$ curl http://localhost:8080/v1/HealthCheck
 ```
 
-### What kind of name is Gubernator?
-Gubernator is the [english pronunciation of governor](https://www.google.com/search?q=how+to+say+governor+in+russian&oq=how+to+say+govener+in+russ)
-in Russian, also it sounds cool.
+##### Docker compose
+The docker compose file includes a local etcd server and 2 gubernator instances
+```bash
+# Download the docker-compose file
+$ curl -O https://raw.githubusercontent.com/mailgun/gubernator/master/docker-compose.yaml
+
+# Edit the compose file to change the environment config variables
+$ vi docker-compose.yaml
+
+# Run the docker container
+$ docker-compose up -d
+
+# Hit the API at localhost:8080 (GRPC is at 8081)
+$ curl http://localhost:8080/v1/HealthCheck
+```
+
+##### Kubernetes
+```bash
+# Download the kubernetes deployment spec
+$ curl -O https://raw.githubusercontent.com/mailgun/gubernator/master/k8s-deployment.yaml
+
+# Edit the deployment file to change the environment config variables
+$ vi k8s-deployment.yaml
+
+# Create the deployment (includes headless service spec)
+$ kubectl create -f k8s-deployment.yaml
+```
+
+### Configuration
+Gubernator is configured via environment variables with an optional `--config` flag
+which takes a file of key/values and places them into the local environment before startup.
+
+See the `example.conf` for all available config options and their descriptions.
+
+
+### Architecture
+See [architecture.md](/architecture.md) for a full discription of the architecture and the inner 
+workings of gubernator.
+
+
+

@@ -229,7 +229,7 @@ func fromEnvFile(configFile string) error {
 		}
 
 		logrus.Debugf("config: [%d] '%s'", i, line)
-		parts := strings.Split(line, "=")
+		parts := strings.SplitN(line, "=", 2)
 		if len(parts) != 2 {
 			return errors.Errorf("malformed key=value on line '%d'", i)
 		}

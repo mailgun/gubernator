@@ -237,7 +237,7 @@ See the `example.conf` for all available config options and their descriptions.
 
 
 ### Architecture
-See [architecture.md](/architecture.md) for a full discription of the architecture and the inner 
+See [architecture.md](/architecture.md) for a full description of the architecture and the inner 
 workings of gubernator.
 
 

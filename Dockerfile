@@ -1,14 +1,20 @@
 # Build image
-FROM golang:1.11.2 as build
+FROM golang:1.12 as build
+
+WORKDIR /src
+
+# This should create cached layer of our dependencies for subsequent builds to use
+COPY go.mod /src
+COPY go.sum /src
+RUN go mod download
 
 # Copy the local package files to the container
-ADD golang /src
-WORKDIR /src
+ADD . /src
 ENV VERSION=dev-build
 
-# Build the project inside the container
+# Build the bot inside the container
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo \
-    -ldflags "-w -s -X main.Version=${VERSION}" -o /gubernator /src/cmd/gubernator-service
+    -ldflags "-w -s -X main.Version=${VERSION}" -o /gubernator /src/cmd/gubernator/main.go /src/cmd/gubernator/config.go
 
 # Create our deploy image
 FROM scratch
@@ -22,5 +28,5 @@ COPY --from=build /gubernator /gubernator
 # Run the server
 ENTRYPOINT ["/gubernator"]
 
-# The service listens on port 9020
-EXPOSE 9020
+EXPOSE 80
+EXPOSE 81

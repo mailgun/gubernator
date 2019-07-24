@@ -3,26 +3,36 @@ package gubernator
 import (
 	"context"
 	"github.com/mailgun/holster"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
-	"sync/atomic"
 	"time"
 )
 
 // globalManager manages async hit queue and updates peers in
 // the cluster periodically when a global rate limit we own updates.
 type globalManager struct {
-	stats          ServerStats
 	asyncQueue     chan *RateLimitReq
 	broadcastQueue chan *RateLimitReq
 	wg             holster.WaitGroup
 	conf           BehaviorConfig
 	log            *logrus.Entry
 	instance       *Instance
+
+	asyncMetrics     prometheus.Histogram
+	broadcastMetrics prometheus.Histogram
 }
 
 func newGlobalManager(conf BehaviorConfig, instance *Instance) *globalManager {
 	gm := globalManager{
-		log:            log.WithField("category", "global-manager"),
+		log: log.WithField("category", "global-manager"),
+		asyncMetrics: prometheus.NewHistogram(prometheus.HistogramOpts{
+			Name: "async_durations",
+			Help: "The duration of GLOBAL async sends in seconds.",
+		}),
+		broadcastMetrics: prometheus.NewHistogram(prometheus.HistogramOpts{
+			Name: "broadcast_durations",
+			Help: "The duration of GLOBAL broadcasts to peers in seconds.",
+		}),
 		asyncQueue:     make(chan *RateLimitReq, 0),
 		broadcastQueue: make(chan *RateLimitReq, 0),
 		instance:       instance,
@@ -39,19 +49,6 @@ func (gm *globalManager) QueueHit(r *RateLimitReq) {
 
 func (gm *globalManager) QueueUpdate(r *RateLimitReq) {
 	gm.broadcastQueue <- r
-}
-
-func (gm *globalManager) Stats(clear bool) ServerStats {
-	if clear {
-		defer func() {
-			atomic.StoreInt64(&gm.stats.AsyncGlobalsCount, 0)
-			atomic.StoreInt64(&gm.stats.BroadcastDuration, 0)
-		}()
-	}
-	return ServerStats{
-		AsyncGlobalsCount: atomic.LoadInt64(&gm.stats.AsyncGlobalsCount),
-		BroadcastDuration: atomic.LoadInt64(&gm.stats.BroadcastDuration),
-	}
 }
 
 // runAsyncHits collects async hit requests and queues them to
@@ -105,6 +102,7 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 		req    GetPeerRateLimitsReq
 	}
 	peerRequests := make(map[string]*pair)
+	start := time.Now()
 
 	// Assign each request to a peer
 	for _, r := range hits {
@@ -137,7 +135,7 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 			continue
 		}
 	}
-	atomic.AddInt64(&gm.stats.AsyncGlobalsCount, int64(len(hits)))
+	gm.asyncMetrics.Observe(time.Since(start).Seconds())
 }
 
 // runBroadcasts collects status changes for global rate limits and broadcasts the changes to each peer in the cluster.
@@ -214,8 +212,5 @@ func (gm *globalManager) updatePeers(updates map[string]*RateLimitReq) {
 		}
 	}
 
-	duration := int64(time.Now().Sub(start))
-	if atomic.LoadInt64(&gm.stats.BroadcastDuration) < duration {
-		atomic.StoreInt64(&gm.stats.BroadcastDuration, duration)
-	}
+	gm.broadcastMetrics.Observe(time.Since(start).Seconds())
 }

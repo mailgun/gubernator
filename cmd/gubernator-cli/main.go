@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/davecgh/go-spew/spew"
 	"math/rand"
 	"os"
 	"time"
@@ -23,6 +24,11 @@ func randInt(min, max int) int64 {
 }
 
 func main() {
+	if len(os.Args) < 2 {
+		fmt.Printf("Please provide an gubernator GRPC endpoint address\n")
+		os.Exit(1)
+	}
+
 	client, err := guber.DialV1Server(os.Args[1])
 	checkErr(err)
 
@@ -45,15 +51,17 @@ func main() {
 		for _, rateLimit := range rateLimits {
 			fan.Run(func(obj interface{}) error {
 				r := obj.(*guber.RateLimitReq)
+				ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*500)
 				// Now hit our cluster with the rate limits
-				_, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+				resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
 					Requests: []*guber.RateLimitReq{r},
 				})
 				checkErr(err)
+				cancel()
 
-				/*if resp.Status == guber.OverLimit {
+				if resp.Responses[0].Status == guber.Status_OVER_LIMIT {
 					spew.Dump(resp)
-				}*/
+				}
 				return nil
 			}, rateLimit)
 		}

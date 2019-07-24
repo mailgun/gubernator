@@ -3,6 +3,7 @@ package gubernator
 import (
 	"context"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
 	"strings"
 	"sync"
 
@@ -271,7 +272,7 @@ func (s *Instance) SetPeers(peers []PeerInfo) {
 		s.health.Message = strings.Join(errs, "|")
 	}
 	s.health.PeerCount = int32(picker.Size())
-	log.WithField("peers", peers).Debug("Peers updated")
+	log.WithField("peers", peers).Info("Peers updated")
 }
 
 // GetPeers returns a peer client for the hash key provided
@@ -292,6 +293,14 @@ func (s *Instance) GetPeerList() []*PeerClient {
 	return s.conf.Picker.Peers()
 }
 
-func (s *Instance) Stats(clear bool) ServerStats {
-	return s.global.Stats(clear)
+// Describe fetches prometheus metrics to be registered
+func (s *Instance) Describe(ch chan<- *prometheus.Desc) {
+	ch <- s.global.asyncMetrics.Desc()
+	ch <- s.global.broadcastMetrics.Desc()
+}
+
+// Collect fetches metrics from the server for use by prometheus
+func (s *Instance) Collect(ch chan<- prometheus.Metric) {
+	ch <- s.global.asyncMetrics
+	ch <- s.global.broadcastMetrics
 }

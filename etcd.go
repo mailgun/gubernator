@@ -24,6 +24,10 @@ const (
 	defaultBaseKey = "/gubernator/peers/"
 )
 
+type PoolInterface interface {
+	Close()
+}
+
 type EtcdPool struct {
 	peers     map[string]struct{}
 	wg        holster.WaitGroup
@@ -46,7 +50,7 @@ func NewEtcdPool(conf EtcdPoolConfig) (*EtcdPool, error) {
 	holster.SetDefault(&conf.BaseKey, defaultBaseKey)
 
 	if conf.AdvertiseAddress == "" {
-		return nil, errors.New("AdvertiseAddress is required")
+		return nil, errors.New("GUBER_ETCD_ADVERTISE_ADDRESS is required")
 	}
 
 	if conf.Client == nil {

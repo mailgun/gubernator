@@ -21,18 +21,20 @@ import (
 	"crypto/x509"
 	"flag"
 	"fmt"
-	"github.com/davecgh/go-spew/spew"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+
 	etcd "github.com/coreos/etcd/clientv3"
 	"github.com/mailgun/gubernator"
 	"github.com/mailgun/holster"
+	"k8s.io/klog"
 )
 
 var debug = false
@@ -64,6 +66,13 @@ func confFromEnv() (ServerConfig, error) {
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		return conf, err
 	}
+
+	// in order to prevent logging to /tmp by k8s.io/client-go
+	// and other kubernetes related dependencies which are using
+	// klog (https://github.com/kubernetes/klog), we need to
+	// initialize klog in the way it prints to stderr only.
+	klog.InitFlags(nil)
+	flag.Set("logtostderr", "true")
 
 	if debug || os.Getenv("GUBER_DEBUG") != "" {
 		logrus.SetLevel(logrus.DebugLevel)

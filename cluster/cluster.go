@@ -18,12 +18,13 @@ package cluster
 
 import (
 	"fmt"
+	"net"
+	"time"
+
 	"github.com/mailgun/gubernator"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	"net"
-	"time"
 )
 
 type instance struct {
@@ -68,10 +69,7 @@ func InstanceAt(idx int) *instance {
 
 // Start a local cluster of gubernator servers
 func Start(numInstances int) error {
-	var addresses []string
-	for i := 0; i < numInstances; i++ {
-		addresses = append(addresses, "")
-	}
+	addresses := make([]string, numInstances, numInstances)
 	return StartWith(addresses)
 }
 

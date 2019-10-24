@@ -50,3 +50,5 @@ require (
 	k8s.io/client-go v0.0.0-20190620085101-78d2af792bab
 	k8s.io/klog v0.3.1
 )
+
+go 1.13

@@ -77,7 +77,7 @@ func tokenBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 	// Client could be requesting that we always return OVER_LIMIT
 	if r.Hits > r.Limit {
 		status.Status = Status_OVER_LIMIT
-		status.Remaining = 0
+		status.Remaining = r.Limit
 	}
 
 	c.Add(r.HashKey(), status, expire)

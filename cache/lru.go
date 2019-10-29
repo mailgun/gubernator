@@ -146,6 +146,10 @@ func (c *LRUCache) Size() int {
 	return c.ll.Len()
 }
 
+func (c *LRUCache) Stats(_ bool) Stats {
+	return c.stats
+}
+
 // Update the expiration time for the key
 func (c *LRUCache) UpdateExpiration(key Key, expireAt int64) bool {
 	if ele, hit := c.cache[key]; hit {

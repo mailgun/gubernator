@@ -1,20 +1,20 @@
 # Build image
 FROM golang:1.13 as build
 
-WORKDIR /src
+WORKDIR /go/src
 
 # This should create cached layer of our dependencies for subsequent builds to use
-COPY go.mod /src
-COPY go.sum /src
+COPY go.mod /go/src
+COPY go.sum /go/src
 RUN go mod download
 
 # Copy the local package files to the container
-ADD . /src
+ADD . /go/src
 ENV VERSION=dev-build
 
 # Build the bot inside the container
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo \
-    -ldflags "-w -s -X main.Version=${VERSION}" -o /gubernator /src/cmd/gubernator/main.go /src/cmd/gubernator/config.go
+    -ldflags "-w -s -X main.Version=${VERSION}" -o /gubernator /go/src/cmd/gubernator/main.go /go/src/cmd/gubernator/config.go
 
 # Create our deploy image
 FROM scratch

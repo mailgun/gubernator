@@ -22,7 +22,7 @@ set -u
 set -x
 
 PROTO_DIR=proto
-GO_DIR=golang
+GO_DIR=.
 PY_DIR=python/gubernator
 GRPC_GATEWAY_DIR=$GOPATH/pkg/mod/github.com/grpc-ecosystem/grpc-gateway\@v1.7.0/third_party/googleapis
 

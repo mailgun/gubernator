@@ -17,6 +17,7 @@ limitations under the License.
 package gubernator
 
 import (
+	"errors"
 	"github.com/mailgun/holster"
 	"time"
 )
@@ -64,4 +65,50 @@ func (i *Interval) Next() {
 	case i.in <- struct{}{}:
 	default:
 	}
+}
+
+const (
+	GregorianMinutes int64 = iota
+	GregorianHours
+	GregorianDays
+	GregorianWeeks
+	GregorianMonths
+	GregorianYears
+)
+
+// Given an gregorian interval as defined by the 'DURATION_IS_GREGORIAN` Behavior,
+// return the expiration time as the end of GREGORIAN interval in milliseconds from `now`.
+// Example: If `now` is 2019-01-01 11:20:10 and `d` = GregorianMinutes then the return
+// expire time would be 2019-01-01 11:20:59 in milliseconds since epoch
+func GregorianExpiration(now time.Time, d int64) (int64, error) {
+	switch d {
+	case GregorianMinutes:
+		return now.Truncate(time.Minute).
+			Add(time.Minute-time.Nanosecond).
+			UnixNano() / 1000000, nil
+	case GregorianHours:
+		y, m, d := now.Date()
+		// See time.Truncate() documentation on why we can' reliably use time.Truncate(Hour) here.
+		return time.Date(y, m, d, now.Hour(), 0, 0, 0, now.Location()).
+			Add(time.Hour-time.Nanosecond).
+			UnixNano() / 1000000, nil
+	case GregorianDays:
+		y, m, d := now.Date()
+		return time.Date(y, m, d, 23, 59, 59, int(time.Second-time.Nanosecond), now.Location()).
+			UnixNano() / 1000000, nil
+	case GregorianWeeks:
+		return 0, errors.New("`Duration = GregorianWeeks` not yet supported; consider making a PR!`")
+	case GregorianMonths:
+		y, m, _ := now.Date()
+		return time.Date(y, m, 1, 0, 0, 0, 0, now.Location()).
+			AddDate(0, 1, 0).Add(-time.Nanosecond).
+			UnixNano() / 1000000, nil
+	case GregorianYears:
+		y, _, _ := now.Date()
+		return time.Date(y, time.January, 1, 0, 0, 0, 0, now.Location()).
+			AddDate(1, 0, 0).
+			Add(-time.Nanosecond).
+			UnixNano() / 1000000, nil
+	}
+	return 0, errors.New("behavior DURATION_IS_GREGORIAN is set; but `Duration` is not a valid gregorian interval")
 }

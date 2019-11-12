@@ -116,6 +116,30 @@ default 500 microsecond window. In production we have observed batch sizes of
 demands could disable batching and would see lower latencies but at the cost of
 throughput.
 
+## Gregorian Behavior
+Users may choose a behavior called `DURATION_IS_GREGORIAN` which changes the 
+behavior of the `Duration` field. When `Behavior` is set to `DURATION_IS_GREGORIAN` 
+the `Duration` of the rate limit is reset whenever the end of selected gregorian 
+calendar interval is reached.
+
+This is useful when you want to impose daily or monthly limits on a resource. Using
+this behavior you know when the end of the day or month is reached the limit on the
+resource is reset regardless of when the first rate limit request was received by
+Gubernator.
+
+Given the following `Duration` values
+*  0 = Minutes
+*  1 = Hours
+*  2 = Days
+*  3 = Weeks
+*  4 = Months
+*  5 = Years
+ 
+Examples when using `Behavior = DURATION_IS_GREGORIAN`
+* If  `Duration = 2` (Days) then the rate limit will reset to `Current = 0` at the end of the current day the rate limit was created.
+* If `Duration = 0` (Minutes) then the rate limit will reset to `Current = 0` at the end of the minute the rate limit was created.
+* If `Duration = 4` (Months) then the rate limit will reset to `Current = 0` at the end of the month the rate limit was created.
+
 ### API
 All methods are accessed via GRPC but are also exposed via HTTP using the
 [GRPC Gateway](https://github.com/grpc-ecosystem/grpc-gateway)
@@ -182,7 +206,7 @@ Example response:
       "status": 0,
       "limit": "10",
       "remaining": "7",
-      "reset_time": "1551309219226",
+      "reset_time": "1551309219226"
     }
   ]
 }

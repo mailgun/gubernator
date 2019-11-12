@@ -18,6 +18,7 @@ package gubernator
 
 import (
 	"github.com/mailgun/gubernator/cache"
+	"time"
 )
 
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket
@@ -67,6 +68,13 @@ func tokenBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 
 	// Add a new rate limit to the cache
 	expire := cache.MillisecondNow() + r.Duration
+	if r.Behavior == Behavior_DURATION_IS_GREGORIAN {
+		var err error
+		expire, err = GregorianExpiration(time.Now(), r.Duration)
+		if err != nil {
+			return nil, err
+		}
+	}
 	status := &RateLimitResp{
 		Status:    Status_UNDER_LIMIT,
 		Limit:     r.Limit,
@@ -94,7 +102,6 @@ func leakyBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 	}
 
 	now := cache.MillisecondNow()
-
 	item, ok := c.Get(r.HashKey())
 	if ok {
 		b, ok := item.(*LeakyBucket)
@@ -104,8 +111,17 @@ func leakyBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 			return tokenBucket(c, r)
 		}
 
-		rate := b.Duration / r.Limit
+		duration := b.Duration
+		if r.Behavior == Behavior_DURATION_IS_GREGORIAN {
+			n := time.Now()
+			expire, err := GregorianExpiration(n, r.Duration)
+			if err != nil {
+				return nil, err
+			}
+			duration = expire - (n.UnixNano() / 1000000)
+		}
 
+		rate := duration / r.Limit
 		// Calculate how much leaked out of the bucket since the last hit
 		elapsed := now - b.TimeStamp
 		leak := int64(elapsed / rate)

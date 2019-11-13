@@ -108,20 +108,28 @@ func leakyBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 		if !ok {
 			// Client switched algorithms; perhaps due to a migration?
 			c.Remove(r.HashKey())
-			return tokenBucket(c, r)
+			return leakyBucket(c, r)
 		}
 
-		duration := b.Duration
+		duration := r.Duration
+		rate := duration / r.Limit
 		if r.Behavior == Behavior_DURATION_IS_GREGORIAN {
+			d, err := GregorianDuration(time.Now(), r.Duration)
+			if err != nil {
+				return nil, err
+			}
 			n := time.Now()
 			expire, err := GregorianExpiration(n, r.Duration)
 			if err != nil {
 				return nil, err
 			}
+			// Calculate the rate using the entire duration of the gregorian interval
+			// IE: Minute = 60,000 milliseconds, etc.. etc..
+			rate = d / r.Limit
+			// Update the duration to be the end of the gregorian interval
 			duration = expire - (n.UnixNano() / 1000000)
 		}
 
-		rate := duration / r.Limit
 		// Calculate how much leaked out of the bucket since the last hit
 		elapsed := now - b.TimeStamp
 		leak := int64(elapsed / rate)
@@ -129,11 +137,6 @@ func leakyBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 		b.LimitRemaining += leak
 		if b.LimitRemaining > b.Limit {
 			b.LimitRemaining = b.Limit
-		}
-
-		// Only update the TS if client is incrementing the hit
-		if r.Hits != 0 {
-			b.TimeStamp = now
 		}
 
 		rl := &RateLimitResp{
@@ -149,6 +152,11 @@ func leakyBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 			return rl, nil
 		}
 
+		// Only update the timestamp if client is incrementing the hit
+		if r.Hits != 0 {
+			b.TimeStamp = now
+		}
+
 		// If requested hits takes the remainder
 		if b.LimitRemaining == r.Hits {
 			b.LimitRemaining = 0
@@ -156,7 +164,8 @@ func leakyBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 			return rl, nil
 		}
 
-		// If requested is more than available, then return over the limit without updating the bucket.
+		// If requested is more than available, then return over the limit
+		// without updating the bucket.
 		if r.Hits > b.LimitRemaining {
 			rl.Status = Status_OVER_LIMIT
 			rl.ResetTime = now + rate
@@ -170,15 +179,27 @@ func leakyBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 
 		b.LimitRemaining -= r.Hits
 		rl.Remaining = b.LimitRemaining
-		c.UpdateExpiration(r.HashKey(), now*r.Duration)
+		c.UpdateExpiration(r.HashKey(), now*duration)
 		return rl, nil
+	}
+
+	duration := r.Duration
+	if r.Behavior == Behavior_DURATION_IS_GREGORIAN {
+		n := time.Now()
+		expire, err := GregorianExpiration(n, r.Duration)
+		if err != nil {
+			return nil, err
+		}
+		// Set the initial duration as the remainder of time until
+		// the end of the gregorian interval.
+		duration = expire - (n.UnixNano() / 1000000)
 	}
 
 	// Create a new leaky bucket
 	b := LeakyBucket{
 		LimitRemaining: r.Limit - r.Hits,
 		Limit:          r.Limit,
-		Duration:       r.Duration,
+		Duration:       duration,
 		TimeStamp:      now,
 	}
 
@@ -196,7 +217,7 @@ func leakyBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 		b.LimitRemaining = 0
 	}
 
-	c.Add(r.HashKey(), &b, now+r.Duration)
+	c.Add(r.HashKey(), &b, now+duration)
 
 	return &rl, nil
 }

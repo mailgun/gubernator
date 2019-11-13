@@ -76,8 +76,38 @@ const (
 	GregorianYears
 )
 
-// Given an gregorian interval as defined by the 'DURATION_IS_GREGORIAN` Behavior,
-// return the expiration time as the end of GREGORIAN interval in milliseconds from `now`.
+// GregorianDuration returns the entire duration of the Gregorian interval
+func GregorianDuration(now time.Time, d int64) (int64, error) {
+	switch d {
+	case GregorianMinutes:
+		return 60000, nil
+	case GregorianHours:
+		return 3.6e+6, nil
+	case GregorianDays:
+		return 8.64e+7, nil
+	case GregorianWeeks:
+		return 0, errors.New("`Duration = GregorianWeeks` not yet supported; consider making a PR!`")
+	case GregorianMonths:
+		y, m, _ := now.Date()
+		// Given the beginning of the month, subtract the end of the current month to get the duration
+		begin := time.Date(y, m, 1, 0, 0, 0, 0, now.Location())
+		end := begin.AddDate(0, 1, 0).Add(-time.Nanosecond)
+		return end.UnixNano() - begin.UnixNano()/1000000, nil
+	case GregorianYears:
+		y, _, _ := now.Date()
+		// Given the beginning of the year, subtract the end of the current year to get the duration
+		begin := time.Date(y, time.January, 1, 0, 0, 0, 0, now.Location())
+		end := begin.AddDate(1, 0, 0).Add(-time.Nanosecond)
+		return end.UnixNano() - begin.UnixNano()/1000000, nil
+	}
+	return 0, errors.New("behavior DURATION_IS_GREGORIAN is set; but `Duration` is not a valid gregorian interval")
+
+}
+
+// GregorianExpiration returns an gregorian interval as defined by the
+// 'DURATION_IS_GREGORIAN` Behavior. it returns the expiration time as the
+// end of GREGORIAN interval in milliseconds from `now`.
+//
 // Example: If `now` is 2019-01-01 11:20:10 and `d` = GregorianMinutes then the return
 // expire time would be 2019-01-01 11:20:59 in milliseconds since epoch
 func GregorianExpiration(now time.Time, d int64) (int64, error) {

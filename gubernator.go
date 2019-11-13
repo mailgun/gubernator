@@ -19,9 +19,10 @@ package gubernator
 import (
 	"context"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus"
 	"strings"
 	"sync"
+
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/mailgun/holster"
 	"github.com/pkg/errors"
@@ -256,15 +257,17 @@ func (s *Instance) SetPeers(peers []PeerInfo) {
 	var errs []string
 
 	for _, peer := range peers {
-		peerInfo, err := NewPeerClient(s.conf.Behaviors, peer.Address)
-		if err != nil {
-			errs = append(errs,
-				fmt.Sprintf("failed to connect to peer '%s'; consistent hash is incomplete", peer.Address))
-			continue
-		}
+		peerInfo := s.conf.Picker.GetPeerByHost(peer.Address)
+		// If we don't have an existing connection, we need to open one.
+		if peerInfo == nil {
+			var err error
+			peerInfo, err = NewPeerClient(s.conf.Behaviors, peer.Address)
+			if err != nil {
+				errs = append(errs,
+					fmt.Sprintf("failed to connect to peer '%s'; consistent hash is incomplete", peer.Address))
+				continue
+			}
 
-		if info := s.conf.Picker.GetPeerByHost(peer.Address); info != nil {
-			peerInfo = info
 		}
 
 		// If this peer refers to this server instance
@@ -273,10 +276,9 @@ func (s *Instance) SetPeers(peers []PeerInfo) {
 		picker.Add(peerInfo)
 	}
 
-	// TODO: schedule a disconnect for old PeerClients once they are no longer in flight
-
 	s.peerMutex.Lock()
-	defer s.peerMutex.Unlock()
+
+	oldPicker := s.conf.Picker
 
 	// Replace our current picker
 	s.conf.Picker = picker
@@ -288,7 +290,37 @@ func (s *Instance) SetPeers(peers []PeerInfo) {
 		s.health.Message = strings.Join(errs, "|")
 	}
 	s.health.PeerCount = int32(picker.Size())
+	s.peerMutex.Unlock()
+
 	log.WithField("peers", peers).Info("Peers updated")
+
+	// Shutdown any old peers we no longer need
+	wg := sync.WaitGroup{}
+	ctx, cancel := context.WithTimeout(context.Background(), s.conf.Behaviors.BatchTimeout)
+	defer cancel()
+
+	shutdownPeers := []*PeerClient{}
+
+	for _, p := range oldPicker.Peers() {
+		peerInfo := s.conf.Picker.GetPeerByHost(p.host)
+		// If this peerInfo is not found, we are no longer using this host
+		// and need to shut it down
+		if peerInfo == nil {
+			shutdownPeers = append(shutdownPeers, p)
+			wg.Add(1)
+			go func() {
+				err := p.Shutdown(ctx)
+				if err != nil {
+					log.WithError(err).WithField("peer", p).Error("while shutting down peer")
+				}
+			}()
+		}
+	}
+
+	wg.Wait()
+	if len(shutdownPeers) > 0 {
+		log.WithField("peers", shutdownPeers).Info("Peers shutdown")
+	}
 }
 
 // GetPeers returns a peer client for the hash key provided

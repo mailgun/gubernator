@@ -18,9 +18,10 @@ package gubernator
 
 import (
 	"context"
+	"sync"
+
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
-	"sync"
 )
 
 type PeerPicker interface {
@@ -40,6 +41,9 @@ type PeerClient struct {
 	mutex   sync.Mutex
 	host    string
 	isOwner bool // true if this peer refers to this server instance
+
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 type response struct {
@@ -53,10 +57,15 @@ type request struct {
 }
 
 func NewPeerClient(conf BehaviorConfig, host string) (*PeerClient, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+
 	c := &PeerClient{
 		queue: make(chan *request, 1000),
 		host:  host,
 		conf:  conf,
+
+		ctx:    ctx,
+		cancel: cancel,
 	}
 
 	if err := c.dialPeer(); err != nil {
@@ -142,11 +151,22 @@ func (c *PeerClient) dialPeer() error {
 // has elapsed or the queue reaches c.batchLimit. Send what is in the queue.
 func (c *PeerClient) run() {
 	var interval = NewInterval(c.conf.BatchWait)
+	defer interval.Stop()
+
 	var queue []*request
 
 	for {
 		select {
-		case r := <-c.queue:
+		case r, ok := <-c.queue:
+			// If the queue has shutdown, we need to send the rest of the queue
+			if !ok {
+				if len(queue) > 0 {
+					c.sendQueue(queue)
+				}
+				c.cancel()
+				return
+			}
+
 			queue = append(queue, r)
 
 			// Send the queue if we reached our batch limit
@@ -167,6 +187,7 @@ func (c *PeerClient) run() {
 				c.sendQueue(queue)
 				queue = nil
 			}
+
 		}
 	}
 }
@@ -203,5 +224,24 @@ func (c *PeerClient) sendQueue(queue []*request) {
 	// Provide responses to channels waiting in the queue
 	for i, r := range queue {
 		r.resp <- &response{rl: resp.RateLimits[i]}
+	}
+}
+
+// Shutdown will gracefully shutdown the client connection, until the context is cancelled
+func (c *PeerClient) Shutdown(ctx context.Context) error {
+	close(c.queue)
+	defer func() {
+		if c.conn != nil {
+			c.conn.Close()
+		}
+	}()
+
+	select {
+	// Block until the caller signals we should hard shutdown
+	case <-ctx.Done():
+		return ctx.Err()
+	// Cleanly shutdown
+	case <-c.ctx.Done():
+		return nil
 	}
 }

@@ -1,4 +1,4 @@
-.PHONY: release docker
+.PHONY: release docker proto
 .DEFAULT_GOAL := release
 
 VERSION=$(shell cat version)
@@ -12,3 +12,6 @@ docker:
 release:
 	GOOS=darwin GOARCH=amd64 go build -ldflags $(LDFLAGS) -o gubernator.darwin ./cmd/gubernator/main.go ./cmd/gubernator/config.go
 	GOOS=linux GOARCH=amd64 go build -ldflags $(LDFLAGS) -o gubernator.linux ./cmd/gubernator/main.go ./cmd/gubernator/config.go
+
+proto:
+	scripts/proto.sh

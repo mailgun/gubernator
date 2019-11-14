@@ -16,11 +16,6 @@ limitations under the License.
 
 package cache
 
-// Interface accepts any cache which returns cache stats
-type Stater interface {
-	Stats(bool) Stats
-}
-
 // So algorithms can interface with different cache implementations
 type Cache interface {
 	// Access methods

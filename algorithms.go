@@ -22,8 +22,18 @@ import (
 )
 
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket
-func tokenBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
+func tokenBucket(s Store, c cache.Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
 	item, ok := c.Get(r.HashKey())
+	// TODO: Maybe put this logic into a function GetFromCache(s, c, r) if assertion works
+	if !ok {
+		var stored RateLimitItem
+		// Check our store first
+		stored, ok = s.Get(r)
+		if ok {
+			// TODO: Test this... not sure if this will work
+			item = stored
+		}
+	}
 	if ok {
 		// The following semantic allows for requests of more than the limit to be rejected, but subsequent
 		// requests within the same duration that are under the limit to succeed. IE: client attempts to
@@ -35,7 +45,7 @@ func tokenBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 		if !ok {
 			// Client switched algorithms; perhaps due to a migration?
 			c.Remove(r.HashKey())
-			return tokenBucket(c, r)
+			return tokenBucket(s, c, r)
 		}
 
 		// If we are already at the limit
@@ -55,6 +65,10 @@ func tokenBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 			return rl, nil
 		}
 
+		defer func() {
+			s.OnChange(r, TokenBucketItem(*rl), 0)
+		}()
+
 		// If requested is more than available, then return over the limit without updating the cache.
 		if r.Hits > rl.Remaining {
 			retStatus := *rl
@@ -69,7 +83,6 @@ func tokenBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 	// Add a new rate limit to the cache
 	expire := cache.MillisecondNow() + r.Duration
 	if r.Behavior == Behavior_DURATION_IS_GREGORIAN {
-		var err error
 		expire, err = GregorianExpiration(time.Now(), r.Duration)
 		if err != nil {
 			return nil, err
@@ -89,26 +102,21 @@ func tokenBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 	}
 
 	c.Add(r.HashKey(), status, expire)
+	s.OnChange(r, TokenBucketItem(*status), expire)
 	return status, nil
 }
 
 // Implements leaky bucket algorithm for rate limiting https://en.wikipedia.org/wiki/Leaky_bucket
-func leakyBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
-	type LeakyBucket struct {
-		Limit          int64
-		Duration       int64
-		LimitRemaining int64
-		TimeStamp      int64
-	}
+func leakyBucket(s Store, c cache.Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
 
 	now := cache.MillisecondNow()
 	item, ok := c.Get(r.HashKey())
 	if ok {
-		b, ok := item.(*LeakyBucket)
+		b, ok := item.(*LeakyBucketItem)
 		if !ok {
 			// Client switched algorithms; perhaps due to a migration?
 			c.Remove(r.HashKey())
-			return leakyBucket(c, r)
+			return leakyBucket(s, c, r)
 		}
 
 		duration := r.Duration
@@ -144,6 +152,10 @@ func leakyBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 			Remaining: b.LimitRemaining,
 			Status:    Status_UNDER_LIMIT,
 		}
+
+		defer func() {
+			s.OnChange(r, *b, now*duration)
+		}()
 
 		// If we are already at the limit
 		if b.LimitRemaining == 0 {
@@ -196,7 +208,7 @@ func leakyBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 	}
 
 	// Create a new leaky bucket
-	b := LeakyBucket{
+	b := LeakyBucketItem{
 		LimitRemaining: r.Limit - r.Hits,
 		Limit:          r.Limit,
 		Duration:       duration,
@@ -218,6 +230,6 @@ func leakyBucket(c cache.Cache, r *RateLimitReq) (*RateLimitResp, error) {
 	}
 
 	c.Add(r.HashKey(), &b, now+duration)
-
+	s.OnChange(r, b, now*duration)
 	return &rl, nil
 }

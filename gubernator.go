@@ -258,9 +258,9 @@ func (s *Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
 
 	switch r.Algorithm {
 	case Algorithm_TOKEN_BUCKET:
-		return tokenBucket(s.conf.Cache, r)
+		return tokenBucket(s.conf.Store, s.conf.Cache, r)
 	case Algorithm_LEAKY_BUCKET:
-		return leakyBucket(s.conf.Cache, r)
+		return leakyBucket(s.conf.Store, s.conf.Cache, r)
 	}
 	return nil, errors.Errorf("invalid rate limit algorithm '%d'", r.Algorithm)
 }

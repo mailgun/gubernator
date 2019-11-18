@@ -22,6 +22,7 @@ type Cache interface {
 	Add(key Key, value interface{}, expireAt int64) bool
 	UpdateExpiration(key Key, expireAt int64) bool
 	Get(key Key) (value interface{}, ok bool)
+	Each() chan Item
 	Remove(key Key)
 
 	// If the cache is exclusive, this will control access to the cache

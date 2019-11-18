@@ -67,7 +67,38 @@ func New(conf Config) (*Instance, error) {
 	RegisterV1Server(conf.GRPCServer, &s)
 	RegisterPeersV1Server(conf.GRPCServer, &s)
 
+	if s.conf.Loader == nil {
+		return &s, nil
+	}
+
+	ch, err := s.conf.Loader.Load()
+	if err != nil {
+		return nil, errors.Wrap(err, "while loading persistent from store")
+	}
+
+	for item := range ch {
+		s.conf.Cache.Add(item.HashKey, item.Value, item.ExpireAt)
+	}
 	return &s, nil
+}
+
+func (s *Instance) Close() error {
+	if s.conf.Loader == nil {
+		return nil
+	}
+
+	out := make(chan RateLimitItem, 500)
+	go func() {
+		for item := range s.conf.Cache.Each() {
+			out <- RateLimitItem{
+				HashKey:  item.Key.(string),
+				ExpireAt: item.ExpireAt,
+				Value:    item.Value,
+			}
+		}
+		close(out)
+	}()
+	return s.conf.Loader.Save(out)
 }
 
 // GetRateLimits is the public interface used by clients to request rate limits from the system. If the

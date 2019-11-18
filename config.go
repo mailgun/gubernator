@@ -35,11 +35,15 @@ type Config struct {
 	// (Optional) The cache implementation
 	Cache cache.Cache
 
-	// (Optional) A persistent store. Allows the implementor the ability to store the rate limits this
+	// (Optional) A persistent store implementation. Allows the implementor the ability to store the rate limits this
 	// instance of gubernator owns. It's up to the implementor to decide what rate limits to persist.
 	// For instance an implementor might only persist rate limits that have an expiration of
 	// longer than 1 hour. (Defaults to NullStore)
 	Store Store
+
+	// (Optional) A loader from a persistent store. Allows the implementor the ability to load and save
+	// the contents of the cache of rate limits when the gubernator instance is started and stopped
+	Loader Loader
 
 	// (Optional) This is the peer picker algorithm the server will use decide which peer in the cluster
 	// will coordinate a rate limit
@@ -74,6 +78,7 @@ func (c *Config) SetDefaults() error {
 	holster.SetDefault(&c.Picker, NewConsistantHash(nil))
 	holster.SetDefault(&c.Cache, cache.NewLRUCache(0))
 	holster.SetDefault(&c.Store, &NullStore{})
+	holster.SetDefault(&c.Loader, &NullLoader{})
 
 	if c.Behaviors.BatchLimit > maxBatchSize {
 		return fmt.Errorf("Behaviors.BatchLimit cannot exceed '%d'", maxBatchSize)

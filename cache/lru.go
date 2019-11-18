@@ -39,10 +39,10 @@ type LRUCache struct {
 	accessMetric *prometheus.Desc
 }
 
-type cacheRecord struct {
-	key      Key
-	value    interface{}
-	expireAt int64
+type Item struct {
+	Key      Key
+	Value    interface{}
+	ExpireAt int64
 }
 
 // New creates a new Cache with a maximum size
@@ -68,27 +68,38 @@ func (c *LRUCache) Unlock() {
 	c.mutex.Unlock()
 }
 
+func (c *LRUCache) Each() chan *Item {
+	out := make(chan *Item)
+	go func() {
+		for _, ele := range c.cache {
+			out <- ele.Value.(*Item)
+		}
+		close(out)
+	}()
+	return out
+}
+
 // Adds a value to the cache with an expiration
 func (c *LRUCache) Add(key Key, value interface{}, expireAt int64) bool {
-	return c.addRecord(&cacheRecord{
-		key:      key,
-		value:    value,
-		expireAt: expireAt,
+	return c.addRecord(&Item{
+		Key:      key,
+		Value:    value,
+		ExpireAt: expireAt,
 	})
 }
 
 // Adds a value to the cache.
-func (c *LRUCache) addRecord(record *cacheRecord) bool {
+func (c *LRUCache) addRecord(record *Item) bool {
 	// If the key already exist, set the new value
-	if ee, ok := c.cache[record.key]; ok {
+	if ee, ok := c.cache[record.Key]; ok {
 		c.ll.MoveToFront(ee)
-		temp := ee.Value.(*cacheRecord)
+		temp := ee.Value.(*Item)
 		*temp = *record
 		return true
 	}
 
 	ele := c.ll.PushFront(record)
-	c.cache[record.key] = ele
+	c.cache[record.Key] = ele
 	if c.cacheSize != 0 && c.ll.Len() > c.cacheSize {
 		c.removeOldest()
 	}
@@ -104,17 +115,17 @@ func MillisecondNow() int64 {
 func (c *LRUCache) Get(key Key) (value interface{}, ok bool) {
 
 	if ele, hit := c.cache[key]; hit {
-		entry := ele.Value.(*cacheRecord)
+		entry := ele.Value.(*Item)
 
 		// If the entry has expired, remove it from the cache
-		if entry.expireAt < MillisecondNow() {
+		if entry.ExpireAt < MillisecondNow() {
 			c.removeElement(ele)
 			c.stats.Miss++
 			return
 		}
 		c.stats.Hit++
 		c.ll.MoveToFront(ele)
-		return entry.value, true
+		return entry.Value, true
 	}
 	c.stats.Miss++
 	return
@@ -137,8 +148,8 @@ func (c *LRUCache) removeOldest() {
 
 func (c *LRUCache) removeElement(e *list.Element) {
 	c.ll.Remove(e)
-	kv := e.Value.(*cacheRecord)
-	delete(c.cache, kv.key)
+	kv := e.Value.(*Item)
+	delete(c.cache, kv.Key)
 }
 
 // Len returns the number of items in the cache.
@@ -153,8 +164,8 @@ func (c *LRUCache) Stats(_ bool) Stats {
 // Update the expiration time for the key
 func (c *LRUCache) UpdateExpiration(key Key, expireAt int64) bool {
 	if ele, hit := c.cache[key]; hit {
-		entry := ele.Value.(*cacheRecord)
-		entry.expireAt = expireAt
+		entry := ele.Value.(*Item)
+		entry.ExpireAt = expireAt
 		return true
 	}
 	return false

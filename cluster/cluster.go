@@ -46,6 +46,7 @@ func (i *instance) Peers() []gubernator.PeerInfo {
 }
 
 func (i *instance) Stop() {
+	i.Guber.Close()
 	i.GRPC.GracefulStop()
 }
 
@@ -84,6 +85,7 @@ func StartWith(addresses []string) error {
 				GlobalSyncWait: time.Millisecond * 50, // Suitable for testing but not production
 				GlobalTimeout:  time.Second,
 			},
+			Store: &gubernator.MockStore{},
 		})
 		if err != nil {
 			return errors.Wrap(err, "while creating new gubernator instance")

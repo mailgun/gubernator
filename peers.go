@@ -18,10 +18,14 @@ package gubernator
 
 import (
 	"context"
+	"sync"
+
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
-	"sync"
 )
+
+// ErrClosing is the error returned when the client is closing
+var ErrClosing = errors.New("closing")
 
 type PeerPicker interface {
 	GetPeerByHost(host string) *PeerClient
@@ -37,9 +41,12 @@ type PeerClient struct {
 	conn    *grpc.ClientConn
 	conf    BehaviorConfig
 	queue   chan *request
-	mutex   sync.Mutex
 	host    string
 	isOwner bool // true if this peer refers to this server instance
+
+	mutex     sync.RWMutex // This mutex is for verifying the closing state of the client
+	isClosing bool
+	wg        sync.WaitGroup // This wait group is to monitor the number of in-flight requests
 }
 
 type response struct {
@@ -71,7 +78,6 @@ func NewPeerClient(conf BehaviorConfig, host string) (*PeerClient, error) {
 // GetPeerRateLimit forwards a rate limit request to a peer. If the rate limit has `behavior == BATCHING` configured
 // this method will attempt to batch the rate limits
 func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
-
 	// TODO: remove batching for global if we end up implementing a HIT aggregator
 	// If config asked for batching or is global rate limit
 	if r.Behavior == Behavior_BATCHING ||
@@ -91,6 +97,16 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 
 // GetPeerRateLimits requests a list of rate limit statuses from a peer
 func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
+	c.mutex.RLock()
+	if c.isClosing {
+		c.mutex.RUnlock()
+		return nil, ErrClosing
+	}
+	c.mutex.RUnlock()
+
+	c.wg.Add(1)
+	defer c.wg.Done()
+
 	resp, err := c.client.GetPeerRateLimits(ctx, r)
 	if err != nil {
 		return nil, err
@@ -105,14 +121,36 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 
 // UpdatePeerGlobals sends global rate limit status updates to a peer
 func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
+	c.mutex.RLock()
+	if c.isClosing {
+		c.mutex.RUnlock()
+		return nil, ErrClosing
+	}
+	c.mutex.RUnlock()
+
+	c.wg.Add(1)
+	defer c.wg.Done()
+
 	return c.client.UpdatePeerGlobals(ctx, r)
 }
 
 func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
+	c.mutex.RLock()
+	if c.isClosing {
+		c.mutex.RUnlock()
+		return nil, ErrClosing
+	}
+
 	req := request{request: r, resp: make(chan *response, 1)}
 
 	// Enqueue the request to be sent
 	c.queue <- &req
+
+	// Unlock to prevent the chan from being closed
+	c.mutex.RUnlock()
+
+	c.wg.Add(1)
+	defer c.wg.Done()
 
 	// Wait for a response or context cancel
 	select {
@@ -142,11 +180,21 @@ func (c *PeerClient) dialPeer() error {
 // has elapsed or the queue reaches c.batchLimit. Send what is in the queue.
 func (c *PeerClient) run() {
 	var interval = NewInterval(c.conf.BatchWait)
+	defer interval.Stop()
+
 	var queue []*request
 
 	for {
 		select {
-		case r := <-c.queue:
+		case r, ok := <-c.queue:
+			// If the queue has shutdown, we need to send the rest of the queue
+			if !ok {
+				if len(queue) > 0 {
+					c.sendQueue(queue)
+				}
+				return
+			}
+
 			queue = append(queue, r)
 
 			// Send the queue if we reached our batch limit
@@ -167,6 +215,7 @@ func (c *PeerClient) run() {
 				c.sendQueue(queue)
 				queue = nil
 			}
+
 		}
 	}
 }
@@ -204,4 +253,44 @@ func (c *PeerClient) sendQueue(queue []*request) {
 	for i, r := range queue {
 		r.resp <- &response{rl: resp.RateLimits[i]}
 	}
+}
+
+// Shutdown will gracefully shutdown the client connection, until the context is cancelled
+func (c *PeerClient) Shutdown(ctx context.Context) error {
+	// Take the write lock since we're going to modify the closing state
+	c.mutex.Lock()
+	if c.isClosing {
+		c.mutex.Unlock()
+		return nil
+	}
+
+	c.isClosing = true
+	// We need to close the chan here to prevent a possible race
+	close(c.queue)
+
+	c.mutex.Unlock()
+
+	defer func() {
+		if c.conn != nil {
+			c.conn.Close()
+		}
+	}()
+
+	// This allows us to wait on the waitgroup, or until the context
+	// has been cancelled. This doesn't leak goroutines, because
+	// closing the connection will kill any outstanding requests.
+	waitChan := make(chan struct{})
+	go func() {
+		c.wg.Wait()
+		close(waitChan)
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-waitChan:
+		return nil
+	}
+
+	return nil
 }

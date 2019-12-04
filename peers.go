@@ -291,6 +291,4 @@ func (c *PeerClient) Shutdown(ctx context.Context) error {
 	case <-waitChan:
 		return nil
 	}
-
-	return nil
 }

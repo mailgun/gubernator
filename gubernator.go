@@ -112,6 +112,16 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*Get
 					return nil
 				}
 
+				var attempts int
+			getPeer:
+				if attempts > 5 {
+					inOut.Out = &RateLimitResp{
+						Error: fmt.Sprintf("GetPeer() keeps returning peers that are in a closing state for '%s' - '%s'", globalKey, err),
+					}
+					out <- inOut
+					return nil
+				}
+
 				peer, err = s.GetPeer(globalKey)
 				if err != nil {
 					inOut.Out = &RateLimitResp{
@@ -143,6 +153,10 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*Get
 					// Make an RPC call to the peer that owns this rate limit
 					inOut.Out, err = peer.GetPeerRateLimit(ctx, inOut.In)
 					if err != nil {
+						if err == ErrClosing {
+							attempts++
+							goto getPeer
+						}
 						inOut.Out = &RateLimitResp{
 							Error: fmt.Sprintf("while fetching rate limit '%s' from peer - '%s'", globalKey, err),
 						}

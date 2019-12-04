@@ -223,7 +223,9 @@ func (gm *globalManager) updatePeers(updates map[string]*RateLimitReq) {
 		cancel()
 
 		if err != nil {
-			gm.log.WithError(err).Errorf("error sending global updates to '%s'", peer.host)
+			if err != ErrClosing {
+				gm.log.WithError(err).Errorf("error sending global updates to '%s'", peer.host)
+			}
 			continue
 		}
 	}

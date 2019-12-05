@@ -140,6 +140,40 @@ Examples when using `Behavior = DURATION_IS_GREGORIAN`
 * If `Duration = 0` (Minutes) then the rate limit will reset to `Current = 0` at the end of the minute the rate limit was created.
 * If `Duration = 4` (Months) then the rate limit will reset to `Current = 0` at the end of the month the rate limit was created.
 
+## Gubernator as a library
+If you are using golang, you can use Gubernator as a library. This is useful if
+you wish to implement a rate limit service with your own company specific model
+on top. We do this internally here at mailgun with a service we creatively
+called `ratelimits` which keeps track of the limits imposed on a per account
+basis. In this way you can utilize the power and speed of Gubernator but still
+layer business logic and integrate domain specific problems into your rate
+limiting service.
+
+When you use the library, your service becomes a full member of the cluster
+participating in the same consistent hashing and caching as a stand alone
+Gubernator server would. All you need to do is provide the GRPC server instance
+and tell Gubernator where the peers in your cluster are located. The
+`cmd/gubernator/main.go` is a great example of how to use Gubernator as a
+library.
+
+### Optional Disk Persistence
+While the Gubernator server currently doesn't directly support disk
+persistence, the Gubernator library does provide interfaces through which
+library users can implement persistence. The Gubernator library has two
+interfaces available for disk persistence. Depending on the use case an
+implementor can implement the [Loader](/store.go) interface and only support persistence
+of rate limits at startup and shutdown, or users can implement the [Store](/store.go)
+interface and Gubernator will continuously call `OnChange()` and `Get()` to
+keep the in memory cache and persistent store up to date with the latest rate
+limit data. Both interfaces *can* be implemented simultaneously to ensure data
+is always saved to persistent storage.
+
+For those who choose to implement the `Store` interface, it is not required to
+store ALL the rate limits received via `OnChange()`. For instance; If you wish
+to support rate limit durations longer than a minute, day or month, calls to
+`OnChange()` can check the duration of a rate limit and decide to only persist
+those rate limits that have durations over a self determined limit.
+
 ### API
 All methods are accessed via GRPC but are also exposed via HTTP using the
 [GRPC Gateway](https://github.com/grpc-ecosystem/grpc-gateway)

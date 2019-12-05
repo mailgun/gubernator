@@ -40,11 +40,11 @@ const (
 var log *logrus.Entry
 
 type Instance struct {
-	wg        holster.WaitGroup
 	health    HealthCheckResp
 	global    *globalManager
 	peerMutex sync.RWMutex
 	conf      Config
+	isClosed  bool
 }
 
 func New(conf Config) (*Instance, error) {
@@ -77,27 +77,29 @@ func New(conf Config) (*Instance, error) {
 	}
 
 	for item := range ch {
-		s.conf.Cache.Add(item.HashKey, item.Value, item.ExpireAt)
+		s.conf.Cache.Add(item)
 	}
 	return &s, nil
 }
 
 func (s *Instance) Close() error {
+	if s.isClosed {
+		return nil
+	}
+
 	if s.conf.Loader == nil {
 		return nil
 	}
 
-	out := make(chan RateLimitItem, 500)
+	out := make(chan *CacheItem, 500)
 	go func() {
 		for item := range s.conf.Cache.Each() {
-			out <- RateLimitItem{
-				HashKey:  item.Key.(string),
-				ExpireAt: item.ExpireAt,
-				Value:    item.Value,
-			}
+			fmt.Printf("Each: %+v\n", item)
+			out <- item
 		}
 		close(out)
 	}()
+	s.isClosed = true
 	return s.conf.Loader.Save(out)
 }
 
@@ -221,14 +223,13 @@ func (s *Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, error)
 	s.global.QueueHit(req)
 
 	s.conf.Cache.Lock()
-	item, ok := s.conf.Cache.Get(req.HashKey())
+	item, ok := s.conf.Cache.GetItem(req.HashKey())
 	s.conf.Cache.Unlock()
 	if ok {
-		rl, ok := item.(*RateLimitResp)
+		// Global rate limits are always stored as RateLimitResp regardless of algorithm
+		rl, ok := item.Value.(*RateLimitResp)
 		if !ok {
-			// Perhaps the rate limit algorithm was changed by the user.
-			s.conf.Cache.Remove(req.HashKey())
-			return s.getGlobalRateLimit(req)
+			return nil, errors.New("Global rate limit is of incorrect type")
 		}
 		return rl, nil
 	} else {
@@ -247,7 +248,12 @@ func (s *Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsRe
 	defer s.conf.Cache.Unlock()
 
 	for _, g := range r.Globals {
-		s.conf.Cache.Add(g.Key, g.Status, g.Status.ResetTime)
+		s.conf.Cache.Add(&CacheItem{
+			ExpireAt:  g.Status.ResetTime,
+			Algorithm: g.Algorithm,
+			Value:     g.Status,
+			Key:       g.Key,
+		})
 	}
 	return &UpdatePeerGlobalsResp{}, nil
 }
@@ -344,7 +350,7 @@ func (s *Instance) SetPeers(peers []PeerInfo) {
 	ctx, cancel := context.WithTimeout(context.Background(), s.conf.Behaviors.BatchTimeout)
 	defer cancel()
 
-	shutdownPeers := []*PeerClient{}
+	var shutdownPeers []*PeerClient
 
 	for _, p := range oldPicker.Peers() {
 		peerInfo := s.conf.Picker.GetPeerByHost(p.host)

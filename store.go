@@ -8,21 +8,12 @@ package gubernator
 // and `Get()` to keep the in memory cache and persistent store up to date with the latest ratelimit data.
 // Both interfaces can be implemented simultaneously to ensure data is always saved to persistent storage.
 
-type RateLimitItem struct {
-	Algorithm Algorithm
-	ExpireAt  int64
-	HashKey   string
-	Value     interface{}
-}
-
 type LeakyBucketItem struct {
-	Limit          int64
-	Duration       int64
-	LimitRemaining int64
-	TimeStamp      int64
+	Limit     int64
+	Duration  int64
+	Remaining int64
+	TimeStamp int64
 }
-
-type TokenBucketItem RateLimitResp
 
 // Store interface allows implementors to off load storage of all or a subset of ratelimits to
 // some persistent store. Methods OnChange() and Get() should avoid blocking as much as possible as these
@@ -31,12 +22,17 @@ type Store interface {
 	// Called by gubernator when a rate limit item is updated. It's up to the store to
 	// decide if this rate limit item should be persisted in the store. It's up to the
 	// store to expire old rate limit items.
-	OnChange(r *RateLimitReq, item RateLimitItem, expireAt int64)
+	OnChange(r *RateLimitReq, item *CacheItem)
 
 	// Called by gubernator when a rate limit is missing from the cache. It's up to the store
 	// to decide if this request is fulfilled. Should return true if the request is fulfilled
 	// and false if the request is not fulfilled or doesn't exist in the store.
-	Get(r *RateLimitReq) (RateLimitItem, bool)
+	Get(r *RateLimitReq) (*CacheItem, bool)
+
+	// Called by gubernator when an existing rate limit should be removed from the store.
+	// NOTE: This is NOT called when an rate limit expires from the cache, store implementors
+	// must expire rate limits in the store.
+	Remove(key string)
 }
 
 // Loader interface allows implementors to store all or a subset of ratelimits into a persistent
@@ -45,49 +41,81 @@ type Loader interface {
 	// Load is called by gubernator just before the instance is ready to accept requests. The implementation
 	// should return a channel gubernator can read to load all rate limits that should be loaded into the
 	// instance cache. The implementation should close the channel to indicate no more rate limits left to load.
-	Load() (chan RateLimitItem, error)
+	Load() (chan *CacheItem, error)
 
 	// Save is called by gubernator just before the instance is shutdown. The passed channel should be
 	// read until the channel is closed.
-	Save(chan RateLimitItem) error
+	Save(chan *CacheItem) error
 }
 
-var _ Store = &NullStore{}
-
-type NullStore struct {
+func NewMockStore() *MockStore {
+	ml := &MockStore{
+		Called:     make(map[string]int),
+		CacheItems: make(map[string]*CacheItem),
+	}
+	ml.Called["OnChange()"] = 0
+	ml.Called["Remove()"] = 0
+	ml.Called["Get()"] = 0
+	return ml
 }
 
-func (ns *NullStore) OnChange(r *RateLimitReq, item RateLimitItem, expireAt int64) {
-	return
-}
-
-func (ns *NullStore) Get(r *RateLimitReq) (RateLimitItem, bool) {
-	return nil, false
+type MockStore struct {
+	Called     map[string]int
+	CacheItems map[string]*CacheItem
 }
 
 var _ Store = &MockStore{}
 
-type MockStore struct {
-	Data []interface{}
+func (ms *MockStore) OnChange(r *RateLimitReq, item *CacheItem) {
+	ms.Called["OnChange()"] += 1
+	ms.CacheItems[item.Key] = item
 }
 
-func (ns *MockStore) OnChange(r *RateLimitReq, item RateLimitItem, expireAt int64) {
-	return
+func (ms *MockStore) Get(r *RateLimitReq) (*CacheItem, bool) {
+	ms.Called["Get()"] += 1
+	item, ok := ms.CacheItems[r.HashKey()]
+	return item, ok
 }
 
-func (ns *MockStore) Get(r *RateLimitReq) (RateLimitItem, bool) {
-	return nil, false
+func (ms *MockStore) Remove(key string) {
+	ms.Called["Remove()"] += 1
+	delete(ms.CacheItems, key)
 }
 
-var _ Loader = &NullLoader{}
-
-type NullLoader struct {
+func NewMockLoader() *MockLoader {
+	ml := &MockLoader{
+		Called: make(map[string]int),
+	}
+	ml.Called["Load()"] = 0
+	ml.Called["Save()"] = 0
+	return ml
 }
 
-func (ns *NullLoader) Load() (chan RateLimitItem, error) {
-	return nil, nil
+type MockLoader struct {
+	Called     map[string]int
+	CacheItems []*CacheItem
 }
 
-func (ns *NullLoader) Save(int chan RateLimitItem) error {
+var _ Loader = &MockLoader{}
+
+func (ml *MockLoader) Load() (chan *CacheItem, error) {
+	ml.Called["Load()"] += 1
+
+	ch := make(chan *CacheItem, 10)
+	go func() {
+		for _, i := range ml.CacheItems {
+			ch <- i
+		}
+		close(ch)
+	}()
+	return ch, nil
+}
+
+func (ml *MockLoader) Save(in chan *CacheItem) error {
+	ml.Called["Save()"] += 1
+
+	for i := range in {
+		ml.CacheItems = append(ml.CacheItems, i)
+	}
 	return nil
 }

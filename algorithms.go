@@ -17,23 +17,21 @@ limitations under the License.
 package gubernator
 
 import (
-	"github.com/mailgun/gubernator/cache"
 	"time"
 )
 
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket
-func tokenBucket(s Store, c cache.Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
-	item, ok := c.Get(r.HashKey())
-	// TODO: Maybe put this logic into a function GetFromCache(s, c, r) if assertion works
-	if !ok {
-		var stored RateLimitItem
-		// Check our store first
-		stored, ok = s.Get(r)
-		if ok {
-			// TODO: Test this... not sure if this will work
-			item = stored
+func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+	item, ok := c.GetItem(r.HashKey())
+	if s != nil {
+		if !ok {
+			// Check our store for the item
+			if item, ok = s.Get(r); ok {
+				c.Add(item)
+			}
 		}
 	}
+
 	if ok {
 		// The following semantic allows for requests of more than the limit to be rejected, but subsequent
 		// requests within the same duration that are under the limit to succeed. IE: client attempts to
@@ -41,11 +39,25 @@ func tokenBucket(s Store, c cache.Cache, r *RateLimitReq) (resp *RateLimitResp, 
 		// don't store OVER_LIMIT in the cache the client can retry within the same rate limit duration with
 		// 100 emails and the request will succeed.
 
-		rl, ok := item.(*RateLimitResp)
+		rl, ok := item.Value.(*RateLimitResp)
 		if !ok {
 			// Client switched algorithms; perhaps due to a migration?
 			c.Remove(r.HashKey())
+			if s != nil {
+				s.Remove(r.HashKey())
+			}
 			return tokenBucket(s, c, r)
+		}
+
+		// Client is only interested in retrieving the current status
+		if r.Hits == 0 {
+			return rl, nil
+		}
+
+		if s != nil {
+			defer func() {
+				s.OnChange(r, item)
+			}()
 		}
 
 		// If we are already at the limit
@@ -54,20 +66,11 @@ func tokenBucket(s Store, c cache.Cache, r *RateLimitReq) (resp *RateLimitResp, 
 			return rl, nil
 		}
 
-		// Client is only interested in retrieving the current status
-		if r.Hits == 0 {
-			return rl, nil
-		}
-
 		// If requested hits takes the remainder
 		if rl.Remaining == r.Hits {
 			rl.Remaining = 0
 			return rl, nil
 		}
-
-		defer func() {
-			s.OnChange(r, TokenBucketItem(*rl), 0)
-		}()
 
 		// If requested is more than available, then return over the limit without updating the cache.
 		if r.Hits > rl.Remaining {
@@ -81,7 +84,7 @@ func tokenBucket(s Store, c cache.Cache, r *RateLimitReq) (resp *RateLimitResp, 
 	}
 
 	// Add a new rate limit to the cache
-	expire := cache.MillisecondNow() + r.Duration
+	expire := MillisecondNow() + r.Duration
 	if r.Behavior == Behavior_DURATION_IS_GREGORIAN {
 		expire, err = GregorianExpiration(time.Now(), r.Duration)
 		if err != nil {
@@ -101,21 +104,41 @@ func tokenBucket(s Store, c cache.Cache, r *RateLimitReq) (resp *RateLimitResp, 
 		status.Remaining = r.Limit
 	}
 
-	c.Add(r.HashKey(), status, expire)
-	s.OnChange(r, TokenBucketItem(*status), expire)
+	item = &CacheItem{
+		Algorithm: r.Algorithm,
+		Key:       r.HashKey(),
+		Value:     status,
+		ExpireAt:  expire,
+	}
+
+	c.Add(item)
+	if s != nil {
+		s.OnChange(r, item)
+	}
 	return status, nil
 }
 
 // Implements leaky bucket algorithm for rate limiting https://en.wikipedia.org/wiki/Leaky_bucket
-func leakyBucket(s Store, c cache.Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+	now := MillisecondNow()
+	item, ok := c.GetItem(r.HashKey())
+	if s != nil {
+		if !ok {
+			// Check our store for the item
+			if item, ok = s.Get(r); ok {
+				c.Add(item)
+			}
+		}
+	}
 
-	now := cache.MillisecondNow()
-	item, ok := c.Get(r.HashKey())
 	if ok {
-		b, ok := item.(*LeakyBucketItem)
+		b, ok := item.Value.(*LeakyBucketItem)
 		if !ok {
 			// Client switched algorithms; perhaps due to a migration?
 			c.Remove(r.HashKey())
+			if s != nil {
+				s.Remove(r.HashKey())
+			}
 			return leakyBucket(s, c, r)
 		}
 
@@ -142,23 +165,25 @@ func leakyBucket(s Store, c cache.Cache, r *RateLimitReq) (resp *RateLimitResp, 
 		elapsed := now - b.TimeStamp
 		leak := int64(elapsed / rate)
 
-		b.LimitRemaining += leak
-		if b.LimitRemaining > b.Limit {
-			b.LimitRemaining = b.Limit
+		b.Remaining += leak
+		if b.Remaining > b.Limit {
+			b.Remaining = b.Limit
 		}
 
 		rl := &RateLimitResp{
 			Limit:     b.Limit,
-			Remaining: b.LimitRemaining,
+			Remaining: b.Remaining,
 			Status:    Status_UNDER_LIMIT,
 		}
 
-		defer func() {
-			s.OnChange(r, *b, now*duration)
-		}()
+		if s != nil {
+			defer func() {
+				s.OnChange(r, item)
+			}()
+		}
 
 		// If we are already at the limit
-		if b.LimitRemaining == 0 {
+		if b.Remaining == 0 {
 			rl.Status = Status_OVER_LIMIT
 			rl.ResetTime = now + rate
 			return rl, nil
@@ -170,15 +195,15 @@ func leakyBucket(s Store, c cache.Cache, r *RateLimitReq) (resp *RateLimitResp, 
 		}
 
 		// If requested hits takes the remainder
-		if b.LimitRemaining == r.Hits {
-			b.LimitRemaining = 0
+		if b.Remaining == r.Hits {
+			b.Remaining = 0
 			rl.Remaining = 0
 			return rl, nil
 		}
 
 		// If requested is more than available, then return over the limit
 		// without updating the bucket.
-		if r.Hits > b.LimitRemaining {
+		if r.Hits > b.Remaining {
 			rl.Status = Status_OVER_LIMIT
 			rl.ResetTime = now + rate
 			return rl, nil
@@ -189,8 +214,8 @@ func leakyBucket(s Store, c cache.Cache, r *RateLimitReq) (resp *RateLimitResp, 
 			return rl, nil
 		}
 
-		b.LimitRemaining -= r.Hits
-		rl.Remaining = b.LimitRemaining
+		b.Remaining -= r.Hits
+		rl.Remaining = b.Remaining
 		c.UpdateExpiration(r.HashKey(), now*duration)
 		return rl, nil
 	}
@@ -209,10 +234,10 @@ func leakyBucket(s Store, c cache.Cache, r *RateLimitReq) (resp *RateLimitResp, 
 
 	// Create a new leaky bucket
 	b := LeakyBucketItem{
-		LimitRemaining: r.Limit - r.Hits,
-		Limit:          r.Limit,
-		Duration:       duration,
-		TimeStamp:      now,
+		Remaining: r.Limit - r.Hits,
+		Limit:     r.Limit,
+		Duration:  duration,
+		TimeStamp: now,
 	}
 
 	rl := RateLimitResp{
@@ -226,10 +251,18 @@ func leakyBucket(s Store, c cache.Cache, r *RateLimitReq) (resp *RateLimitResp, 
 	if r.Hits > r.Limit {
 		rl.Status = Status_OVER_LIMIT
 		rl.Remaining = 0
-		b.LimitRemaining = 0
+		b.Remaining = 0
 	}
 
-	c.Add(r.HashKey(), &b, now+duration)
-	s.OnChange(r, b, now*duration)
+	item = &CacheItem{
+		ExpireAt:  now + duration,
+		Algorithm: r.Algorithm,
+		Key:       r.HashKey(),
+		Value:     &b,
+	}
+	c.Add(item)
+	if s != nil {
+		s.OnChange(r, item)
+	}
 	return &rl, nil
 }

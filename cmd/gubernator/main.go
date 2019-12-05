@@ -18,8 +18,6 @@ package main
 
 import (
 	"context"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"net"
 	"net/http"
 	"os"
@@ -27,9 +25,10 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/mailgun/gubernator"
-	"github.com/mailgun/gubernator/cache"
 	"github.com/mailgun/holster"
 	"github.com/mailgun/holster/etcdutil"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
@@ -47,7 +46,7 @@ func main() {
 	checkErr(err, "while getting config")
 
 	// The LRU cache we store rate limits in
-	cache := cache.NewLRUCache(conf.CacheSize)
+	cache := gubernator.NewLRUCache(conf.CacheSize)
 
 	// cache also implements prometheus.Collector interface
 	prometheus.MustRegister(cache)

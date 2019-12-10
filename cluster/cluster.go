@@ -21,7 +21,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/mailgun/gubernator"
+	"github.com/mailgun/gubernator/v2"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"

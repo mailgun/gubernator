@@ -21,8 +21,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mailgun/gubernator"
-	"github.com/mailgun/gubernator/cluster"
+	"github.com/mailgun/gubernator/v2"
+	"github.com/mailgun/gubernator/v2/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

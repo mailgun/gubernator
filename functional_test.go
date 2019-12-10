@@ -23,8 +23,8 @@ import (
 	"testing"
 	"time"
 
-	guber "github.com/mailgun/gubernator"
-	"github.com/mailgun/gubernator/cluster"
+	guber "github.com/mailgun/gubernator/v2"
+	"github.com/mailgun/gubernator/v2/cluster"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"

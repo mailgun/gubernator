@@ -1,4 +1,4 @@
-module github.com/mailgun/gubernator
+module github.com/mailgun/gubernator/v2
 
 require (
 	github.com/Unix4ever/statsd v0.0.0-20160120230120-a8219f1fb9d8 // indirect

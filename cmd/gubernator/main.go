@@ -24,7 +24,7 @@ import (
 	"os/signal"
 
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"github.com/mailgun/gubernator"
+	"github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/holster"
 	"github.com/mailgun/holster/etcdutil"
 	"github.com/prometheus/client_golang/prometheus"

@@ -17,7 +17,7 @@ limitations under the License.
 package gubernator_test
 
 import (
-	"github.com/mailgun/gubernator"
+	"github.com/mailgun/gubernator/v2"
 	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"

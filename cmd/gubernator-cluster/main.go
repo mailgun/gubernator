@@ -21,7 +21,7 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/mailgun/gubernator/v2/cluster"
+	"github.com/mailgun/gubernator/cluster"
 	"github.com/sirupsen/logrus"
 )
 

@@ -18,10 +18,10 @@ package gubernator
 
 import (
 	"fmt"
-	"time"
-
+	"github.com/mailgun/gubernator/cache"
 	"github.com/mailgun/holster"
 	"google.golang.org/grpc"
+	"time"
 )
 
 // config for a gubernator instance
@@ -33,17 +33,7 @@ type Config struct {
 	Behaviors BehaviorConfig
 
 	// (Optional) The cache implementation
-	Cache Cache
-
-	// (Optional) A persistent store implementation. Allows the implementor the ability to store the rate limits this
-	// instance of gubernator owns. It's up to the implementor to decide what rate limits to persist.
-	// For instance an implementor might only persist rate limits that have an expiration of
-	// longer than 1 hour.
-	Store Store
-
-	// (Optional) A loader from a persistent store. Allows the implementor the ability to load and save
-	// the contents of the cache when the gubernator instance is started and stopped
-	Loader Loader
+	Cache cache.Cache
 
 	// (Optional) This is the peer picker algorithm the server will use decide which peer in the cluster
 	// will coordinate a rate limit
@@ -76,7 +66,7 @@ func (c *Config) SetDefaults() error {
 	holster.SetDefault(&c.Behaviors.GlobalSyncWait, time.Microsecond*500)
 
 	holster.SetDefault(&c.Picker, NewConsistantHash(nil))
-	holster.SetDefault(&c.Cache, NewLRUCache(0))
+	holster.SetDefault(&c.Cache, cache.NewLRUCache(0))
 
 	if c.Behaviors.BatchLimit > maxBatchSize {
 		return fmt.Errorf("Behaviors.BatchLimit cannot exceed '%d'", maxBatchSize)

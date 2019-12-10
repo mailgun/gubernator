@@ -19,7 +19,7 @@ package cluster
 import (
 	"testing"
 
-	"github.com/mailgun/gubernator/v2"
+	"github.com/mailgun/gubernator"
 	"github.com/stretchr/testify/assert"
 )
 

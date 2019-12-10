@@ -76,17 +76,5 @@ limit request if the cluster is large enough. GLOBAL should only be used for
 extremely high volume rate limits that don't scale well with the traditional
 non `GLOBAL` behavior.
 
-## Gubernator as a library
-If you are using golang, you can use gubernator as a library. This is useful if
-you wish to implement a rate limit service with your own company specific model
-on top. We do this internally here at mailgun with a service we creatively
-called `ratelimits` which keeps track of the limits imposed on a per account
-basis. In this way you can utilize the power and speed of gubernator but still
-layer business logic and integrate domain specific problems into your rate
-limiting service.
 
-When you use the library, your service becomes a full member of the cluster
-participating in the same consistent hashing and caching as a stand alone
-gubernator server would. All you need to do is provide the GRPC server instance
-and tell gubernator where the peers in your cluster are located.
 

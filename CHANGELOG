@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2019-12-10
+### Added
+* Added `Loader` interface for only loading and saving at startup and shutdown
+* Added `Store` interface for continuous synchronization between the persistent store and the cache.
+### Changed
+* Moved `cache.Cache` into the `gubernator` package
+* Changed the `Cache` interface to use `CacheItem` for storing and retrieving cached items.
+
 ## [0.6.0] - 2019-11-12
 ### Added
 * DURATION_IS_GREGORIAN behavior to support interval based ratelimit durations

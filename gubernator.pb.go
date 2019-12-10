@@ -97,7 +97,7 @@ const (
 	// single peer to decide if the rate limit has been reached.
 	Behavior_GLOBAL Behavior = 2
 	// Changes the behavior of the `Duration` field. When `Behavior` is set to `DURATION_IS_GREGORIAN`
-	// the `Duration` of the rate limit is reset whenever the end of selected GREGORIAN calender
+	// the `Duration` of the rate limit is reset whenever the end of selected GREGORIAN calendar
 	// interval is reached.
 	//
 	// Given the following `Duration` values

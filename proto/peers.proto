@@ -52,5 +52,6 @@ message UpdatePeerGlobalsReq {
 message UpdatePeerGlobal {
     string key = 1;
     RateLimitResp status = 2;
+    Algorithm algorithm = 3;
 }
 message UpdatePeerGlobalsResp {}

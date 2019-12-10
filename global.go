@@ -207,9 +207,8 @@ func (gm *globalManager) updatePeers(updates map[string]*RateLimitReq) {
 		}
 		// Build an UpdatePeerGlobalsReq
 		req.Globals = append(req.Globals, &UpdatePeerGlobal{
-			Algorithm: rl.Algorithm,
-			Key:       rl.HashKey(),
-			Status:    status,
+			Key:    rl.HashKey(),
+			Status: status,
 		})
 	}
 

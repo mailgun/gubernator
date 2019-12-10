@@ -32,7 +32,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	etcd "github.com/coreos/etcd/clientv3"
-	"github.com/mailgun/gubernator/v2"
+	"github.com/mailgun/gubernator"
 	"github.com/mailgun/holster"
 	"k8s.io/klog"
 )

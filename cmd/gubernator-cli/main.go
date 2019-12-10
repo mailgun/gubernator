@@ -24,7 +24,7 @@ import (
 	"os"
 	"time"
 
-	guber "github.com/mailgun/gubernator/v2"
+	guber "github.com/mailgun/gubernator"
 	"github.com/mailgun/holster"
 )
 

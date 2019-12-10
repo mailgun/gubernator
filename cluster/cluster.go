@@ -21,7 +21,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/mailgun/gubernator/v2"
+	"github.com/mailgun/gubernator"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -45,10 +45,8 @@ func (i *instance) Peers() []gubernator.PeerInfo {
 	return result
 }
 
-func (i *instance) Stop() error {
-	err := i.Guber.Close()
+func (i *instance) Stop() {
 	i.GRPC.GracefulStop()
-	return err
 }
 
 var instances []*instance
@@ -78,22 +76,39 @@ func Start(numInstances int) error {
 // Start a local cluster with specific addresses
 func StartWith(addresses []string) error {
 	for _, address := range addresses {
-		ins, err := StartInstance(address, gubernator.Config{
+		srv := grpc.NewServer()
+
+		guber, err := gubernator.New(gubernator.Config{
+			GRPCServer: srv,
 			Behaviors: gubernator.BehaviorConfig{
 				GlobalSyncWait: time.Millisecond * 50, // Suitable for testing but not production
 				GlobalTimeout:  time.Second,
 			},
 		})
 		if err != nil {
-			return errors.Wrapf(err, "while starting instance for addr '%s'", address)
+			return errors.Wrap(err, "while creating new gubernator instance")
 		}
 
-		// Add the peers and instances to the package level variables
-		peers = append(peers, ins.Address)
-		instances = append(instances, ins)
+		listener, err := net.Listen("tcp", address)
+		if err != nil {
+			return errors.Wrap(err, "while listening on random interface")
+		}
+
+		go func() {
+			logrus.Infof("Listening on %s", listener.Addr().String())
+			if err := srv.Serve(listener); err != nil {
+				fmt.Printf("while serving: %s\n", err)
+			}
+		}()
+
+		peers = append(peers, listener.Addr().String())
+		instances = append(instances, &instance{
+			Address: listener.Addr().String(),
+			Guber:   guber,
+			GRPC:    srv,
+		})
 	}
 
-	// Tell each instance about the other peers
 	for _, ins := range instances {
 		ins.Guber.SetPeers(ins.Peers())
 	}
@@ -104,35 +119,4 @@ func Stop() {
 	for _, ins := range instances {
 		ins.Stop()
 	}
-}
-
-// Start a single instance of gubernator with the provided config and listening address.
-// If address is empty string a random port on the loopback device will be chosen.
-func StartInstance(address string, conf gubernator.Config) (*instance, error) {
-	conf.GRPCServer = grpc.NewServer()
-
-	guber, err := gubernator.New(conf)
-	if err != nil {
-		return nil, errors.Wrap(err, "while creating new gubernator instance")
-	}
-
-	listener, err := net.Listen("tcp", address)
-	if err != nil {
-		return nil, errors.Wrap(err, "while listening on random interface")
-	}
-
-	go func() {
-		logrus.Infof("Listening on %s", listener.Addr().String())
-		if err := conf.GRPCServer.Serve(listener); err != nil {
-			fmt.Printf("while serving: %s\n", err)
-		}
-	}()
-
-	guber.SetPeers([]gubernator.PeerInfo{{Address: listener.Addr().String(), IsOwner: true}})
-
-	return &instance{
-		Address: listener.Addr().String(),
-		GRPC:    conf.GRPCServer,
-		Guber:   guber,
-	}, nil
 }

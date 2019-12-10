@@ -40,11 +40,11 @@ const (
 var log *logrus.Entry
 
 type Instance struct {
+	wg        holster.WaitGroup
 	health    HealthCheckResp
 	global    *globalManager
 	peerMutex sync.RWMutex
 	conf      Config
-	isClosed  bool
 }
 
 func New(conf Config) (*Instance, error) {
@@ -67,40 +67,7 @@ func New(conf Config) (*Instance, error) {
 	RegisterV1Server(conf.GRPCServer, &s)
 	RegisterPeersV1Server(conf.GRPCServer, &s)
 
-	if s.conf.Loader == nil {
-		return &s, nil
-	}
-
-	ch, err := s.conf.Loader.Load()
-	if err != nil {
-		return nil, errors.Wrap(err, "while loading persistent from store")
-	}
-
-	for item := range ch {
-		s.conf.Cache.Add(item)
-	}
 	return &s, nil
-}
-
-func (s *Instance) Close() error {
-	if s.isClosed {
-		return nil
-	}
-
-	if s.conf.Loader == nil {
-		return nil
-	}
-
-	out := make(chan *CacheItem, 500)
-	go func() {
-		for item := range s.conf.Cache.Each() {
-			fmt.Printf("Each: %+v\n", item)
-			out <- item
-		}
-		close(out)
-	}()
-	s.isClosed = true
-	return s.conf.Loader.Save(out)
 }
 
 // GetRateLimits is the public interface used by clients to request rate limits from the system. If the
@@ -223,13 +190,14 @@ func (s *Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, error)
 	s.global.QueueHit(req)
 
 	s.conf.Cache.Lock()
-	item, ok := s.conf.Cache.GetItem(req.HashKey())
+	item, ok := s.conf.Cache.Get(req.HashKey())
 	s.conf.Cache.Unlock()
 	if ok {
-		// Global rate limits are always stored as RateLimitResp regardless of algorithm
-		rl, ok := item.Value.(*RateLimitResp)
+		rl, ok := item.(*RateLimitResp)
 		if !ok {
-			return nil, errors.New("Global rate limit is of incorrect type")
+			// Perhaps the rate limit algorithm was changed by the user.
+			s.conf.Cache.Remove(req.HashKey())
+			return s.getGlobalRateLimit(req)
 		}
 		return rl, nil
 	} else {
@@ -248,12 +216,7 @@ func (s *Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsRe
 	defer s.conf.Cache.Unlock()
 
 	for _, g := range r.Globals {
-		s.conf.Cache.Add(&CacheItem{
-			ExpireAt:  g.Status.ResetTime,
-			Algorithm: g.Algorithm,
-			Value:     g.Status,
-			Key:       g.Key,
-		})
+		s.conf.Cache.Add(g.Key, g.Status, g.Status.ResetTime)
 	}
 	return &UpdatePeerGlobalsResp{}, nil
 }
@@ -295,9 +258,9 @@ func (s *Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
 
 	switch r.Algorithm {
 	case Algorithm_TOKEN_BUCKET:
-		return tokenBucket(s.conf.Store, s.conf.Cache, r)
+		return tokenBucket(s.conf.Cache, r)
 	case Algorithm_LEAKY_BUCKET:
-		return leakyBucket(s.conf.Store, s.conf.Cache, r)
+		return leakyBucket(s.conf.Cache, r)
 	}
 	return nil, errors.Errorf("invalid rate limit algorithm '%d'", r.Algorithm)
 }
@@ -350,7 +313,7 @@ func (s *Instance) SetPeers(peers []PeerInfo) {
 	ctx, cancel := context.WithTimeout(context.Background(), s.conf.Behaviors.BatchTimeout)
 	defer cancel()
 
-	var shutdownPeers []*PeerClient
+	shutdownPeers := []*PeerClient{}
 
 	for _, p := range oldPicker.Peers() {
 		peerInfo := s.conf.Picker.GetPeerByHost(p.host)

@@ -12,7 +12,15 @@ type LeakyBucketItem struct {
 	Limit     int64
 	Duration  int64
 	Remaining int64
-	TimeStamp int64
+	UpdatedAt int64
+}
+
+type TokenBucketItem struct {
+	Status    Status
+	Limit     int64
+	Duration  int64
+	Remaining int64
+	CreatedAt int64
 }
 
 // Store interface allows implementors to off load storage of all or a subset of ratelimits to

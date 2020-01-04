@@ -179,6 +179,10 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*Get
 						if err != nil {
 							inOut.Out = &RateLimitResp{Error: err.Error()}
 						}
+
+						// Inform the client of the owner key of the key
+						inOut.Out.Metadata = map[string]string{"owner": peer.host}
+
 						out <- inOut
 						return nil
 					}
@@ -228,17 +232,17 @@ func (s *Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, error)
 	if ok {
 		// Global rate limits are always stored as RateLimitResp regardless of algorithm
 		rl, ok := item.Value.(*RateLimitResp)
-		if !ok {
-			return nil, errors.New("Global rate limit is of incorrect type")
+		if ok {
+			return rl, nil
 		}
-		return rl, nil
-	} else {
-		cpy := *req
-		cpy.Behavior = Behavior_NO_BATCHING
-		// Process the rate limit like we own it since we have no data on the rate limit
-		resp, err := s.getRateLimit(&cpy)
-		return resp, err
+		// We get here if the owning node hasn't asynchronously forwarded it's updates to us yet and
+		// our cache still holds the rate limit we created on the first hit.
 	}
+	cpy := *req
+	cpy.Behavior = Behavior_NO_BATCHING
+	// Process the rate limit like we own it
+	resp, err := s.getRateLimit(&cpy)
+	return resp, err
 }
 
 // UpdatePeerGlobals updates the local cache with a list of global rate limits. This method should only

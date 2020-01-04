@@ -65,8 +65,13 @@ type LRUCache struct {
 type CacheItem struct {
 	Algorithm Algorithm
 	Key       string
-	ExpireAt  int64
 	Value     interface{}
+
+	// Timestamp when rate limit expires
+	ExpireAt int64
+	// Timestamp when the cache should invalidate this rate limit. This is useful when used in conjunction with
+	// a persistent store to ensure our node has the most up to date info from the store. Ignored if set to `0`
+	InvalidAt int64
 }
 
 var _ Cache = &LRUCache{}
@@ -135,8 +140,16 @@ func (c *LRUCache) GetItem(key interface{}) (item *CacheItem, ok bool) {
 	if ele, hit := c.cache[key]; hit {
 		entry := ele.Value.(*CacheItem)
 
+		now := MillisecondNow()
+		// If the entry is invalidated
+		if entry.InvalidAt != 0 && entry.InvalidAt < now {
+			c.removeElement(ele)
+			c.stats.Miss++
+			return
+		}
+
 		// If the entry has expired, remove it from the cache
-		if entry.ExpireAt < MillisecondNow() {
+		if entry.ExpireAt < now {
 			c.removeElement(ele)
 			c.stats.Miss++
 			return

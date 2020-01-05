@@ -33,12 +33,24 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 	}
 
 	if ok {
+		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
+			c.Remove(r.HashKey())
+			if s != nil {
+				s.Remove(r.HashKey())
+			}
+			return &RateLimitResp{
+				Status:    Status_UNDER_LIMIT,
+				Limit:     r.Limit,
+				Remaining: r.Limit,
+				ResetTime: 0,
+			}, nil
+		}
+
 		// The following semantic allows for requests of more than the limit to be rejected, but subsequent
 		// requests within the same duration that are under the limit to succeed. IE: client attempts to
 		// send 1000 emails but 100 is their limit. The request is rejected as over the limit, but since we
 		// don't store OVER_LIMIT in the cache the client can retry within the same rate limit duration with
 		// 100 emails and the request will succeed.
-
 		t, ok := item.Value.(*TokenBucketItem)
 		if !ok {
 			// Client switched algorithms; perhaps due to a migration?
@@ -188,6 +200,10 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 				s.Remove(r.HashKey())
 			}
 			return leakyBucket(s, c, r)
+		}
+
+		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
+			b.Remaining = r.Limit
 		}
 
 		// Update limit and duration if they changed

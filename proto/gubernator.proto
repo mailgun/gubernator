@@ -120,7 +120,7 @@ enum Behavior {
   // ignore any `Hit` values provided in the current request. The effect this has is dependent on
   // algorithm chosen. For instance, if used with `TOKEN_BUCKET` it will immediately expire the
   // cache value. For `LEAKY_BUCKET` it sets the `Remaining` to `Limit`.
-  RESET_HITS = 8;
+  RESET_REMAINING = 8;
 
   // TODO: Add support for LOCAL. Which would force the rate limit to be handled by the local instance
 }

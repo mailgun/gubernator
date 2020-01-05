@@ -174,7 +174,7 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*Get
 						}
 					}
 				} else {
-					if inOut.In.Behavior == Behavior_GLOBAL {
+					if HasBehavior(inOut.In.Behavior, Behavior_GLOBAL) {
 						inOut.Out, err = s.getGlobalRateLimit(inOut.In)
 						if err != nil {
 							inOut.Out = &RateLimitResp{Error: err.Error()}
@@ -293,7 +293,7 @@ func (s *Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
 	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
 
-	if r.Behavior == Behavior_GLOBAL {
+	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
 		s.global.QueueUpdate(r)
 	}
 
@@ -407,4 +407,19 @@ func (s *Instance) Describe(ch chan<- *prometheus.Desc) {
 func (s *Instance) Collect(ch chan<- prometheus.Metric) {
 	ch <- s.global.asyncMetrics
 	ch <- s.global.broadcastMetrics
+}
+
+// HasBehavior returns true if the provided behavior is set
+func HasBehavior(b Behavior, flag Behavior) bool {
+	return b&flag != 0
+}
+
+// SetBehavior sets or clears the behavior depending on the boolean `set`
+func SetBehavior(b *Behavior, flag Behavior, set bool) {
+	if set {
+		*b = *b | flag
+	} else {
+		mask := *b ^ flag
+		*b &= mask
+	}
 }

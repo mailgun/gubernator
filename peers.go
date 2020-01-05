@@ -78,21 +78,18 @@ func NewPeerClient(conf BehaviorConfig, host string) (*PeerClient, error) {
 // GetPeerRateLimit forwards a rate limit request to a peer. If the rate limit has `behavior == BATCHING` configured
 // this method will attempt to batch the rate limits
 func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
-	// TODO: remove batching for global if we end up implementing a HIT aggregator
-	// If config asked for batching or is global rate limit
-	if r.Behavior == Behavior_BATCHING ||
-		r.Behavior == Behavior_GLOBAL {
-		return c.getPeerRateLimitsBatch(ctx, r)
+	// If config asked for no batching
+	if HasBehavior(r.Behavior, Behavior_NO_BATCHING) {
+		// Send a single low latency rate limit request
+		resp, err := c.GetPeerRateLimits(ctx, &GetPeerRateLimitsReq{
+			Requests: []*RateLimitReq{r},
+		})
+		if err != nil {
+			return nil, err
+		}
+		return resp.RateLimits[0], nil
 	}
-
-	// Send a single low latency rate limit request
-	resp, err := c.GetPeerRateLimits(ctx, &GetPeerRateLimitsReq{
-		Requests: []*RateLimitReq{r},
-	})
-	if err != nil {
-		return nil, err
-	}
-	return resp.RateLimits[0], nil
+	return c.getPeerRateLimitsBatch(ctx, r)
 }
 
 // GetPeerRateLimits requests a list of rate limit statuses from a peer

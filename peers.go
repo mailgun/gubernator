@@ -256,7 +256,7 @@ func (c *PeerClient) sendQueue(queue []*request) {
 }
 
 // Shutdown will gracefully shutdown the client connection, until the context is cancelled
-func (c *PeerClient) Shutdown(ctx context.Context, wg *sync.WaitGroup) error {
+func (c *PeerClient) Shutdown(ctx context.Context) error {
 	// Take the write lock since we're going to modify the closing state
 	c.mutex.Lock()
 	if c.isClosing {
@@ -274,8 +274,6 @@ func (c *PeerClient) Shutdown(ctx context.Context, wg *sync.WaitGroup) error {
 		if c.conn != nil {
 			c.conn.Close()
 		}
-
-		wg.Done()
 	}()
 
 	// This allows us to wait on the waitgroup, or until the context

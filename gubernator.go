@@ -364,10 +364,12 @@ func (s *Instance) SetPeers(peers []PeerInfo) {
 
 	for _, p := range shutdownPeers {
         go func() {
-            err := p.Shutdown(ctx, &wg)
+            err := p.Shutdown(ctx)
             if err != nil {
                 log.WithError(err).WithField("peer", p).Error("while shutting down peer")
             }
+
+    		wg.Done()
         }()
 	}
 

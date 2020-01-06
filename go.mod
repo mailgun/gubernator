@@ -3,8 +3,10 @@ module github.com/mailgun/gubernator
 require (
 	github.com/coreos/etcd v3.3.15+incompatible
 	github.com/davecgh/go-spew v1.1.1
+	github.com/fatih/structs v1.1.0 // indirect
 	github.com/golang/protobuf v1.3.2
 	github.com/grpc-ecosystem/grpc-gateway v1.10.0
+	github.com/mailgun/holster v3.0.0+incompatible
 	github.com/mailgun/holster/v3 v3.8.1
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.1.0

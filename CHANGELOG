@@ -16,12 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Fixed a bug in global behaviour where it would return an error if the async
   update had not occured before the a second request is made. Now it acts like it
   owns the rate limit until the owning node sends an update
-<<<<<<< HEAD
 * Always include reset_time in leaky bucket responses
 * Fixed subtle bug during shutdown where PeerClient passed into goroutine could
   be out of scope/changed when routine runs
-=======
->>>>>>> Added Behavior RESET_REMAINING to reset any hits recorded in the cache for the specified rate limit
 * Behavior is now a flag, this should be a backward compatible change for
   anyone using GLOBAL or NO_BATCHING but will break anyone using
   DURATION_IS_GREGORIAN. Use `HasBehavior()` function to check for behavior

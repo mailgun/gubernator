@@ -36,7 +36,7 @@ type Interval struct {
 func NewInterval(d time.Duration) *Interval {
 	i := Interval{
 		C:  make(chan struct{}, 1),
-		in: make(chan struct{}),
+		in: make(chan struct{}, 1),
 	}
 	i.run(d)
 	return &i

@@ -41,8 +41,7 @@ func TestPeerClientShutdown(t *testing.T) {
 
 		t.Run(c.Name, func(t *testing.T) {
 
-			client, err := gubernator.NewPeerClient(config, cluster.GetPeer())
-			assert.NoError(t, err)
+			client := gubernator.NewPeerClient(config, cluster.GetRandomPeer())
 
 			wg := sync.WaitGroup{}
 			wg.Add(threads)
@@ -57,14 +56,14 @@ func TestPeerClientShutdown(t *testing.T) {
 						Behavior: c.Behavior,
 					})
 
-					assert.Contains(t, []error{nil, gubernator.ErrClosing}, err)
+					assert.Subset(t, []error{nil, &gubernator.PeerErr{}}, err)
 				}()
 			}
 
 			// yield the processor that way we allow other goroutines to start their request
 			runtime.Gosched()
 
-			err = client.Shutdown(context.Background())
+			err := client.Shutdown(context.Background())
 			assert.NoError(t, err)
 
 			wg.Wait()

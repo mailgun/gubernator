@@ -216,7 +216,7 @@ func (gm *globalManager) updatePeers(updates map[string]*RateLimitReq) {
 
 	for _, peer := range gm.instance.GetPeerList() {
 		// Exclude ourselves from the update
-		if peer.isOwner {
+		if peer.info.IsOwner {
 			continue
 		}
 
@@ -225,8 +225,9 @@ func (gm *globalManager) updatePeers(updates map[string]*RateLimitReq) {
 		cancel()
 
 		if err != nil {
-			if err != ErrClosing {
-				gm.log.WithError(err).Errorf("error sending global updates to '%s'", peer.host)
+			// Skip peers that are not in a ready state
+			if !IsNotReady(err) {
+				gm.log.WithError(err).Errorf("error sending global updates to '%s'", peer.info.Address)
 			}
 			continue
 		}

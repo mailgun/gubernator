@@ -36,11 +36,10 @@ type instance struct {
 func (i *instance) Peers() []gubernator.PeerInfo {
 	var result []gubernator.PeerInfo
 	for _, peer := range peers {
-		info := gubernator.PeerInfo{Address: peer}
-		if peer == i.Address {
-			info.IsOwner = true
+		if peer.Address == i.Address {
+			peer.IsOwner = true
 		}
-		result = append(result, info)
+		result = append(result, peer)
 	}
 	return result
 }
@@ -52,15 +51,15 @@ func (i *instance) Stop() error {
 }
 
 var instances []*instance
-var peers []string
+var peers []gubernator.PeerInfo
 
 // Returns a random peer from the cluster
-func GetPeer() string {
+func GetRandomPeer() gubernator.PeerInfo {
 	return gubernator.RandomPeer(peers)
 }
 
 // Returns a specific peer
-func PeerAt(idx int) string {
+func PeerAt(idx int) gubernator.PeerInfo {
 	return peers[idx]
 }
 
@@ -89,7 +88,7 @@ func StartWith(addresses []string) error {
 		}
 
 		// Add the peers and instances to the package level variables
-		peers = append(peers, ins.Address)
+		peers = append(peers, gubernator.PeerInfo{Address: ins.Address})
 		instances = append(instances, ins)
 	}
 

@@ -97,7 +97,7 @@ func TestGetPeer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			peers = tt.peers
-			got := GetPeer()
+			got := GetRandomPeer()
 
 			if !stringInSlice(got, peers) {
 				t.Errorf("expected one of: %v", tt.peers)

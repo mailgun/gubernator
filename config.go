@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/mailgun/holster"
 	"github.com/mailgun/holster/v3/setter"
 	"google.golang.org/grpc"
 )
@@ -45,9 +46,18 @@ type Config struct {
 	// the contents of the cache when the gubernator instance is started and stopped
 	Loader Loader
 
-	// (Optional) This is the peer picker algorithm the server will use decide which peer in the cluster
-	// will coordinate a rate limit
-	Picker PeerPicker
+	// (Optional) This is the peer picker algorithm the server will use decide which peer in the local cluster
+	// will own the rate limit
+	LocalPicker PeerPicker
+
+	// (Optional) This is the peer picker algorithm the server will use when deciding which remote peer to forward
+	// rate limits too when a `Config.DataCenter` is set to something other than empty string.
+	RegionPicker RegionPeerPicker
+
+	// (Optional) This is the name of our local data center. This value will be used by LocalPicker when
+	// deciding who we should immediately connect too for our local picker. Should remain empty if not
+	// using multi data center support.
+	DataCenter string
 }
 
 type BehaviorConfig struct {
@@ -60,7 +70,7 @@ type BehaviorConfig struct {
 
 	// How long a non-owning peer should wait before syncing hits to the owning peer
 	GlobalSyncWait time.Duration
-	// How long we should wait for a global sync responses from peers
+	// How long we should wait for global sync responses from peers
 	GlobalTimeout time.Duration
 	// The max number of global updates we can batch into a single peer request
 	GlobalBatchLimit int
@@ -75,8 +85,11 @@ func (c *Config) SetDefaults() error {
 	setter.SetDefault(&c.Behaviors.GlobalBatchLimit, maxBatchSize)
 	setter.SetDefault(&c.Behaviors.GlobalSyncWait, time.Microsecond*500)
 
-	setter.SetDefault(&c.Picker, NewConsistantHash(nil))
-	setter.SetDefault(&c.Cache, NewLRUCache(0))
+	holster.SetDefault(&c.LocalPicker, NewConsistantHash(nil))
+	// TODO: Default to a MultiPicker
+	// TODO: Update to the latest holster version
+	//holster.SetDefault(&c.LocalPicker, NewConsistantHash(nil))
+	holster.SetDefault(&c.Cache, NewLRUCache(0))
 
 	if c.Behaviors.BatchLimit > maxBatchSize {
 		return fmt.Errorf("Behaviors.BatchLimit cannot exceed '%d'", maxBatchSize)

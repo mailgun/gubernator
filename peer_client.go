@@ -24,29 +24,33 @@ import (
 	"google.golang.org/grpc"
 )
 
-// ErrClosing is the error returned when the client is closing
-var ErrClosing = errors.New("closing")
-
 type PeerPicker interface {
-	GetPeerByHost(host string) *PeerClient
+	GetByPeerInfo(PeerInfo) *PeerClient
 	Peers() []*PeerClient
 	Get(string) (*PeerClient, error)
 	New() PeerPicker
 	Add(*PeerClient)
-	Size() int
+	Size() int // TODO: Might not be useful?
 }
 
-type PeerClient struct {
-	client  PeersV1Client
-	conn    *grpc.ClientConn
-	conf    BehaviorConfig
-	queue   chan *request
-	host    string
-	isOwner bool // true if this peer refers to this server instance
+type peerStatus int
 
-	mutex     sync.RWMutex // This mutex is for verifying the closing state of the client
-	isClosing bool
-	wg        sync.WaitGroup // This wait group is to monitor the number of in-flight requests
+const (
+	peerNotConnected peerStatus = iota
+	peerConnected
+	peerClosing
+)
+
+type PeerClient struct {
+	client PeersV1Client
+	conn   *grpc.ClientConn
+	conf   BehaviorConfig
+	queue  chan *request
+	info   PeerInfo
+
+	mutex  sync.RWMutex   // This mutex is for verifying the closing state of the client
+	status peerStatus     // Keep the current status of the peer
+	wg     sync.WaitGroup // This wait group is to monitor the number of in-flight requests
 }
 
 type response struct {
@@ -59,20 +63,57 @@ type request struct {
 	resp    chan *response
 }
 
-func NewPeerClient(conf BehaviorConfig, host string) (*PeerClient, error) {
-	c := &PeerClient{
-		queue: make(chan *request, 1000),
-		host:  host,
-		conf:  conf,
+func NewPeerClient(conf BehaviorConfig, info PeerInfo) *PeerClient {
+	return &PeerClient{
+		queue:  make(chan *request, 1000),
+		status: peerNotConnected,
+		conf:   conf,
+		info:   info,
+	}
+}
+
+// Connect establishes a GRPC connection to a peer
+func (c *PeerClient) Connect() error {
+	// NOTE: To future self, this mutex is used here because we need to know if the peer is disconnecting and
+	// handle ErrClosing. Since this mutex MUST be here we take this opportunity to also see if we are connected.
+	// Doing this here encapsulates managing the connected state to the PeerClient struct. Previously a PeerClient
+	// was connected when `NewPeerClient()` was called however, when adding support for multi data centers having a
+	// PeerClient connected to every Peer in every data center continuously is not desirable, especially if nodes
+	// in each region are configured to all have sisters.
+
+	c.mutex.RLock()
+	if c.status == peerClosing {
+		c.mutex.RUnlock()
+		return &PeerErr{err: errors.New("already disconnecting")}
 	}
 
-	if err := c.dialPeer(); err != nil {
-		return nil, err
+	if c.status == peerNotConnected {
+		// This mutex stuff looks wonky, but it allows us to use RLock() 99% of the time, while the 1% where we
+		// actually need to connect uses a full Lock(), using RLock() most of which should reduce the over head
+		// of a full lock on every call
+
+		// Yield the read lock so we can get the RW lock
+		c.mutex.RUnlock()
+		c.mutex.Lock()
+		defer c.mutex.Unlock()
+
+		// Now that we have the RW lock, ensure no else got here ahead of us.
+		if c.status == peerConnected {
+			return nil
+		}
+
+		var err error
+		c.conn, err = grpc.Dial(c.info.Address, grpc.WithInsecure())
+		if err != nil {
+			return &PeerErr{err: errors.Wrapf(err, "failed to dial peer %s", c.info.Address)}
+		}
+		c.client = NewPeersV1Client(c.conn)
+		c.status = peerConnected
+		go c.run()
+		return nil
 	}
-
-	go c.run()
-
-	return c, nil
+	c.mutex.RUnlock()
+	return nil
 }
 
 // GetPeerRateLimit forwards a rate limit request to a peer. If the rate limit has `behavior == BATCHING` configured
@@ -94,12 +135,9 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 
 // GetPeerRateLimits requests a list of rate limit statuses from a peer
 func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
-	c.mutex.RLock()
-	if c.isClosing {
-		c.mutex.RUnlock()
-		return nil, ErrClosing
+	if err := c.Connect(); err != nil {
+		return nil, err
 	}
-	c.mutex.RUnlock()
 
 	c.wg.Add(1)
 	defer c.wg.Done()
@@ -118,12 +156,9 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 
 // UpdatePeerGlobals sends global rate limit status updates to a peer
 func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
-	c.mutex.RLock()
-	if c.isClosing {
-		c.mutex.RUnlock()
-		return nil, ErrClosing
+	if err := c.Connect(); err != nil {
+		return nil, err
 	}
-	c.mutex.RUnlock()
 
 	c.wg.Add(1)
 	defer c.wg.Done()
@@ -132,19 +167,14 @@ func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 }
 
 func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
-	c.mutex.RLock()
-	if c.isClosing {
-		c.mutex.RUnlock()
-		return nil, ErrClosing
+	if err := c.Connect(); err != nil {
+		return nil, err
 	}
 
 	req := request{request: r, resp: make(chan *response, 1)}
 
 	// Enqueue the request to be sent
 	c.queue <- &req
-
-	// Unlock to prevent the chan from being closed
-	c.mutex.RUnlock()
 
 	c.wg.Add(1)
 	defer c.wg.Done()
@@ -159,18 +189,6 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-}
-
-// dialPeer dials a peer and initializes the GRPC client
-func (c *PeerClient) dialPeer() error {
-	var err error
-	c.conn, err = grpc.Dial(c.host, grpc.WithInsecure())
-	if err != nil {
-		return errors.Wrapf(err, "failed to dial peer %s", c.host)
-	}
-
-	c.client = NewPeersV1Client(c.conn)
-	return nil
 }
 
 // run waits for requests to be queued, when either c.batchWait time
@@ -256,12 +274,12 @@ func (c *PeerClient) sendQueue(queue []*request) {
 func (c *PeerClient) Shutdown(ctx context.Context) error {
 	// Take the write lock since we're going to modify the closing state
 	c.mutex.Lock()
-	if c.isClosing {
+	if c.status == peerClosing || c.status == peerNotConnected {
 		c.mutex.Unlock()
 		return nil
 	}
 
-	c.isClosing = true
+	c.status = peerClosing
 	// We need to close the chan here to prevent a possible race
 	close(c.queue)
 
@@ -288,4 +306,31 @@ func (c *PeerClient) Shutdown(ctx context.Context) error {
 	case <-waitChan:
 		return nil
 	}
+}
+
+// PeerErr is returned if the peer is not connected or is in a closing state
+type PeerErr struct {
+	err error
+}
+
+func (p *PeerErr) NotReady() bool {
+	return true
+}
+
+func (p *PeerErr) Error() string {
+	return p.err.Error()
+}
+
+func (p *PeerErr) Cause() error {
+	return p.err
+}
+
+type notReadyErr interface {
+	NotReady() bool
+}
+
+// IsNotReady returns true if the err is because the peer is not connected or in a closing state
+func IsNotReady(err error) bool {
+	te, ok := err.(notReadyErr)
+	return ok && te.NotReady()
 }

@@ -28,8 +28,27 @@ import (
 )
 
 type PeerInfo struct {
+	// (Optional) This id is unique within a data center. It identifies which nodes are sisters in a multi data
+	// center config. Leave empty if you don't want to specify sisters or if you are not using multi
+	// data center support.
+	SisterID string
+
+	// (Optional) The name of the data center this peer is in. Leave blank if not using multi data center support.
+	DataCenter string
+
+	// (Required) The IP address of the peer which will field peer requests
 	Address string
+
+	// (Optional) Is true if PeerInfo is for this instance of gubernator
 	IsOwner bool
+}
+
+// Returns the hash key used to identify this peer in the Picker.
+func (p PeerInfo) HashKey() string {
+	if len(p.SisterID) != 0 {
+		return p.SisterID
+	}
+	return p.Address
 }
 
 type UpdateFunc func([]PeerInfo)

@@ -60,7 +60,8 @@ func (ch *ConsistantHash) Peers() []*PeerClient {
 
 // Adds a peer to the hash
 func (ch *ConsistantHash) Add(peer *PeerClient) {
-	hash := int(ch.hashFunc([]byte(peer.host)))
+	hash := int(ch.hashFunc([]byte(peer.info.HashKey())))
+
 	ch.peerKeys = append(ch.peerKeys, hash)
 	ch.peerMap[hash] = peer
 	sort.Ints(ch.peerKeys)
@@ -71,9 +72,9 @@ func (ch *ConsistantHash) Size() int {
 	return len(ch.peerKeys)
 }
 
-// Returns the peer by hostname
-func (ch *ConsistantHash) GetPeerByHost(host string) *PeerClient {
-	return ch.peerMap[int(ch.hashFunc([]byte(host)))]
+// Returns the peer by peer info
+func (ch *ConsistantHash) GetByPeerInfo(peer PeerInfo) *PeerClient {
+	return ch.peerMap[int(ch.hashFunc([]byte(peer.HashKey())))]
 }
 
 // Given a key, return the peer that key is assigned too

@@ -359,13 +359,18 @@ func (s *Instance) SetPeers(peers []PeerInfo) {
 		if peerInfo == nil {
 			shutdownPeers = append(shutdownPeers, p)
 			wg.Add(1)
-			go func() {
-				err := p.Shutdown(ctx)
-				if err != nil {
-					log.WithError(err).WithField("peer", p).Error("while shutting down peer")
-				}
-			}()
 		}
+	}
+
+	for _, p := range shutdownPeers {
+        go func() {
+            err := p.Shutdown(ctx)
+            if err != nil {
+                log.WithError(err).WithField("peer", p).Error("while shutting down peer")
+            }
+
+    		wg.Done()
+        }()
 	}
 
 	wg.Wait()

@@ -33,12 +33,24 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 	}
 
 	if ok {
+		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
+			c.Remove(r.HashKey())
+			if s != nil {
+				s.Remove(r.HashKey())
+			}
+			return &RateLimitResp{
+				Status:    Status_UNDER_LIMIT,
+				Limit:     r.Limit,
+				Remaining: r.Limit,
+				ResetTime: 0,
+			}, nil
+		}
+
 		// The following semantic allows for requests of more than the limit to be rejected, but subsequent
 		// requests within the same duration that are under the limit to succeed. IE: client attempts to
 		// send 1000 emails but 100 is their limit. The request is rejected as over the limit, but since we
 		// don't store OVER_LIMIT in the cache the client can retry within the same rate limit duration with
 		// 100 emails and the request will succeed.
-
 		t, ok := item.Value.(*TokenBucketItem)
 		if !ok {
 			// Client switched algorithms; perhaps due to a migration?
@@ -74,7 +86,7 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 		// If the duration config changed, update the new ExpireAt
 		if t.Duration != r.Duration {
 			expire := t.CreatedAt + r.Duration
-			if r.Behavior == Behavior_DURATION_IS_GREGORIAN {
+			if HasBehavior(r.Behavior, Behavior_DURATION_IS_GREGORIAN) {
 				expire, err = GregorianExpiration(time.Now(), r.Duration)
 				if err != nil {
 					return nil, err
@@ -124,7 +136,7 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 	// Add a new rate limit to the cache
 	now := MillisecondNow()
 	expire := now + r.Duration
-	if r.Behavior == Behavior_DURATION_IS_GREGORIAN {
+	if HasBehavior(r.Behavior, Behavior_DURATION_IS_GREGORIAN) {
 		expire, err = GregorianExpiration(time.Now(), r.Duration)
 		if err != nil {
 			return nil, err
@@ -190,13 +202,17 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 			return leakyBucket(s, c, r)
 		}
 
+		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
+			b.Remaining = r.Limit
+		}
+
 		// Update limit and duration if they changed
 		b.Limit = r.Limit
 		b.Duration = r.Duration
 
 		duration := r.Duration
 		rate := duration / r.Limit
-		if r.Behavior == Behavior_DURATION_IS_GREGORIAN {
+		if HasBehavior(r.Behavior, Behavior_DURATION_IS_GREGORIAN) {
 			d, err := GregorianDuration(time.Now(), r.Duration)
 			if err != nil {
 				return nil, err
@@ -273,7 +289,7 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 	}
 
 	duration := r.Duration
-	if r.Behavior == Behavior_DURATION_IS_GREGORIAN {
+	if HasBehavior(r.Behavior, Behavior_DURATION_IS_GREGORIAN) {
 		n := time.Now()
 		expire, err := GregorianExpiration(n, r.Duration)
 		if err != nil {

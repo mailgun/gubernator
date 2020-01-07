@@ -61,6 +61,7 @@ enum Algorithm {
   LEAKY_BUCKET = 1;
 }
 
+// A set of int32 flags used to control the behavior of a rate limit in gubernator
 enum Behavior {
   // BATCHING is the default behavior. This enables batching requests which protects the
   // service from thundering herd. IE: When a service experiences spikes of unexpected high
@@ -70,7 +71,7 @@ enum Behavior {
   // the `batchWait` setting. Defaults to around 500 Microseconds of additional
   // latency in low throughput situations. For high volume loads, batching can reduce
   // the overall load on the system substantially.
-  BATCHING = 0;
+  BATCHING = 0; // <-- this is here because proto requires it, but has no effect if used
 
   // Disables batching. Use this for super low latency rate limit requests when
   // thundering herd is not a concern but latency of requests is of paramount importance.
@@ -105,15 +106,21 @@ enum Behavior {
   //
   // Examples when using `Behavior = DURATION_IS_GREGORIAN`
   //
-  // If  `Duration = 2` (Days) then the rate limit will reset to `Current = 0` at the end of the
-  // current day the rate limit was created.
+  // If  `Duration = 2` (Days) then the rate limit will expire at the end of the current day the
+  // rate limit was created.
   //
-  // If `Duration = 0` (Minutes) then the rate limit will reset to `Current = 0` at the end of
-  // the minute the rate limit was created.
+  // If `Duration = 0` (Minutes) then the rate limit will expire at the end of the current minute
+  // the rate limit was created.
   //
-  // If `Duration = 4` (Months) then the rate limit will reset to `Current = 0` at the end of
-  // the month the rate limit was created.
-  DURATION_IS_GREGORIAN = 3;
+  // If `Duration = 4` (Months) then the rate limit will expire at the end of the current month
+  // the rate limit was created.
+  DURATION_IS_GREGORIAN = 4;
+
+  // If this flag is set causes the rate limit to reset any accrued hits stored in the cache, and will
+  // ignore any `Hit` values provided in the current request. The effect this has is dependent on
+  // algorithm chosen. For instance, if used with `TOKEN_BUCKET` it will immediately expire the
+  // cache value. For `LEAKY_BUCKET` it sets the `Remaining` to `Limit`.
+  RESET_REMAINING = 8;
 
   // TODO: Add support for LOCAL. Which would force the rate limit to be handled by the local instance
 }
@@ -142,7 +149,7 @@ message RateLimitReq {
   // subsequent requests, when this occurs any previous rate limit hit counts are reset.
   Algorithm algorithm = 6;
 
-  // The behavior of the rate limit in gubernator.
+  // Behavior is a set of int32 flags that control the behavior of the rate limit in gubernator
   Behavior behavior = 7;
 }
 

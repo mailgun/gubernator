@@ -422,4 +422,76 @@ func TestChangeLimit(t *testing.T) {
 	}
 }
 
+func TestResetRemaining(t *testing.T) {
+	client, errs := guber.DialV1Server(cluster.GetPeer())
+	require.Nil(t, errs)
+
+	tests := []struct {
+		Remaining int64
+		Algorithm guber.Algorithm
+		Behavior  guber.Behavior
+		Status    guber.Status
+		Name      string
+		Limit     int64
+	}{
+		{
+			Name:      "Should subtract 1 from remaining",
+			Algorithm: guber.Algorithm_TOKEN_BUCKET,
+			Status:    guber.Status_UNDER_LIMIT,
+			Behavior:  guber.Behavior_BATCHING,
+			Remaining: 99,
+			Limit:     100,
+		},
+		{
+			Name:      "Should subtract 2 from remaining",
+			Algorithm: guber.Algorithm_TOKEN_BUCKET,
+			Status:    guber.Status_UNDER_LIMIT,
+			Behavior:  guber.Behavior_BATCHING,
+			Remaining: 98,
+			Limit:     100,
+		},
+		{
+			Name:      "Should reset the remaining",
+			Algorithm: guber.Algorithm_TOKEN_BUCKET,
+			Status:    guber.Status_UNDER_LIMIT,
+			Behavior:  guber.Behavior_RESET_REMAINING,
+			Remaining: 100,
+			Limit:     100,
+		},
+		{
+			Name:      "Should subtract 1 from remaining after reset",
+			Algorithm: guber.Algorithm_TOKEN_BUCKET,
+			Status:    guber.Status_UNDER_LIMIT,
+			Behavior:  guber.Behavior_BATCHING,
+			Remaining: 99,
+			Limit:     100,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.Name, func(t *testing.T) {
+			resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+				Requests: []*guber.RateLimitReq{
+					{
+						Name:      "test_reset_remaining",
+						UniqueKey: "account:1234",
+						Algorithm: tt.Algorithm,
+						Duration:  guber.Millisecond * 100,
+						Behavior:  tt.Behavior,
+						Limit:     tt.Limit,
+						Hits:      1,
+					},
+				},
+			})
+			require.Nil(t, err)
+
+			rl := resp.Responses[0]
+
+			assert.Equal(t, tt.Status, rl.Status)
+			assert.Equal(t, tt.Remaining, rl.Remaining)
+			assert.Equal(t, tt.Limit, rl.Limit)
+		})
+	}
+}
+
 // TODO: Add a test for sending no rate limits RateLimitReqList.RateLimits = nil

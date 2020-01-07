@@ -39,7 +39,7 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 		// don't store OVER_LIMIT in the cache the client can retry within the same rate limit duration with
 		// 100 emails and the request will succeed.
 
-		rl, ok := item.Value.(*RateLimitResp)
+		t, ok := item.Value.(*TokenBucketItem)
 		if !ok {
 			// Client switched algorithms; perhaps due to a migration?
 			c.Remove(r.HashKey())
@@ -49,65 +49,113 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 			return tokenBucket(s, c, r)
 		}
 
-		// Client is only interested in retrieving the current status
-		if r.Hits == 0 {
-			return rl, nil
-		}
-
 		if s != nil {
 			defer func() {
 				s.OnChange(r, item)
 			}()
 		}
 
+		// Update the limit if it changed
+		if t.Limit != r.Limit {
+			t.Limit = r.Limit
+			// If our remaining is greater than our new limit
+			if t.Remaining > t.Limit {
+				t.Remaining = t.Limit
+			}
+		}
+
+		rl := &RateLimitResp{
+			Status:    t.Status,
+			Limit:     r.Limit,
+			Remaining: t.Remaining,
+			ResetTime: item.ExpireAt,
+		}
+
+		// If the duration config changed, update the new ExpireAt
+		if t.Duration != r.Duration {
+			expire := t.CreatedAt + r.Duration
+			if r.Behavior == Behavior_DURATION_IS_GREGORIAN {
+				expire, err = GregorianExpiration(time.Now(), r.Duration)
+				if err != nil {
+					return nil, err
+				}
+			}
+			// If our new duration means we are currently expired
+			if expire < MillisecondNow() {
+				// Update this so s.OnChange() will get the new expire change
+				item.ExpireAt = expire
+				c.Remove(item.Key)
+				return tokenBucket(s, c, r)
+			}
+			item.ExpireAt = expire
+			rl.ResetTime = expire
+		}
+
+		// Client is only interested in retrieving the current status or updating the rate limit config
+		if r.Hits == 0 {
+			return rl, nil
+		}
+
 		// If we are already at the limit
 		if rl.Remaining == 0 {
 			rl.Status = Status_OVER_LIMIT
+			t.Status = rl.Status
 			return rl, nil
 		}
 
 		// If requested hits takes the remainder
-		if rl.Remaining == r.Hits {
+		if t.Remaining == r.Hits {
+			t.Remaining = 0
 			rl.Remaining = 0
 			return rl, nil
 		}
 
 		// If requested is more than available, then return over the limit without updating the cache.
-		if r.Hits > rl.Remaining {
-			retStatus := *rl
-			retStatus.Status = Status_OVER_LIMIT
-			return &retStatus, nil
+		if r.Hits > t.Remaining {
+			rl.Status = Status_OVER_LIMIT
+			return rl, nil
 		}
 
-		rl.Remaining -= r.Hits
+		t.Remaining -= r.Hits
+		rl.Remaining = t.Remaining
 		return rl, nil
 	}
 
 	// Add a new rate limit to the cache
-	expire := MillisecondNow() + r.Duration
+	now := MillisecondNow()
+	expire := now + r.Duration
 	if r.Behavior == Behavior_DURATION_IS_GREGORIAN {
 		expire, err = GregorianExpiration(time.Now(), r.Duration)
 		if err != nil {
 			return nil, err
 		}
 	}
-	status := &RateLimitResp{
+
+	t := &TokenBucketItem{
+		Limit:     r.Limit,
+		Duration:  r.Duration,
+		Remaining: r.Limit - r.Hits,
+		CreatedAt: now,
+	}
+
+	rl := &RateLimitResp{
 		Status:    Status_UNDER_LIMIT,
 		Limit:     r.Limit,
-		Remaining: r.Limit - r.Hits,
+		Remaining: t.Remaining,
 		ResetTime: expire,
 	}
 
 	// Client could be requesting that we always return OVER_LIMIT
 	if r.Hits > r.Limit {
-		status.Status = Status_OVER_LIMIT
-		status.Remaining = r.Limit
+		rl.Status = Status_OVER_LIMIT
+		rl.Remaining = r.Limit
+		t.Remaining = r.Limit
 	}
 
 	item = &CacheItem{
 		Algorithm: r.Algorithm,
 		Key:       r.HashKey(),
-		Value:     status,
+		Value:     t,
 		ExpireAt:  expire,
 	}
 
@@ -115,7 +163,7 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 	if s != nil {
 		s.OnChange(r, item)
 	}
-	return status, nil
+	return rl, nil
 }
 
 // Implements leaky bucket algorithm for rate limiting https://en.wikipedia.org/wiki/Leaky_bucket
@@ -142,6 +190,10 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 			return leakyBucket(s, c, r)
 		}
 
+		// Update limit and duration if they changed
+		b.Limit = r.Limit
+		b.Duration = r.Duration
+
 		duration := r.Duration
 		rate := duration / r.Limit
 		if r.Behavior == Behavior_DURATION_IS_GREGORIAN {
@@ -154,6 +206,7 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 			if err != nil {
 				return nil, err
 			}
+
 			// Calculate the rate using the entire duration of the gregorian interval
 			// IE: Minute = 60,000 milliseconds, etc.. etc..
 			rate = d / r.Limit
@@ -162,7 +215,7 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 		}
 
 		// Calculate how much leaked out of the bucket since the last hit
-		elapsed := now - b.TimeStamp
+		elapsed := now - b.UpdatedAt
 		leak := int64(elapsed / rate)
 
 		b.Remaining += leak
@@ -174,6 +227,7 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 			Limit:     b.Limit,
 			Remaining: b.Remaining,
 			Status:    Status_UNDER_LIMIT,
+			ResetTime: now + rate,
 		}
 
 		if s != nil {
@@ -185,13 +239,12 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 		// If we are already at the limit
 		if b.Remaining == 0 {
 			rl.Status = Status_OVER_LIMIT
-			rl.ResetTime = now + rate
 			return rl, nil
 		}
 
 		// Only update the timestamp if client is incrementing the hit
 		if r.Hits != 0 {
-			b.TimeStamp = now
+			b.UpdatedAt = now
 		}
 
 		// If requested hits takes the remainder
@@ -205,7 +258,6 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 		// without updating the bucket.
 		if r.Hits > b.Remaining {
 			rl.Status = Status_OVER_LIMIT
-			rl.ResetTime = now + rate
 			return rl, nil
 		}
 
@@ -237,14 +289,14 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 		Remaining: r.Limit - r.Hits,
 		Limit:     r.Limit,
 		Duration:  duration,
-		TimeStamp: now,
+		UpdatedAt: now,
 	}
 
 	rl := RateLimitResp{
 		Status:    Status_UNDER_LIMIT,
 		Limit:     r.Limit,
 		Remaining: r.Limit - r.Hits,
-		ResetTime: 0,
+		ResetTime: duration / r.Limit,
 	}
 
 	// Client could be requesting that we start with the bucket OVER_LIMIT

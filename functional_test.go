@@ -201,6 +201,7 @@ func TestLeakyBucket(t *testing.T) {
 		assert.Equal(t, test.Status, rl.Status, i)
 		assert.Equal(t, test.Remaining, rl.Remaining, i)
 		assert.Equal(t, int64(5), rl.Limit, i)
+		assert.True(t, rl.ResetTime != 0)
 		time.Sleep(test.Sleep)
 	}
 }
@@ -269,7 +270,8 @@ func TestMissingFields(t *testing.T) {
 }
 
 func TestGlobalRateLimits(t *testing.T) {
-	client, errs := guber.DialV1Server(cluster.PeerAt(0))
+	peer := cluster.PeerAt(0)
+	client, errs := guber.DialV1Server(peer)
 	require.Nil(t, errs)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
@@ -279,10 +281,8 @@ func TestGlobalRateLimits(t *testing.T) {
 		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
 			Requests: []*guber.RateLimitReq{
 				{
-					// For this test this name/key should ensure our connected peer is NOT the owner,
-					// the peer we are connected to should forward requests asynchronously to the owner.
 					Name:      "test_global",
-					UniqueKey: "account:1234",
+					UniqueKey: "account:12345",
 					Algorithm: guber.Algorithm_TOKEN_BUCKET,
 					Behavior:  guber.Behavior_GLOBAL,
 					Duration:  guber.Second * 3,
@@ -296,18 +296,21 @@ func TestGlobalRateLimits(t *testing.T) {
 		assert.Equal(t, status, resp.Responses[0].Status, i)
 		assert.Equal(t, remain, resp.Responses[0].Remaining, i)
 		assert.Equal(t, int64(5), resp.Responses[0].Limit, i)
+		// name/key should ensure our connected peer is NOT the owner,
+		// the peer we are connected to should forward requests asynchronously to the owner.
+		assert.NotEqual(t, peer, resp.Responses[0].Metadata["owner"])
 	}
 
 	// Our first hit should create the request on the peer and queue for async forward
 	sendHit(guber.Status_UNDER_LIMIT, 4, 1)
 
-	// Our second hit should return the same response as the first since the async forward hasn't occurred yet
-	sendHit(guber.Status_UNDER_LIMIT, 4, 2)
+	// Our second should be processed as if we own it since the async forward hasn't occurred yet
+	sendHit(guber.Status_UNDER_LIMIT, 3, 2)
 
 	time.Sleep(time.Second)
 
-	// Our second hit should return the accurate response as the async forward should have completed and the owner
-	// will have updated us with the latest counts
+	// After sleeping this response should be from the updated async call from our owner. Notice the
+	// remaining is still 3 as the hit is queued for update to the owner
 	sendHit(guber.Status_UNDER_LIMIT, 3, 3)
 
 	// Inspect our metrics, ensure they collected the counts we expected during this test
@@ -320,6 +323,7 @@ func TestGlobalRateLimits(t *testing.T) {
 	assert.Nil(t, m.Write(&buf))
 	assert.Equal(t, uint64(1), *buf.Histogram.SampleCount)
 
+	// Instance 3 should be the owner of our global rate limit
 	instance = cluster.InstanceAt(3)
 	metricCh = make(chan prometheus.Metric, 5)
 	instance.Guber.Collect(metricCh)
@@ -328,6 +332,94 @@ func TestGlobalRateLimits(t *testing.T) {
 	m = <-metricCh // Broadcast metric
 	assert.Nil(t, m.Write(&buf))
 	assert.Equal(t, uint64(1), *buf.Histogram.SampleCount)
+}
+
+func TestChangeLimit(t *testing.T) {
+	client, errs := guber.DialV1Server(cluster.GetPeer())
+	require.Nil(t, errs)
+
+	tests := []struct {
+		Remaining int64
+		Algorithm guber.Algorithm
+		Status    guber.Status
+		Name      string
+		Limit     int64
+	}{
+		{
+			Name:      "Should subtract 1 from remaining",
+			Algorithm: guber.Algorithm_TOKEN_BUCKET,
+			Status:    guber.Status_UNDER_LIMIT,
+			Remaining: 99,
+			Limit:     100,
+		},
+		{
+			Name:      "Should subtract 1 from remaining",
+			Algorithm: guber.Algorithm_TOKEN_BUCKET,
+			Status:    guber.Status_UNDER_LIMIT,
+			Remaining: 98,
+			Limit:     100,
+		},
+		{
+			Name:      "Should subtract 1 from remaining and change limit to 10",
+			Algorithm: guber.Algorithm_TOKEN_BUCKET,
+			Status:    guber.Status_UNDER_LIMIT,
+			Remaining: 9,
+			Limit:     10,
+		},
+		{
+			Name:      "Should subtract 1 from remaining with new limit of 10",
+			Algorithm: guber.Algorithm_TOKEN_BUCKET,
+			Status:    guber.Status_UNDER_LIMIT,
+			Remaining: 8,
+			Limit:     10,
+		},
+		{
+			Name:      "Should subtract 1 from remaining for leaky bucket",
+			Algorithm: guber.Algorithm_LEAKY_BUCKET,
+			Status:    guber.Status_UNDER_LIMIT,
+			Remaining: 99,
+			Limit:     100,
+		},
+		{
+			Name:      "Should subtract 1 from remaining for leaky bucket after limit change",
+			Algorithm: guber.Algorithm_LEAKY_BUCKET,
+			Status:    guber.Status_UNDER_LIMIT,
+			Remaining: 9,
+			Limit:     10,
+		},
+		{
+			Name:      "Should subtract 1 from remaining for leaky bucket with new limit",
+			Algorithm: guber.Algorithm_LEAKY_BUCKET,
+			Status:    guber.Status_UNDER_LIMIT,
+			Remaining: 8,
+			Limit:     10,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.Name, func(t *testing.T) {
+			resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+				Requests: []*guber.RateLimitReq{
+					{
+						Name:      "test_change_limit",
+						UniqueKey: "account:1234",
+						Algorithm: tt.Algorithm,
+						Duration:  guber.Millisecond * 100,
+						Limit:     tt.Limit,
+						Hits:      1,
+					},
+				},
+			})
+			require.Nil(t, err)
+
+			rl := resp.Responses[0]
+
+			assert.Equal(t, tt.Status, rl.Status)
+			assert.Equal(t, tt.Remaining, rl.Remaining)
+			assert.Equal(t, tt.Limit, rl.Limit)
+			assert.True(t, rl.ResetTime != 0)
+		})
+	}
 }
 
 // TODO: Add a test for sending no rate limits RateLimitReqList.RateLimits = nil

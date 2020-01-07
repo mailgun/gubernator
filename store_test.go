@@ -72,7 +72,7 @@ func TestLoader(t *testing.T) {
 
 	// Loader instance should have 1 rate limit
 	require.Equal(t, 1, len(loader.CacheItems))
-	item, ok := loader.CacheItems[0].Value.(*gubernator.RateLimitResp)
+	item, ok := loader.CacheItems[0].Value.(*gubernator.TokenBucketItem)
 	require.Equal(t, true, ok)
 	assert.Equal(t, int64(2), item.Limit)
 	assert.Equal(t, int64(1), item.Remaining)
@@ -109,15 +109,17 @@ func TestStore(t *testing.T) {
 			algorithm:       gubernator.Algorithm_TOKEN_BUCKET,
 			switchAlgorithm: gubernator.Algorithm_LEAKY_BUCKET,
 			testCase: func(req gubernator.RateLimitReq, store *gubernator.MockStore) {
+				now := gubernator.MillisecondNow()
 				// Expire 1 second from now
-				expire := gubernator.MillisecondNow() + gubernator.Second
+				expire := now + gubernator.Second
 				store.CacheItems[req.HashKey()] = &gubernator.CacheItem{
 					Algorithm: gubernator.Algorithm_TOKEN_BUCKET,
 					ExpireAt:  expire,
 					Key:       req.HashKey(),
-					Value: &gubernator.RateLimitResp{
-						ResetTime: expire,
+					Value: &gubernator.TokenBucketItem{
 						Limit:     req.Limit,
+						Duration:  req.Duration,
+						CreatedAt: now,
 						Remaining: 1,
 					},
 				}
@@ -149,7 +151,7 @@ func TestStore(t *testing.T) {
 					ExpireAt:  expire,
 					Key:       req.HashKey(),
 					Value: &gubernator.LeakyBucketItem{
-						TimeStamp: gubernator.MillisecondNow(),
+						UpdatedAt: gubernator.MillisecondNow(),
 						Duration:  req.Duration,
 						Limit:     req.Limit,
 						Remaining: 1,
@@ -245,7 +247,7 @@ func TestStore(t *testing.T) {
 func getRemaining(item *gubernator.CacheItem) int64 {
 	switch item.Algorithm {
 	case gubernator.Algorithm_TOKEN_BUCKET:
-		return item.Value.(*gubernator.RateLimitResp).Remaining
+		return item.Value.(*gubernator.TokenBucketItem).Remaining
 	case gubernator.Algorithm_LEAKY_BUCKET:
 		return item.Value.(*gubernator.LeakyBucketItem).Remaining
 	}

@@ -4,11 +4,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.0] - 2019-12-10
+## [0.8.0] - 2020-01-04
+### Added
+* Allow cache users to invalidate a ratelimit after a specific time
+* Changing limit and duration before expire should now work correctly
+
+## Changes
+* TokenBucketItem is now provided when `OnChange()` is called instead of `RateLimitResp`
+* Fixed a bug in global behaviour where it would return an error if the async
+  update had not occured before the a second request is made. Now it acts like it
+  owns the rate limit until the owning node sends an update
+* Always include reset_time in leaky bucket responses
+* Fixed subtle bug during shutdown where PeerClient passed into goroutine could
+  be out of scope/changed when routine runs
+
+## [0.7.1] - 2019-12-10
 ### Added
 * Added `Loader` interface for only loading and saving at startup and shutdown
 * Added `Store` interface for continuous synchronization between the persistent store and the cache.
-### Changed
+### Changes
 * Moved `cache.Cache` into the `gubernator` package
 * Changed the `Cache` interface to use `CacheItem` for storing and retrieving cached items.
 

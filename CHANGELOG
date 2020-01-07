@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Fixed a bug in global behaviour where it would return an error if the async
 update had not occured before the a second request is made. Now it acts like it
 owns the rate limit until the owning node sends an update
+* Always include reset_time in leaky bucket responses
 
 ## [0.7.1] - 2019-12-10
 ### Added

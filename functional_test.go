@@ -201,6 +201,7 @@ func TestLeakyBucket(t *testing.T) {
 		assert.Equal(t, test.Status, rl.Status, i)
 		assert.Equal(t, test.Remaining, rl.Remaining, i)
 		assert.Equal(t, int64(5), rl.Limit, i)
+		assert.True(t, rl.ResetTime != 0)
 		time.Sleep(test.Sleep)
 	}
 }
@@ -368,6 +369,27 @@ func TestChangeLimit(t *testing.T) {
 		{
 			Name:      "Should subtract 1 from remaining with new limit of 10",
 			Algorithm: guber.Algorithm_TOKEN_BUCKET,
+			Status:    guber.Status_UNDER_LIMIT,
+			Remaining: 8,
+			Limit:     10,
+		},
+		{
+			Name:      "Should subtract 1 from remaining for leaky bucket",
+			Algorithm: guber.Algorithm_LEAKY_BUCKET,
+			Status:    guber.Status_UNDER_LIMIT,
+			Remaining: 99,
+			Limit:     100,
+		},
+		{
+			Name:      "Should subtract 1 from remaining for leaky bucket after limit change",
+			Algorithm: guber.Algorithm_LEAKY_BUCKET,
+			Status:    guber.Status_UNDER_LIMIT,
+			Remaining: 9,
+			Limit:     10,
+		},
+		{
+			Name:      "Should subtract 1 from remaining for leaky bucket with new limit",
+			Algorithm: guber.Algorithm_LEAKY_BUCKET,
 			Status:    guber.Status_UNDER_LIMIT,
 			Remaining: 8,
 			Limit:     10,

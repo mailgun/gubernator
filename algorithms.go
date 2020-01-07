@@ -227,6 +227,7 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 			Limit:     b.Limit,
 			Remaining: b.Remaining,
 			Status:    Status_UNDER_LIMIT,
+			ResetTime: now + rate,
 		}
 
 		if s != nil {
@@ -238,7 +239,6 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 		// If we are already at the limit
 		if b.Remaining == 0 {
 			rl.Status = Status_OVER_LIMIT
-			rl.ResetTime = now + rate
 			return rl, nil
 		}
 
@@ -258,7 +258,6 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 		// without updating the bucket.
 		if r.Hits > b.Remaining {
 			rl.Status = Status_OVER_LIMIT
-			rl.ResetTime = now + rate
 			return rl, nil
 		}
 
@@ -297,7 +296,7 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 		Status:    Status_UNDER_LIMIT,
 		Limit:     r.Limit,
 		Remaining: r.Limit - r.Hits,
-		ResetTime: 0,
+		ResetTime: duration / r.Limit,
 	}
 
 	// Client could be requesting that we start with the bucket OVER_LIMIT

@@ -355,26 +355,22 @@ func (s *Instance) SetPeers(peers []PeerInfo) {
 	defer cancel()
 
 	var shutdownPeers []*PeerClient
-
 	for _, p := range oldPicker.Peers() {
-		peerInfo := s.conf.Picker.GetPeerByHost(p.host)
-		// If this peerInfo is not found, we are no longer using this host
-		// and need to shut it down
-		if peerInfo == nil {
+		// If this peerInfo is not found, we are no longer using this host and need to shut it down
+		if peerInfo := s.conf.Picker.GetPeerByHost(p.host); peerInfo == nil {
 			shutdownPeers = append(shutdownPeers, p)
-			wg.Add(1)
 		}
 	}
 
 	for _, p := range shutdownPeers {
-        go func() {
-            err := p.Shutdown(ctx)
-            if err != nil {
-                log.WithError(err).WithField("peer", p).Error("while shutting down peer")
-            }
-
-    		wg.Done()
-        }()
+		wg.Add(1)
+		go func(pc *PeerClient) {
+			err := pc.Shutdown(ctx)
+			if err != nil {
+				log.WithError(err).WithField("peer", pc).Error("while shutting down peer")
+			}
+			wg.Done()
+		}(p)
 	}
 
 	wg.Wait()

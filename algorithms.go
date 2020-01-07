@@ -55,15 +55,21 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 			}()
 		}
 
+		// Update the limit if it changed
+		if t.Limit != r.Limit {
+			t.Limit = r.Limit
+			// If our remaining is greater than our new limit
+			if t.Remaining > t.Limit {
+				t.Remaining = t.Limit
+			}
+		}
+
 		rl := &RateLimitResp{
 			Status:    t.Status,
 			Limit:     r.Limit,
 			Remaining: t.Remaining,
 			ResetTime: item.ExpireAt,
 		}
-
-		// Update the limit if it changed
-		t.Limit = r.Limit
 
 		// If the duration config changed, update the new ExpireAt
 		if t.Duration != r.Duration {

@@ -352,17 +352,24 @@ func TestChangeLimit(t *testing.T) {
 			Limit:     100,
 		},
 		{
-			Name:      "Should subtract 2 from remaining",
+			Name:      "Should subtract 1 from remaining",
 			Algorithm: guber.Algorithm_TOKEN_BUCKET,
 			Status:    guber.Status_UNDER_LIMIT,
 			Remaining: 98,
 			Limit:     100,
 		},
 		{
-			Name:      "Should subtract 3 from remaining and change limit to 10",
+			Name:      "Should subtract 1 from remaining and change limit to 10",
 			Algorithm: guber.Algorithm_TOKEN_BUCKET,
 			Status:    guber.Status_UNDER_LIMIT,
-			Remaining: 97,
+			Remaining: 9,
+			Limit:     10,
+		},
+		{
+			Name:      "Should subtract 1 from remaining with new limit of 10",
+			Algorithm: guber.Algorithm_TOKEN_BUCKET,
+			Status:    guber.Status_UNDER_LIMIT,
+			Remaining: 8,
 			Limit:     10,
 		},
 	}

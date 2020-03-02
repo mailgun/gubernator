@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"container/list"
+
 	"github.com/mailgun/holster"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -71,6 +72,8 @@ type CacheItem struct {
 	ExpireAt int64
 	// Timestamp when the cache should invalidate this rate limit. This is useful when used in conjunction with
 	// a persistent store to ensure our node has the most up to date info from the store. Ignored if set to `0`
+	// It is set by the persistent store implementation to indicate when the node should query the persistent store
+	// for the latest rate limit data.
 	InvalidAt int64
 }
 

@@ -27,9 +27,10 @@ type TokenBucketItem struct {
 // some persistent store. Methods OnChange() and Get() should avoid blocking as much as possible as these
 // methods are called on every rate limit request and will effect the performance of gubernator.
 type Store interface {
-	// Called by gubernator when a rate limit item is updated. It's up to the store to
+	// Called by gubernator *after* a rate limit item is updated. It's up to the store to
 	// decide if this rate limit item should be persisted in the store. It's up to the
-	// store to expire old rate limit items.
+	// store to expire old rate limit items. The CacheItem represents the current state of
+	// the rate limit item *after* the RateLimitReq has been applied.
 	OnChange(r *RateLimitReq, item *CacheItem)
 
 	// Called by gubernator when a rate limit is missing from the cache. It's up to the store

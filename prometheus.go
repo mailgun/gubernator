@@ -18,11 +18,12 @@ package gubernator
 
 import (
 	"context"
-	"github.com/mailgun/holster"
+	"time"
+
+	"github.com/mailgun/holster/v3/syncutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"google.golang.org/grpc/stats"
-	"time"
 )
 
 type GRPCStats struct {
@@ -40,7 +41,7 @@ var statsContextKey = contextKey{}
 // called this collector pulls all the stats from
 type Collector struct {
 	reqCh chan *GRPCStats
-	wg    holster.WaitGroup
+	wg    syncutil.WaitGroup
 
 	// Metrics collectors
 	grpcRequestCount    *prometheus.CounterVec

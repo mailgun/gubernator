@@ -19,7 +19,9 @@ package gubernator
 import (
 	"context"
 	"fmt"
-	"github.com/mailgun/holster"
+	"reflect"
+
+	"github.com/mailgun/holster/v3/syncutil"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	api_v1 "k8s.io/api/core/v1"
@@ -29,14 +31,13 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
-	"reflect"
 )
 
 type K8sPool struct {
 	client    *kubernetes.Clientset
 	peers     map[string]struct{}
 	cancelCtx context.CancelFunc
-	wg        holster.WaitGroup
+	wg        syncutil.WaitGroup
 	ctx       context.Context
 	log       *logrus.Entry
 	conf      K8sPoolConfig

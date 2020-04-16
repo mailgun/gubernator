@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mailgun/holster"
+	"github.com/mailgun/holster/v3/setter"
 	"google.golang.org/grpc"
 )
 
@@ -67,16 +67,16 @@ type BehaviorConfig struct {
 }
 
 func (c *Config) SetDefaults() error {
-	holster.SetDefault(&c.Behaviors.BatchTimeout, time.Millisecond*500)
-	holster.SetDefault(&c.Behaviors.BatchLimit, maxBatchSize)
-	holster.SetDefault(&c.Behaviors.BatchWait, time.Microsecond*500)
+	setter.SetDefault(&c.Behaviors.BatchTimeout, time.Millisecond*500)
+	setter.SetDefault(&c.Behaviors.BatchLimit, maxBatchSize)
+	setter.SetDefault(&c.Behaviors.BatchWait, time.Microsecond*500)
 
-	holster.SetDefault(&c.Behaviors.GlobalTimeout, time.Millisecond*500)
-	holster.SetDefault(&c.Behaviors.GlobalBatchLimit, maxBatchSize)
-	holster.SetDefault(&c.Behaviors.GlobalSyncWait, time.Microsecond*500)
+	setter.SetDefault(&c.Behaviors.GlobalTimeout, time.Millisecond*500)
+	setter.SetDefault(&c.Behaviors.GlobalBatchLimit, maxBatchSize)
+	setter.SetDefault(&c.Behaviors.GlobalSyncWait, time.Microsecond*500)
 
-	holster.SetDefault(&c.Picker, NewConsistantHash(nil))
-	holster.SetDefault(&c.Cache, NewLRUCache(0))
+	setter.SetDefault(&c.Picker, NewConsistantHash(nil))
+	setter.SetDefault(&c.Cache, NewLRUCache(0))
 
 	if c.Behaviors.BatchLimit > maxBatchSize {
 		return fmt.Errorf("Behaviors.BatchLimit cannot exceed '%d'", maxBatchSize)

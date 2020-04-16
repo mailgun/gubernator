@@ -18,14 +18,15 @@ package gubernator
 
 import (
 	"errors"
-	"github.com/mailgun/holster"
 	"time"
+
+	"github.com/mailgun/holster/v3/syncutil"
 )
 
 type Interval struct {
 	C  chan struct{}
 	in chan struct{}
-	wg holster.WaitGroup
+	wg syncutil.WaitGroup
 }
 
 // NewInterval creates a new ticker like object, however

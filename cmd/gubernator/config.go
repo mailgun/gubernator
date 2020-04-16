@@ -27,13 +27,12 @@ import (
 	"strings"
 	"time"
 
+	etcd "github.com/coreos/etcd/clientv3"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/mailgun/gubernator"
+	"github.com/mailgun/holster/v3/setter"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-
-	etcd "github.com/coreos/etcd/clientv3"
-	"github.com/mailgun/gubernator"
-	"github.com/mailgun/holster"
 	"k8s.io/klog"
 )
 
@@ -88,29 +87,29 @@ func confFromEnv() (ServerConfig, error) {
 	}
 
 	// Main config
-	holster.SetDefault(&conf.GRPCListenAddress, os.Getenv("GUBER_GRPC_ADDRESS"), "0.0.0.0:81")
-	holster.SetDefault(&conf.HTTPListenAddress, os.Getenv("GUBER_HTTP_ADDRESS"), "0.0.0.0:80")
-	holster.SetDefault(&conf.CacheSize, getEnvInteger("GUBER_CACHE_SIZE"), 50000)
+	setter.SetDefault(&conf.GRPCListenAddress, os.Getenv("GUBER_GRPC_ADDRESS"), "0.0.0.0:81")
+	setter.SetDefault(&conf.HTTPListenAddress, os.Getenv("GUBER_HTTP_ADDRESS"), "0.0.0.0:80")
+	setter.SetDefault(&conf.CacheSize, getEnvInteger("GUBER_CACHE_SIZE"), 50000)
 
 	// Behaviors
-	holster.SetDefault(&conf.Behaviors.BatchTimeout, getEnvDuration("GUBER_BATCH_TIMEOUT"))
-	holster.SetDefault(&conf.Behaviors.BatchLimit, getEnvInteger("GUBER_BATCH_LIMIT"))
-	holster.SetDefault(&conf.Behaviors.BatchWait, getEnvDuration("GUBER_BATCH_WAIT"))
+	setter.SetDefault(&conf.Behaviors.BatchTimeout, getEnvDuration("GUBER_BATCH_TIMEOUT"))
+	setter.SetDefault(&conf.Behaviors.BatchLimit, getEnvInteger("GUBER_BATCH_LIMIT"))
+	setter.SetDefault(&conf.Behaviors.BatchWait, getEnvDuration("GUBER_BATCH_WAIT"))
 
-	holster.SetDefault(&conf.Behaviors.GlobalTimeout, getEnvDuration("GUBER_GLOBAL_TIMEOUT"))
-	holster.SetDefault(&conf.Behaviors.GlobalBatchLimit, getEnvInteger("GUBER_GLOBAL_BATCH_LIMIT"))
-	holster.SetDefault(&conf.Behaviors.GlobalSyncWait, getEnvDuration("GUBER_GLOBAL_SYNC_WAIT"))
+	setter.SetDefault(&conf.Behaviors.GlobalTimeout, getEnvDuration("GUBER_GLOBAL_TIMEOUT"))
+	setter.SetDefault(&conf.Behaviors.GlobalBatchLimit, getEnvInteger("GUBER_GLOBAL_BATCH_LIMIT"))
+	setter.SetDefault(&conf.Behaviors.GlobalSyncWait, getEnvDuration("GUBER_GLOBAL_SYNC_WAIT"))
 
 	// ETCD Config
-	holster.SetDefault(&conf.EtcdAdvertiseAddress, os.Getenv("GUBER_ETCD_ADVERTISE_ADDRESS"), "127.0.0.1:81")
-	holster.SetDefault(&conf.EtcdKeyPrefix, os.Getenv("GUBER_ETCD_KEY_PREFIX"), "/gubernator-peers")
-	holster.SetDefault(&conf.EtcdConf.Endpoints, getEnvSlice("GUBER_ETCD_ENDPOINTS"), []string{"localhost:2379"})
-	holster.SetDefault(&conf.EtcdConf.DialTimeout, getEnvDuration("GUBER_ETCD_DIAL_TIMEOUT"), time.Second*5)
-	holster.SetDefault(&conf.EtcdConf.Username, os.Getenv("GUBER_ETCD_USER"))
-	holster.SetDefault(&conf.EtcdConf.Password, os.Getenv("GUBER_ETCD_PASSWORD"))
+	setter.SetDefault(&conf.EtcdAdvertiseAddress, os.Getenv("GUBER_ETCD_ADVERTISE_ADDRESS"), "127.0.0.1:81")
+	setter.SetDefault(&conf.EtcdKeyPrefix, os.Getenv("GUBER_ETCD_KEY_PREFIX"), "/gubernator-peers")
+	setter.SetDefault(&conf.EtcdConf.Endpoints, getEnvSlice("GUBER_ETCD_ENDPOINTS"), []string{"localhost:2379"})
+	setter.SetDefault(&conf.EtcdConf.DialTimeout, getEnvDuration("GUBER_ETCD_DIAL_TIMEOUT"), time.Second*5)
+	setter.SetDefault(&conf.EtcdConf.Username, os.Getenv("GUBER_ETCD_USER"))
+	setter.SetDefault(&conf.EtcdConf.Password, os.Getenv("GUBER_ETCD_PASSWORD"))
 
 	// Kubernetes Config
-	holster.SetDefault(&conf.K8PoolConf.Namespace, os.Getenv("GUBER_K8S_NAMESPACE"), "default")
+	setter.SetDefault(&conf.K8PoolConf.Namespace, os.Getenv("GUBER_K8S_NAMESPACE"), "default")
 	conf.K8PoolConf.PodIP = os.Getenv("GUBER_K8S_POD_IP")
 	conf.K8PoolConf.PodPort = os.Getenv("GUBER_K8S_POD_PORT")
 	conf.K8PoolConf.Selector = os.Getenv("GUBER_K8S_ENDPOINTS_SELECTOR")
@@ -151,15 +150,15 @@ func setupTLS(conf *etcd.Config) error {
 
 	// set `GUBER_ETCD_TLS_ENABLE` and this line will
 	// create a TLS config with no config.
-	holster.SetDefault(&conf.TLS, &tls.Config{})
+	setter.SetDefault(&conf.TLS, &tls.Config{})
 
-	holster.SetDefault(&tlsCertFile, os.Getenv("GUBER_ETCD_TLS_CERT"))
-	holster.SetDefault(&tlsKeyFile, os.Getenv("GUBER_ETCD_TLS_KEY"))
-	holster.SetDefault(&tlsCAFile, os.Getenv("GUBER_ETCD_TLS_CA"))
+	setter.SetDefault(&tlsCertFile, os.Getenv("GUBER_ETCD_TLS_CERT"))
+	setter.SetDefault(&tlsKeyFile, os.Getenv("GUBER_ETCD_TLS_KEY"))
+	setter.SetDefault(&tlsCAFile, os.Getenv("GUBER_ETCD_TLS_CA"))
 
 	// If the CA file was provided
 	if tlsCAFile != "" {
-		holster.SetDefault(&conf.TLS, &tls.Config{})
+		setter.SetDefault(&conf.TLS, &tls.Config{})
 
 		var certPool *x509.CertPool = nil
 		if pemBytes, err := ioutil.ReadFile(tlsCAFile); err == nil {
@@ -168,7 +167,7 @@ func setupTLS(conf *etcd.Config) error {
 		} else {
 			return errors.Wrapf(err, "while loading cert CA file '%s'", tlsCAFile)
 		}
-		holster.SetDefault(&conf.TLS.RootCAs, certPool)
+		setter.SetDefault(&conf.TLS.RootCAs, certPool)
 		conf.TLS.InsecureSkipVerify = false
 	}
 
@@ -179,13 +178,13 @@ func setupTLS(conf *etcd.Config) error {
 			return errors.Wrapf(err, "while loading cert '%s' and key file '%s'",
 				tlsCertFile, tlsKeyFile)
 		}
-		holster.SetDefault(&conf.TLS.Certificates, []tls.Certificate{tlsCert})
+		setter.SetDefault(&conf.TLS.Certificates, []tls.Certificate{tlsCert})
 	}
 
 	// If no other TLS config is provided this will force connecting with TLS,
 	// without cert verification
 	if os.Getenv("GUBER_ETCD_TLS_SKIP_VERIFY") != "" {
-		holster.SetDefault(&conf.TLS, &tls.Config{})
+		setter.SetDefault(&conf.TLS, &tls.Config{})
 		conf.TLS.InsecureSkipVerify = true
 	}
 	return nil

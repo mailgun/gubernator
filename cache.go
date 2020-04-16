@@ -19,13 +19,12 @@ This work is derived from github.com/golang/groupcache/lru
 package gubernator
 
 import (
+	"container/list"
 	"fmt"
 	"sync"
 	"time"
 
-	"container/list"
-
-	"github.com/mailgun/holster"
+	"github.com/mailgun/holster/v3/setter"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -81,7 +80,7 @@ var _ Cache = &LRUCache{}
 
 // New creates a new Cache with a maximum size
 func NewLRUCache(maxSize int) *LRUCache {
-	holster.SetDefault(&maxSize, 50000)
+	setter.SetDefault(&maxSize, 50000)
 
 	return &LRUCache{
 		cache:     make(map[interface{}]*list.Element),

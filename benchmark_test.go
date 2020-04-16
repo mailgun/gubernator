@@ -18,10 +18,11 @@ package gubernator_test
 
 import (
 	"context"
+	"testing"
+
 	guber "github.com/mailgun/gubernator"
 	"github.com/mailgun/gubernator/cluster"
-	"github.com/mailgun/holster"
-	"testing"
+	"github.com/mailgun/holster/v3/syncutil"
 )
 
 func BenchmarkServer_GetPeerRateLimitNoBatching(b *testing.B) {
@@ -113,7 +114,7 @@ func BenchmarkServer_ThunderingHeard(b *testing.B) {
 	}
 
 	b.Run("ThunderingHeard", func(b *testing.B) {
-		fan := holster.NewFanOut(100)
+		fan := syncutil.NewFanOut(100)
 		for n := 0; n < b.N; n++ {
 			fan.Run(func(o interface{}) error {
 				_, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{

@@ -25,8 +25,8 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/mailgun/gubernator"
-	"github.com/mailgun/holster"
-	"github.com/mailgun/holster/etcdutil"
+	"github.com/mailgun/holster/v3/etcdutil"
+	"github.com/mailgun/holster/v3/syncutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
@@ -37,7 +37,7 @@ var log = logrus.WithField("category", "server")
 var Version = "dev-build"
 
 func main() {
-	var wg holster.WaitGroup
+	var wg syncutil.WaitGroup
 	var conf ServerConfig
 	var err error
 

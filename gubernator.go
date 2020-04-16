@@ -22,10 +22,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/prometheus/client_golang/prometheus"
-
-	"github.com/mailgun/holster"
+	"github.com/mailgun/holster/v3/syncutil"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -123,7 +122,7 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*Get
 	// Asynchronously fetch rate limits
 	out := make(chan InOut)
 	go func() {
-		fan := holster.NewFanOut(1000)
+		fan := syncutil.NewFanOut(1000)
 		// For each item in the request body
 		for i, item := range r.Requests {
 			fan.Run(func(data interface{}) error {

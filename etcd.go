@@ -21,7 +21,8 @@ import (
 	"time"
 
 	etcd "github.com/coreos/etcd/clientv3"
-	"github.com/mailgun/holster"
+	"github.com/mailgun/holster/v3/setter"
+	"github.com/mailgun/holster/v3/syncutil"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -46,7 +47,7 @@ type PoolInterface interface {
 
 type EtcdPool struct {
 	peers     map[string]struct{}
-	wg        holster.WaitGroup
+	wg        syncutil.WaitGroup
 	ctx       context.Context
 	cancelCtx context.CancelFunc
 	watchChan etcd.WatchChan
@@ -63,7 +64,7 @@ type EtcdPoolConfig struct {
 }
 
 func NewEtcdPool(conf EtcdPoolConfig) (*EtcdPool, error) {
-	holster.SetDefault(&conf.BaseKey, defaultBaseKey)
+	setter.SetDefault(&conf.BaseKey, defaultBaseKey)
 
 	if conf.AdvertiseAddress == "" {
 		return nil, errors.New("GUBER_ETCD_ADVERTISE_ADDRESS is required")

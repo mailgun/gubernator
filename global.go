@@ -18,10 +18,11 @@ package gubernator
 
 import (
 	"context"
-	"github.com/mailgun/holster"
+	"time"
+
+	"github.com/mailgun/holster/v3/syncutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
-	"time"
 )
 
 // globalManager manages async hit queue and updates peers in
@@ -29,7 +30,7 @@ import (
 type globalManager struct {
 	asyncQueue     chan *RateLimitReq
 	broadcastQueue chan *RateLimitReq
-	wg             holster.WaitGroup
+	wg             syncutil.WaitGroup
 	conf           BehaviorConfig
 	log            *logrus.Entry
 	instance       *Instance

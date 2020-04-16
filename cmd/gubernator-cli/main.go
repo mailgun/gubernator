@@ -19,13 +19,13 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/davecgh/go-spew/spew"
 	"math/rand"
 	"os"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	guber "github.com/mailgun/gubernator"
-	"github.com/mailgun/holster"
+	"github.com/mailgun/holster/v3/syncutil"
 )
 
 func checkErr(err error) {
@@ -62,7 +62,7 @@ func main() {
 		})
 	}
 
-	fan := holster.NewFanOut(10)
+	fan := syncutil.NewFanOut(10)
 	for {
 		for _, rateLimit := range rateLimits {
 			fan.Run(func(obj interface{}) error {

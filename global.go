@@ -129,11 +129,11 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 			continue
 		}
 
-		p, ok := peerRequests[peer.host]
+		p, ok := peerRequests[peer.info.Address]
 		if ok {
 			p.req.Requests = append(p.req.Requests, r)
 		} else {
-			peerRequests[peer.host] = &pair{
+			peerRequests[peer.info.Address] = &pair{
 				client: peer,
 				req:    GetPeerRateLimitsReq{Requests: []*RateLimitReq{r}},
 			}
@@ -148,7 +148,7 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 
 		if err != nil {
 			gm.log.WithError(err).
-				Errorf("error sending global hits to '%s'", p.client.host)
+				Errorf("error sending global hits to '%s'", p.client.info.Address)
 			continue
 		}
 	}

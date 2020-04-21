@@ -186,6 +186,7 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*Get
 					}
 
 					// Make an RPC call to the peer that owns this rate limit
+					fmt.Println("reaching out to peer")
 					inOut.Out, err = peer.GetPeerRateLimit(ctx, inOut.In)
 					if err != nil {
 						if IsNotReady(err) {
@@ -196,6 +197,8 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*Get
 							Error: fmt.Sprintf("while fetching rate limit '%s' from peer - '%s'", globalKey, err),
 						}
 					}
+
+					fmt.Println("got data from peer")
 
 					// Inform the client of the owner key of the key
 					inOut.Out.Metadata = map[string]string{"owner": peer.info.Address}

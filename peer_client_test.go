@@ -56,14 +56,14 @@ func TestPeerClientShutdown(t *testing.T) {
 						Behavior: c.Behavior,
 					})
 
-					assert.Contains(t, []error{nil, gubernator.ErrClosing}, err)
+					assert.Contains(t, []error{nil, &gubernator.PeerErr{}}, err)
 				}()
 			}
 
 			// yield the processor that way we allow other goroutines to start their request
 			runtime.Gosched()
 
-			err = client.Shutdown(context.Background())
+			err := client.Shutdown(context.Background())
 			assert.NoError(t, err)
 
 			wg.Wait()

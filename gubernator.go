@@ -295,6 +295,10 @@ func (s *Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
 		s.global.QueueUpdate(r)
 	}
 
+	if HasBehavior(r.Behavior, Behavior_MULTI_REGION) {
+		s.conf.RegionPicker.QueueHits(r)
+	}
+
 	switch r.Algorithm {
 	case Algorithm_TOKEN_BUCKET:
 		return tokenBucket(s.conf.Store, s.conf.Cache, r)

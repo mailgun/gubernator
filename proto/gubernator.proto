@@ -122,6 +122,9 @@ enum Behavior {
   // cache value. For `LEAKY_BUCKET` it sets the `Remaining` to `Limit`.
   RESET_REMAINING = 8;
 
+  // Pushes rate limits to other regions
+  MULTI_REGION = 16;
+
   // TODO: Add support for LOCAL. Which would force the rate limit to be handled by the local instance
 }
 

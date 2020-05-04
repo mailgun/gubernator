@@ -24,7 +24,7 @@ set -x
 PROTO_DIR=proto
 GO_DIR=.
 PY_DIR=python/gubernator
-GRPC_GATEWAY_DIR=$GOPATH/pkg/mod/github.com/grpc-ecosystem/grpc-gateway\@v1.7.0/third_party/googleapis
+GRPC_GATEWAY_DIR=$GOPATH/pkg/mod/github.com/grpc-ecosystem/grpc-gateway\@v1.11.1/third_party/googleapis
 
 protoc -I=$PROTO_DIR \
     -I=$GRPC_GATEWAY_DIR \

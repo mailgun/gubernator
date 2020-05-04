@@ -25,7 +25,6 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/mailgun/gubernator"
-	"github.com/mailgun/holster/v3/etcdutil"
 	"github.com/mailgun/holster/v3/syncutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -64,6 +63,7 @@ func main() {
 		Picker:     conf.Picker,
 		GRPCServer: grpcSrv,
 		Cache:      cache,
+		DataCenter: conf.DataCenter,
 	})
 	checkErr(err, "while creating new gubernator instance")
 
@@ -88,16 +88,26 @@ func main() {
 		checkErr(err, "while querying kubernetes API")
 	} else {
 		// Register ourselves with other peers via ETCD
-		etcdClient, err := etcdutil.NewClient(&conf.EtcdConf)
-		checkErr(err, "while connecting to etcd")
+		// etcdClient, err := etcdutil.NewClient(&conf.EtcdConf)
+		// checkErr(err, "while connecting to etcd")
 
-		pool, err = gubernator.NewEtcdPool(gubernator.EtcdPoolConfig{
-			AdvertiseAddress: conf.EtcdAdvertiseAddress,
+		// pool, err = gubernator.NewEtcdPool(gubernator.EtcdPoolConfig{
+		// 	AdvertiseAddress: conf.EtcdAdvertiseAddress,
+		// 	OnUpdate:         guber.SetPeers,
+		// 	Client:           etcdClient,
+		// 	BaseKey:          conf.EtcdKeyPrefix,
+		// })
+		// checkErr(err, "while registering with ETCD pool")
+
+		// Register peer on memberlist
+		pool, err = gubernator.NewMemberlistPool(gubernator.MemberlistPoolConfig{
+			AdvertiseAddress: conf.MemberlistPoolConfig.AdvertiseAddress,
+			AdvertisePort:    conf.MemberlistPoolConfig.AdvertisePort,
+			KnownNodes:       conf.MemberlistPoolConfig.KnownNodes,
+			DataCenter:       conf.DataCenter,
 			OnUpdate:         guber.SetPeers,
-			Client:           etcdClient,
-			BaseKey:          conf.EtcdKeyPrefix,
 		})
-		checkErr(err, "while registering with ETCD pool")
+		checkErr(err, "while joining memberlist")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

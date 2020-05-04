@@ -181,12 +181,10 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 
 	req := request{request: r, resp: make(chan *response, 1)}
 
-	// Check that peer is not closing before enqueueing the request
+	// Check that peer is not closing before enqueueing the request to be sent
 	if c.status == peerClosing {
 		return nil, &PeerErr{err: errors.New("peer closing")}
 	}
-
-	// Enqueue the request to be sent
 	c.queue <- &req
 
 	// See NOTE above about RLock and wg.Add(1)

@@ -89,8 +89,10 @@ func StartWith(addresses []string) error {
 	for _, address := range addresses {
 		ins, err := StartInstance(address, gubernator.Config{
 			Behaviors: gubernator.BehaviorConfig{
-				GlobalSyncWait: time.Millisecond * 50, // Suitable for testing but not production
-				GlobalTimeout:  time.Second,
+				GlobalSyncWait:      time.Millisecond * 50, // Suitable for testing but not production
+				GlobalTimeout:       time.Second,
+				MultiRegionSyncWait: time.Millisecond * 50,
+				MultiRegionTimeout:  time.Second,
 			},
 		})
 		if err != nil {

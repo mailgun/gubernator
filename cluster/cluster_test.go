@@ -33,7 +33,7 @@ func Test_instance_Peers(t *testing.T) {
 		{
 			name:     "Happy path",
 			instance: &instance{Address: "mailgun.com"},
-			peers:    []gubernator.PeerInfo{gubernator.PeerInfo{Address: "mailgun.com"}},
+			peers:    []gubernator.PeerInfo{{Address: "mailgun.com"}},
 			want: []gubernator.PeerInfo{
 				{Address: "mailgun.com", IsOwner: true},
 			},
@@ -41,7 +41,7 @@ func Test_instance_Peers(t *testing.T) {
 		{
 			name:     "Get multy peers",
 			instance: &instance{Address: "mailgun.com"},
-			peers:    []gubernator.PeerInfo{gubernator.PeerInfo{Address: "localhost:11111"}, gubernator.PeerInfo{Address: "mailgun.com"}},
+			peers:    []gubernator.PeerInfo{{Address: "localhost:11111"}, {Address: "mailgun.com"}},
 			want: []gubernator.PeerInfo{
 				{Address: "localhost:11111"},
 				{Address: "mailgun.com", IsOwner: true},
@@ -62,7 +62,7 @@ func Test_instance_Peers(t *testing.T) {
 		{
 			name:     "Owner does not exist",
 			instance: &instance{Address: "mailgun.com"},
-			peers:    []gubernator.PeerInfo{gubernator.PeerInfo{Address: "localhost:11111"}},
+			peers:    []gubernator.PeerInfo{{Address: "localhost:11111"}},
 			want: []gubernator.PeerInfo{
 				{Address: "localhost:11111"},
 			},
@@ -87,11 +87,11 @@ func TestGetPeer(t *testing.T) {
 	}{
 		{
 			name:  "Happy path",
-			peers: []gubernator.PeerInfo{gubernator.PeerInfo{Address: "mailgun.com"}},
+			peers: []gubernator.PeerInfo{{Address: "mailgun.com"}},
 		},
 		{
 			name:  "Get one peer from multiple peers",
-			peers: []gubernator.PeerInfo{gubernator.PeerInfo{Address: "mailgun.com"}, gubernator.PeerInfo{Address: "localhost"}, gubernator.PeerInfo{Address: "test.com"}},
+			peers: []gubernator.PeerInfo{{Address: "mailgun.com"}, {Address: "localhost"}, {Address: "test.com"}},
 		},
 	}
 	for _, tt := range tests {
@@ -105,7 +105,7 @@ func TestGetPeer(t *testing.T) {
 }
 
 func TestPeerAt(t *testing.T) {
-	peers = []gubernator.PeerInfo{gubernator.PeerInfo{Address: "mailgun.com"}}
+	peers = []gubernator.PeerInfo{{Address: "mailgun.com"}}
 
 	got := PeerAt(0)
 	want := gubernator.PeerInfo{Address: "mailgun.com"}
@@ -183,7 +183,7 @@ func TestStartMultipleInstancesWithAddresses(t *testing.T) {
 	err := StartWith(addresses)
 	assert.Nil(t, err)
 
-	wantPeers := []gubernator.PeerInfo{gubernator.PeerInfo{Address: "127.0.0.1:11111"}, gubernator.PeerInfo{Address: "127.0.0.1:22222"}}
+	wantPeers := []gubernator.PeerInfo{{Address: "127.0.0.1:11111"}, {Address: "127.0.0.1:22222"}}
 	wantInstances := []*instance{
 		{Address: "127.0.0.1:11111"},
 		{Address: "127.0.0.1:22222"},

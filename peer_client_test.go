@@ -56,7 +56,17 @@ func TestPeerClientShutdown(t *testing.T) {
 						Behavior: c.Behavior,
 					})
 
-					assert.Subset(t, []error{nil, &gubernator.PeerErr{}}, err)
+					isExpectedErr := false
+
+					switch err.(type) {
+					case *gubernator.PeerErr:
+						isExpectedErr = true
+					case nil:
+						isExpectedErr = true
+					}
+
+					assert.True(t, true, isExpectedErr)
+
 				}()
 			}
 

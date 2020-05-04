@@ -74,6 +74,11 @@ type BehaviorConfig struct {
 	GlobalTimeout time.Duration
 	// The max number of global updates we can batch into a single peer request
 	GlobalBatchLimit int
+
+	// How long
+	MultiRegionSyncWait   time.Duration
+	MultiRegionTimeout    time.Duration
+	MultiRegionBatchLimit int
 }
 
 func (c *Config) SetDefaults() error {
@@ -84,6 +89,10 @@ func (c *Config) SetDefaults() error {
 	setter.SetDefault(&c.Behaviors.GlobalTimeout, time.Millisecond*500)
 	setter.SetDefault(&c.Behaviors.GlobalBatchLimit, maxBatchSize)
 	setter.SetDefault(&c.Behaviors.GlobalSyncWait, time.Microsecond*500)
+
+	setter.SetDefault(&c.Behaviors.MultiRegionTimeout, time.Millisecond*500)
+	setter.SetDefault(&c.Behaviors.MultiRegionBatchLimit, maxBatchSize)
+	setter.SetDefault(&c.Behaviors.MultiRegionSyncWait, time.Microsecond*500)
 
 	holster.SetDefault(&c.LocalPicker, NewConsistantHash(nil))
 	// TODO: Default to a MultiPicker

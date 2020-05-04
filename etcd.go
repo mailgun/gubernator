@@ -302,7 +302,7 @@ func (e *EtcdPool) register(name string) error {
 
 			if _, err := e.conf.Client.Revoke(ctx, lease.ID); err != nil {
 				e.log.WithError(err).
-					Warn("during lease revoke ")
+					Warn("during lease revoke")
 			}
 			cancel()
 			return false

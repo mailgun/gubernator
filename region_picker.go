@@ -70,33 +70,50 @@ func (rp *RegionPicker) Add(peer *PeerClient) {
 }
 
 // QueueHits writes the RateLimitReq to be asyncronously sent to other regions
-func (mp *RegionPicker) QueueHits(r *RateLimitReq) {
-	mp.reqQueue <- r
+func (rp *RegionPicker) QueueHits(r *RateLimitReq) {
+	rp.reqQueue <- r
 }
 
 func (rp *RegionPicker) runAsyncReqs() {
 	var interval = NewInterval(rp.conf.MultiRegionSyncWait)
-	// Keys are data centers with a value that is the slice of requests to be sent
-	hits := make([]*RateLimitReq, rp.conf.MultiRegionBatchLimit)
+	hits := make(map[string]*RateLimitReq)
 
 	rp.wg.Until(func(done chan struct{}) bool {
 		select {
 		case r := <-rp.reqQueue:
-			hits = append(hits, r)
+			key := r.HashKey()
+
+			// Aggregate the hits into a single request
+			_, ok := hits[key]
+			if ok {
+				hits[key].Hits += r.Hits
+			} else {
+				hits[key] = r
+			}
+
+			// Send the hits if we reached our batch limit
 			if len(hits) == rp.conf.MultiRegionBatchLimit {
-				for _, picker := range rp.regions {
+				for dc, picker := range rp.regions {
+					log.Infof("Sending %v hit(s) to %s picker", len(hits), dc)
 					rp.sendHits(hits, picker)
 				}
-				hits = make([]*RateLimitReq, rp.conf.MultiRegionBatchLimit)
-				return true
+				hits = make(map[string]*RateLimitReq)
 			}
+
+			// Queue next interval
+			if len(hits) == 1 {
+				interval.Next()
+			}
+
 		case <-interval.C:
 			if len(hits) > 0 {
-				for _, picker := range rp.regions {
+				for dc, picker := range rp.regions {
+					log.Infof("Sending %v hit(s) to %s picker", len(hits), dc)
 					rp.sendHits(hits, picker)
 				}
-				hits = make([]*RateLimitReq, rp.conf.MultiRegionBatchLimit)
+				hits = make(map[string]*RateLimitReq)
 			}
+
 		case <-done:
 			return false
 		}
@@ -104,7 +121,6 @@ func (rp *RegionPicker) runAsyncReqs() {
 	})
 }
 
-func (rp *RegionPicker) sendHits(r []*RateLimitReq, picker PeerPicker) {
+func (rp *RegionPicker) sendHits(r map[string]*RateLimitReq, picker PeerPicker) {
 	// Does nothing for now
-	log.Infof("Sending %v hits to picker", len(r))
 }

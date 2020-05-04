@@ -103,6 +103,7 @@ func (c *PeerClient) Connect() error {
 		}
 
 		var err error
+		// c.conn, err = grpc.Dial(fmt.Sprintf("%s:%s", c.info.Address, ""), grpc.WithInsecure())
 		c.conn, err = grpc.Dial(c.info.Address, grpc.WithInsecure())
 		if err != nil {
 			return &PeerErr{err: errors.Wrapf(err, "failed to dial peer %s", c.info.Address)}

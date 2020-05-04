@@ -92,7 +92,7 @@ func (c *Config) SetDefaults() error {
 
 	setter.SetDefault(&c.Behaviors.MultiRegionTimeout, time.Millisecond*500)
 	setter.SetDefault(&c.Behaviors.MultiRegionBatchLimit, maxBatchSize)
-	setter.SetDefault(&c.Behaviors.MultiRegionSyncWait, time.Microsecond*500)
+	setter.SetDefault(&c.Behaviors.MultiRegionSyncWait, time.Second)
 
 	holster.SetDefault(&c.LocalPicker, NewConsistantHash(nil))
 	// TODO: Default to a MultiPicker

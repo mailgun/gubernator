@@ -101,13 +101,14 @@ func main() {
 
 		// Register peer on memberlist
 		pool, err = gubernator.NewMemberlistPool(gubernator.MemberlistPoolConfig{
-			AdvertiseAddress: conf.MemberlistPoolConfig.AdvertiseAddress,
-			AdvertisePort:    conf.MemberlistPoolConfig.AdvertisePort,
-			KnownNodes:       conf.MemberlistPoolConfig.KnownNodes,
-			DataCenter:       conf.DataCenter,
-			OnUpdate:         guber.SetPeers,
+			AdvertiseAddress:        conf.MemberlistPoolConfig.AdvertiseAddress,
+			AdvertisePort:           conf.MemberlistPoolConfig.AdvertisePort,
+			KnownNodes:              conf.MemberlistPoolConfig.KnownNodes,
+			DataCenter:              conf.DataCenter,
+			GubernatorListenAddress: conf.GRPCListenAddress,
+			OnUpdate:                guber.SetPeers,
 		})
-		checkErr(err, "while joining memberlist")
+		checkErr(err, "while creating memberlist")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

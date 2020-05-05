@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mailgun/holster"
 	"github.com/mailgun/holster/v3/setter"
 	"google.golang.org/grpc"
 )
@@ -94,11 +93,9 @@ func (c *Config) SetDefaults() error {
 	setter.SetDefault(&c.Behaviors.MultiRegionBatchLimit, maxBatchSize)
 	setter.SetDefault(&c.Behaviors.MultiRegionSyncWait, time.Second)
 
-	holster.SetDefault(&c.LocalPicker, NewConsistantHash(nil))
-	// TODO: Default to a MultiPicker
-	// TODO: Update to the latest holster version
-	//holster.SetDefault(&c.LocalPicker, NewConsistantHash(nil))
-	holster.SetDefault(&c.Cache, NewLRUCache(0))
+	setter.SetDefault(&c.LocalPicker, NewConsistantHash(nil))
+	setter.SetDefault(&c.RegionPicker, NewRegionPicker(nil))
+	setter.SetDefault(&c.Cache, NewLRUCache(0))
 
 	if c.Behaviors.BatchLimit > maxBatchSize {
 		return fmt.Errorf("Behaviors.BatchLimit cannot exceed '%d'", maxBatchSize)

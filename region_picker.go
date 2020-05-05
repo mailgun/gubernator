@@ -9,31 +9,40 @@ type RegionPeerPicker interface {
 	GetByPeerInfo(PeerInfo) *PeerClient
 	Add(*PeerClient)
 	QueueHits(r *RateLimitReq)
+	New() RegionPeerPicker
 }
 
 // RegionPicker encapsulates pickers for a set of regions
 type RegionPicker struct {
+	*ConsistentHash
+
 	// A map of all the pickers by region
 	regions map[string]PeerPicker
 	// The implementation of picker we will use for each region
-	picker   PeerPicker
 	conf     BehaviorConfig
 	wg       syncutil.WaitGroup
 	reqQueue chan *RateLimitReq
 }
 
-func NewRegionPicker(picker PeerPicker) *RegionPicker {
+func NewRegionPicker(fn HashFunc) *RegionPicker {
 	rp := &RegionPicker{
-		regions:  make(map[string]PeerPicker),
-		picker:   picker,
-		reqQueue: make(chan *RateLimitReq, 0),
+		regions:        make(map[string]PeerPicker),
+		reqQueue:       make(chan *RateLimitReq, 0),
+		ConsistentHash: NewConsistantHash(fn),
 	}
+	// TODO: Move this out of the picker
 	rp.runAsyncReqs()
 	return rp
 }
 
-// TODO: Sending cross DC should mainly update the hits, the config should not be sent, or ignored when received
-// TODO: Calculation of OVERLIMIT should not occur when sending hits cross DC
+func (rp *RegionPicker) New() RegionPeerPicker {
+	hash := rp.ConsistentHash.New().(*ConsistentHash)
+	return &RegionPicker{
+		regions:        make(map[string]PeerPicker),
+		reqQueue:       make(chan *RateLimitReq, 0),
+		ConsistentHash: hash,
+	}
+}
 
 // GetClients returns all the PeerClients that match this key in all regions
 func (rp *RegionPicker) GetClients(key string) ([]*PeerClient, error) {
@@ -63,13 +72,13 @@ func (rp *RegionPicker) GetByPeerInfo(info PeerInfo) *PeerClient {
 func (rp *RegionPicker) Add(peer *PeerClient) {
 	picker, ok := rp.regions[peer.info.DataCenter]
 	if !ok {
-		picker = rp.picker.New()
+		picker = rp.ConsistentHash.New()
 		rp.regions[peer.info.DataCenter] = picker
 	}
 	picker.Add(peer)
 }
 
-// QueueHits writes the RateLimitReq to be asyncronously sent to other regions
+// QueueHits writes the RateLimitReq to be asynchronously sent to other regions
 func (rp *RegionPicker) QueueHits(r *RateLimitReq) {
 	rp.reqQueue <- r
 }

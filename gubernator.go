@@ -311,7 +311,7 @@ func (s *Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
 // SetPeers is called by the implementor to indicate the pool of peers has changed
 func (s *Instance) SetPeers(peerInfo []PeerInfo) {
 	localPicker := s.conf.LocalPicker.New()
-	regionPicker := NewRegionPicker(s.conf.LocalPicker.New())
+	regionPicker := s.conf.RegionPicker.New()
 
 	for _, info := range peerInfo {
 		// Add peers that are not in our local DC to the RegionPicker
@@ -340,7 +340,9 @@ func (s *Instance) SetPeers(peerInfo []PeerInfo) {
 	s.peerMutex.Unlock()
 
 	// TODO: We should run this in a routine and query the PeerPickers for their last errors, If any errors then
-	// cluster is unhealthy.
+	//  cluster is unhealthy. When our node is talking to other nodes, we should record all their errors for a time.
+	//  Some type of expire cache I think, where errors will eventually expire, but if someone hits our `/healthy`
+	//  endpoint we should return un-healthy if there are errors in the error cache
 	/*s.health.Status = Healthy
 	if len(errs) != 0 {
 		s.health.Status = UnHealthy
@@ -351,41 +353,29 @@ func (s *Instance) SetPeers(peerInfo []PeerInfo) {
 	//TODO: This should include the regions peers? log.WithField("peers", peers).Info("Peers updated")
 
 	// Shutdown any old peers we no longer need
-	wg := sync.WaitGroup{}
 	ctx, cancel := context.WithTimeout(context.Background(), s.conf.Behaviors.BatchTimeout)
 	defer cancel()
 
 	var shutdownPeers []*PeerClient
-
 	for _, peer := range oldLocalPicker.Peers() {
-		peerInfo := s.conf.LocalPicker.GetByPeerInfo(peer.info)
-		// If this peerInfo is not found, we are no longer using this host
-		// and need to shut it down
-		if peerInfo == nil {
+		if peerInfo := s.conf.LocalPicker.GetByPeerInfo(peer.info); peerInfo == nil {
 			shutdownPeers = append(shutdownPeers, peer)
-			wg.Add(1)
-			go func() {
-				err := peer.Shutdown(ctx)
-				if err != nil {
-					log.WithError(err).WithField("peer", peer).Error("while shutting down peer")
-				}
-				// TODO: Ensure the wg.Done() PR is merged
-			}()
 		}
 	}
 
+	var wg syncutil.WaitGroup
 	for _, p := range shutdownPeers {
-		wg.Add(1)
-		go func(pc *PeerClient) {
+		wg.Run(func(obj interface{}) error {
+			pc := obj.(*PeerClient)
 			err := pc.Shutdown(ctx)
 			if err != nil {
 				log.WithError(err).WithField("peer", pc).Error("while shutting down peer")
 			}
-			wg.Done()
-		}(p)
+			return nil
+		}, p)
 	}
-
 	wg.Wait()
+
 	if len(shutdownPeers) > 0 {
 		log.WithField("peers", shutdownPeers).Info("Peers shutdown")
 	}

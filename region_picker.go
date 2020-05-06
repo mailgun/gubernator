@@ -130,6 +130,8 @@ func (rp *RegionPicker) runAsyncReqs() {
 	})
 }
 
+// TODO: Sending cross DC should mainly update the hits, the config should not be sent, or ignored when received
+// TODO: Calculation of OVERLIMIT should not occur when sending hits cross DC
 func (rp *RegionPicker) sendHits(r map[string]*RateLimitReq, picker PeerPicker) {
 	// Does nothing for now
 }

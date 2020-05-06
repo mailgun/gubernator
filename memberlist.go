@@ -47,7 +47,7 @@ func NewMemberlistPool(conf MemberlistPoolConfig) (*MemberlistPool, error) {
 	// Prep metadata
 	gob.Register(MemberlistMetadata{})
 	gubernatorPort := strings.Split(conf.GubernatorListenAddress, ":")[1]
-	metadata := MemberlistMetadata{Datacenter: conf.DataCenter, GubernatorPort: gubernatorPort}
+	metadata := MemberlistMetadata{DataCenter: conf.DataCenter, GubernatorPort: gubernatorPort}
 
 	// Join memberlist pool
 	err = memberlistPool.joinPool(conf.KnownNodes, metadata)
@@ -61,16 +61,17 @@ func NewMemberlistPool(conf MemberlistPoolConfig) (*MemberlistPool, error) {
 func (m *MemberlistPool) joinPool(knownNodes []string, metadata MemberlistMetadata) error {
 	// Get local node and set metadata
 	node := m.memberlist.LocalNode()
-	encodedMetadata, err := encodeMemberlistMetadata(metadata)
+	serializedMetadata, err := serializeMemberlistMetadata(metadata)
 	if err != nil {
 		return err
 	}
-	node.Meta = encodedMetadata
+	node.Meta = serializedMetadata
 
 	// Join memberlist
 	_, err = m.memberlist.Join(knownNodes)
 	if err != nil && err.Error() != "EOF" {
-		// return errors.Wrap(err, "while joining memberlist")
+		log.Infof("join error: %s", err.Error())
+		return errors.Wrap(err, "while joining memberlist")
 	}
 
 	return nil
@@ -97,19 +98,18 @@ func newMemberListEventHandler(onUpdate UpdateFunc) *memberlistEventHandler {
 func (e *memberlistEventHandler) NotifyJoin(node *ml.Node) {
 	address := strings.Split(node.Address(), ":")[0]
 
-	// Decode metadata
-	meta, err := decodeMemberlistMetadata(node.Meta)
+	// Deserialize metadata
+	metadata, err := deserializeMemberlistMetadata(node.Meta)
 	if err != nil {
 		// This is called during memberlist initialization due to the fact that the local node
 		// has no metadata yet
 		log.Warn(errors.Wrap(err, "while joining memberlist"))
 	} else {
 		// Construct Gubernator address and create PeerInfo
-		gubernatorAddress := fmt.Sprintf("%s:%s", address, meta.GubernatorPort)
-		e.peers[address] = PeerInfo{Address: gubernatorAddress, DataCenter: meta.Datacenter}
+		gubernatorAddress := fmt.Sprintf("%s:%s", address, metadata.GubernatorPort)
+		e.peers[address] = PeerInfo{Address: gubernatorAddress, DataCenter: metadata.DataCenter}
+		e.callOnUpdate()
 	}
-
-	e.callOnUpdate()
 }
 
 func (e *memberlistEventHandler) NotifyLeave(node *ml.Node) {
@@ -124,21 +124,20 @@ func (e *memberlistEventHandler) NotifyLeave(node *ml.Node) {
 func (e *memberlistEventHandler) NotifyUpdate(node *ml.Node) {
 	address := strings.Split(node.Address(), ":")[0]
 
-	// Decode metadata
-	meta, err := decodeMemberlistMetadata(node.Meta)
+	// Deserialize metadata
+	metadata, err := deserializeMemberlistMetadata(node.Meta)
 	if err != nil {
 		log.Warn(errors.Wrap(err, "while updating memberlist"))
 	} else {
 		// Construct Gubernator address and create PeerInfo
-		gubernatorAddress := fmt.Sprintf("%s:%s", address, meta.GubernatorPort)
-		e.peers[address] = PeerInfo{Address: gubernatorAddress, DataCenter: meta.Datacenter}
+		gubernatorAddress := fmt.Sprintf("%s:%s", address, metadata.GubernatorPort)
+		e.peers[address] = PeerInfo{Address: gubernatorAddress, DataCenter: metadata.DataCenter}
+		e.callOnUpdate()
 	}
-
-	e.callOnUpdate()
 }
 
 func (e *memberlistEventHandler) callOnUpdate() {
-	var peers []PeerInfo
+	peers := []PeerInfo{}
 
 	for _, p := range e.peers {
 		peers = append(peers, p)
@@ -148,11 +147,11 @@ func (e *memberlistEventHandler) callOnUpdate() {
 }
 
 type MemberlistMetadata struct {
-	Datacenter     string
+	DataCenter     string
 	GubernatorPort string
 }
 
-func encodeMemberlistMetadata(metadata MemberlistMetadata) ([]byte, error) {
+func serializeMemberlistMetadata(metadata MemberlistMetadata) ([]byte, error) {
 	buf := bytes.Buffer{}
 	encoder := gob.NewEncoder(&buf)
 
@@ -165,7 +164,7 @@ func encodeMemberlistMetadata(metadata MemberlistMetadata) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func decodeMemberlistMetadata(metadataAsByteSlice []byte) (*MemberlistMetadata, error) {
+func deserializeMemberlistMetadata(metadataAsByteSlice []byte) (*MemberlistMetadata, error) {
 	metadata := MemberlistMetadata{}
 	buf := bytes.Buffer{}
 

@@ -137,6 +137,7 @@ func TestTokenBucket(t *testing.T) {
 
 		rl := resp.Responses[0]
 
+		assert.Empty(t, rl.Error)
 		assert.Equal(t, test.Status, rl.Status)
 		assert.Equal(t, test.Remaining, rl.Remaining)
 		assert.Equal(t, int64(2), rl.Limit)
@@ -270,14 +271,15 @@ func TestMissingFields(t *testing.T) {
 }
 
 func TestGlobalRateLimits(t *testing.T) {
-	peer := cluster.PeerAt(0)
+	const clientInstance = 1
+	peer := cluster.PeerAt(clientInstance)
 	client, errs := guber.DialV1Server(peer)
 	require.Nil(t, errs)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 	defer cancel()
 
-	sendHit := func(status guber.Status, remain int64, i int) {
+	sendHit := func(status guber.Status, remain int64, i int) string {
 		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
 			Requests: []*guber.RateLimitReq{
 				{
@@ -296,9 +298,15 @@ func TestGlobalRateLimits(t *testing.T) {
 		assert.Equal(t, status, resp.Responses[0].Status, i)
 		assert.Equal(t, remain, resp.Responses[0].Remaining, i)
 		assert.Equal(t, int64(5), resp.Responses[0].Limit, i)
+
+		// ensure that we have a canonical host
+		assert.NotEmpty(t, resp.Responses[0].Metadata["owner"])
+
 		// name/key should ensure our connected peer is NOT the owner,
 		// the peer we are connected to should forward requests asynchronously to the owner.
 		assert.NotEqual(t, peer, resp.Responses[0].Metadata["owner"])
+
+		return resp.Responses[0].Metadata["owner"]
 	}
 
 	// Our first hit should create the request on the peer and queue for async forward
@@ -311,10 +319,13 @@ func TestGlobalRateLimits(t *testing.T) {
 
 	// After sleeping this response should be from the updated async call from our owner. Notice the
 	// remaining is still 3 as the hit is queued for update to the owner
-	sendHit(guber.Status_UNDER_LIMIT, 3, 3)
+	canonicalHost := sendHit(guber.Status_UNDER_LIMIT, 3, 3)
+
+	canonicalInstance := cluster.InstanceForHost(canonicalHost)
 
 	// Inspect our metrics, ensure they collected the counts we expected during this test
-	instance := cluster.InstanceAt(0)
+	instance := cluster.InstanceForHost(peer)
+
 	metricCh := make(chan prometheus.Metric, 5)
 	instance.Guber.Collect(metricCh)
 
@@ -323,10 +334,8 @@ func TestGlobalRateLimits(t *testing.T) {
 	assert.Nil(t, m.Write(&buf))
 	assert.Equal(t, uint64(1), *buf.Histogram.SampleCount)
 
-	// Instance 3 should be the owner of our global rate limit
-	instance = cluster.InstanceAt(3)
 	metricCh = make(chan prometheus.Metric, 5)
-	instance.Guber.Collect(metricCh)
+	canonicalInstance.Guber.Collect(metricCh)
 
 	m = <-metricCh // Async metric
 	m = <-metricCh // Broadcast metric

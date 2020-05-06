@@ -69,6 +69,16 @@ func InstanceAt(idx int) *instance {
 	return instances[idx]
 }
 
+// Return the specific instance for a host
+func InstanceForHost(host string) *instance {
+	for i := range instances {
+		if instances[i].Address == host {
+			return instances[i]
+		}
+	}
+	return nil
+}
+
 // Start a local cluster of gubernator servers
 func Start(numInstances int) error {
 	addresses := make([]string, numInstances, numInstances)

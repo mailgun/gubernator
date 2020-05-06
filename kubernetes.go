@@ -95,14 +95,14 @@ func (e *K8sPool) start() error {
 	)
 
 	e.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		/*AddFunc: func(obj interface{}) {
+		AddFunc: func(obj interface{}) {
 			key, err := cache.MetaNamespaceKeyFunc(obj)
 			logrus.Debugf("Queue (Add) '%s' - %s", key, err)
 			if err != nil {
 				logrus.Errorf("while calling MetaNamespaceKeyFunc(): %s", err)
 				return
 			}
-		},*/
+		},
 		UpdateFunc: func(obj, new interface{}) {
 			key, err := cache.MetaNamespaceKeyFunc(obj)
 			logrus.Debugf("Queue (Update) '%s' - %s", key, err)

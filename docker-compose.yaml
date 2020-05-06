@@ -33,8 +33,6 @@ services:
     ports:
       - "8181:81"
       - "8180:80"
-    depends_on:
-      - gubernator-1
 
   gubernator-3:
     image: mbond/gubernator:latest
@@ -52,8 +50,6 @@ services:
     ports:
       - "8281:81"
       - "8280:80"
-    depends_on:
-      - gubernator-2
 
   gubernator-4:
     image: mbond/gubernator:latest
@@ -71,5 +67,3 @@ services:
     ports:
       - "8381:81"
       - "8380:80"
-    depends_on:
-      - gubernator-3

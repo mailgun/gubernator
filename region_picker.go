@@ -7,8 +7,8 @@ import (
 type RegionPeerPicker interface {
 	GetClients(string) ([]*PeerClient, error)
 	GetByPeerInfo(PeerInfo) *PeerClient
+	Pickers() map[string]PeerPicker
 	Add(*PeerClient)
-	QueueHits(r *RateLimitReq)
 	New() RegionPeerPicker
 }
 
@@ -30,8 +30,6 @@ func NewRegionPicker(fn HashFunc) *RegionPicker {
 		reqQueue:       make(chan *RateLimitReq, 0),
 		ConsistentHash: NewConsistantHash(fn),
 	}
-	// TODO: Move this out of the picker
-	rp.runAsyncReqs()
 	return rp
 }
 
@@ -69,6 +67,11 @@ func (rp *RegionPicker) GetByPeerInfo(info PeerInfo) *PeerClient {
 	return nil
 }
 
+// Pickers returns a map of each region and its respective PeerPicker
+func (rp *RegionPicker) Pickers() map[string]PeerPicker {
+	return rp.regions
+}
+
 func (rp *RegionPicker) Add(peer *PeerClient) {
 	picker, ok := rp.regions[peer.info.DataCenter]
 	if !ok {
@@ -76,62 +79,4 @@ func (rp *RegionPicker) Add(peer *PeerClient) {
 		rp.regions[peer.info.DataCenter] = picker
 	}
 	picker.Add(peer)
-}
-
-// QueueHits writes the RateLimitReq to be asynchronously sent to other regions
-func (rp *RegionPicker) QueueHits(r *RateLimitReq) {
-	rp.reqQueue <- r
-}
-
-func (rp *RegionPicker) runAsyncReqs() {
-	var interval = NewInterval(rp.conf.MultiRegionSyncWait)
-	hits := make(map[string]*RateLimitReq)
-
-	rp.wg.Until(func(done chan struct{}) bool {
-		select {
-		case r := <-rp.reqQueue:
-			key := r.HashKey()
-
-			// Aggregate the hits into a single request
-			_, ok := hits[key]
-			if ok {
-				hits[key].Hits += r.Hits
-			} else {
-				hits[key] = r
-			}
-
-			// Send the hits if we reached our batch limit
-			if len(hits) == rp.conf.MultiRegionBatchLimit {
-				for dc, picker := range rp.regions {
-					log.Infof("Sending %v hit(s) to %s picker", len(hits), dc)
-					rp.sendHits(hits, picker)
-				}
-				hits = make(map[string]*RateLimitReq)
-			}
-
-			// Queue next interval
-			if len(hits) == 1 {
-				interval.Next()
-			}
-
-		case <-interval.C:
-			if len(hits) > 0 {
-				for dc, picker := range rp.regions {
-					log.Infof("Sending %v hit(s) to %s picker", len(hits), dc)
-					rp.sendHits(hits, picker)
-				}
-				hits = make(map[string]*RateLimitReq)
-			}
-
-		case <-done:
-			return false
-		}
-		return true
-	})
-}
-
-// TODO: Sending cross DC should mainly update the hits, the config should not be sent, or ignored when received
-// TODO: Calculation of OVERLIMIT should not occur when sending hits cross DC
-func (rp *RegionPicker) sendHits(r map[string]*RateLimitReq, picker PeerPicker) {
-	// Does nothing for now
 }

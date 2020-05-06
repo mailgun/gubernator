@@ -31,7 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Setup and shutdown the mailgun mock server for the entire test suite
+// Setup and shutdown the mock gubernator cluster for the entire test suite
 func TestMain(m *testing.M) {
 	if err := cluster.StartWith([]string{
 		"127.0.0.1:9990",
@@ -46,6 +46,71 @@ func TestMain(m *testing.M) {
 	}
 	defer cluster.Stop()
 	os.Exit(m.Run())
+}
+
+func TestGlobalRateLimits(t *testing.T) {
+	peer := cluster.PeerAt(0)
+	client, errs := guber.DialV1Server(peer.Address)
+	require.Nil(t, errs)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+
+	sendHit := func(status guber.Status, remain int64, i int) {
+		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
+			Requests: []*guber.RateLimitReq{
+				{
+					Name:      "test_global",
+					UniqueKey: "account:12345",
+					Algorithm: guber.Algorithm_TOKEN_BUCKET,
+					Behavior:  guber.Behavior_GLOBAL,
+					Duration:  guber.Second * 3,
+					Hits:      1,
+					Limit:     5,
+				},
+			},
+		})
+		require.Nil(t, err, i)
+		assert.Equal(t, "", resp.Responses[0].Error, i)
+		assert.Equal(t, status, resp.Responses[0].Status, i)
+		assert.Equal(t, remain, resp.Responses[0].Remaining, i)
+		assert.Equal(t, int64(5), resp.Responses[0].Limit, i)
+		// name/key should ensure our connected peer is NOT the owner,
+		// the peer we are connected to should forward requests asynchronously to the owner.
+		assert.NotEqual(t, peer, resp.Responses[0].Metadata["owner"])
+	}
+
+	// Our first hit should create the request on the peer and queue for async forward
+	sendHit(guber.Status_UNDER_LIMIT, 4, 1)
+
+	// Our second should be processed as if we own it since the async forward hasn't occurred yet
+	sendHit(guber.Status_UNDER_LIMIT, 3, 2)
+
+	time.Sleep(time.Second)
+
+	// After sleeping this response should be from the updated async call from our owner. Notice the
+	// remaining is still 3 as the hit is queued for update to the owner
+	sendHit(guber.Status_UNDER_LIMIT, 3, 3)
+
+	// Inspect our metrics, ensure they collected the counts we expected during this test
+	instance := cluster.InstanceAt(0)
+	metricCh := make(chan prometheus.Metric, 5)
+	instance.Guber.Collect(metricCh)
+
+	buf := dto.Metric{}
+	m := <-metricCh // Async metric
+	assert.Nil(t, m.Write(&buf))
+	assert.Equal(t, uint64(1), *buf.Histogram.SampleCount)
+
+	// Instance 3 should be the owner of our global rate limit
+	instance = cluster.InstanceAt(3)
+	metricCh = make(chan prometheus.Metric, 5)
+	instance.Guber.Collect(metricCh)
+
+	m = <-metricCh // Async metric
+	m = <-metricCh // Broadcast metric
+	assert.Nil(t, m.Write(&buf))
+	assert.Equal(t, uint64(1), *buf.Histogram.SampleCount)
 }
 
 func TestOverTheLimit(t *testing.T) {

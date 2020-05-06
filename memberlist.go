@@ -32,7 +32,7 @@ func NewMemberlistPool(conf MemberlistPoolConfig) (*MemberlistPool, error) {
 	events := newMemberListEventHandler(conf.OnUpdate)
 
 	// Configure memberlist
-	config := ml.DefaultLANConfig()
+	config := ml.DefaultWANConfig()
 	config.Events = events
 	config.AdvertiseAddr = conf.AdvertiseAddress
 	config.AdvertisePort = conf.AdvertisePort
@@ -45,9 +45,9 @@ func NewMemberlistPool(conf MemberlistPoolConfig) (*MemberlistPool, error) {
 	memberlistPool.memberlist = memberlist
 
 	// Prep metadata
-	gob.Register(MemberlistMetadata{})
+	gob.Register(memberlistMetadata{})
 	gubernatorPort := strings.Split(conf.GubernatorListenAddress, ":")[1]
-	metadata := MemberlistMetadata{DataCenter: conf.DataCenter, GubernatorPort: gubernatorPort}
+	metadata := memberlistMetadata{DataCenter: conf.DataCenter, GubernatorPort: gubernatorPort}
 
 	// Join memberlist pool
 	err = memberlistPool.joinPool(conf.KnownNodes, metadata)
@@ -58,7 +58,7 @@ func NewMemberlistPool(conf MemberlistPoolConfig) (*MemberlistPool, error) {
 	return memberlistPool, nil
 }
 
-func (m *MemberlistPool) joinPool(knownNodes []string, metadata MemberlistMetadata) error {
+func (m *MemberlistPool) joinPool(knownNodes []string, metadata memberlistMetadata) error {
 	// Get local node and set metadata
 	node := m.memberlist.LocalNode()
 	serializedMetadata, err := serializeMemberlistMetadata(metadata)
@@ -69,8 +69,7 @@ func (m *MemberlistPool) joinPool(knownNodes []string, metadata MemberlistMetada
 
 	// Join memberlist
 	_, err = m.memberlist.Join(knownNodes)
-	if err != nil && err.Error() != "EOF" {
-		log.Infof("join error: %s", err.Error())
+	if err != nil {
 		return errors.Wrap(err, "while joining memberlist")
 	}
 
@@ -137,7 +136,7 @@ func (e *memberlistEventHandler) NotifyUpdate(node *ml.Node) {
 }
 
 func (e *memberlistEventHandler) callOnUpdate() {
-	peers := []PeerInfo{}
+	var peers = []PeerInfo{}
 
 	for _, p := range e.peers {
 		peers = append(peers, p)
@@ -146,12 +145,12 @@ func (e *memberlistEventHandler) callOnUpdate() {
 	e.OnUpdate(peers)
 }
 
-type MemberlistMetadata struct {
+type memberlistMetadata struct {
 	DataCenter     string
 	GubernatorPort string
 }
 
-func serializeMemberlistMetadata(metadata MemberlistMetadata) ([]byte, error) {
+func serializeMemberlistMetadata(metadata memberlistMetadata) ([]byte, error) {
 	buf := bytes.Buffer{}
 	encoder := gob.NewEncoder(&buf)
 
@@ -164,8 +163,8 @@ func serializeMemberlistMetadata(metadata MemberlistMetadata) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func deserializeMemberlistMetadata(metadataAsByteSlice []byte) (*MemberlistMetadata, error) {
-	metadata := MemberlistMetadata{}
+func deserializeMemberlistMetadata(metadataAsByteSlice []byte) (*memberlistMetadata, error) {
+	metadata := memberlistMetadata{}
 	buf := bytes.Buffer{}
 
 	buf.Write(metadataAsByteSlice)

@@ -38,11 +38,12 @@ const (
 var log *logrus.Entry
 
 type Instance struct {
-	health    HealthCheckResp
-	global    *globalManager
-	peerMutex sync.RWMutex
-	conf      Config
-	isClosed  bool
+	health      HealthCheckResp
+	global      *globalManager
+	mutliRegion *mutliRegionManager
+	peerMutex   sync.RWMutex
+	conf        Config
+	isClosed    bool
 }
 
 func New(conf Config) (*Instance, error) {
@@ -60,6 +61,7 @@ func New(conf Config) (*Instance, error) {
 	}
 
 	s.global = newGlobalManager(conf.Behaviors, &s)
+	s.mutliRegion = newMultiRegionManager(conf.Behaviors, &s)
 
 	// Register our server with GRPC
 	RegisterV1Server(conf.GRPCServer, &s)
@@ -296,7 +298,7 @@ func (s *Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
 	}
 
 	if HasBehavior(r.Behavior, Behavior_MULTI_REGION) {
-		s.conf.RegionPicker.QueueHits(r)
+		s.mutliRegion.QueueHits(r)
 	}
 
 	switch r.Algorithm {
@@ -335,6 +337,7 @@ func (s *Instance) SetPeers(peerInfo []PeerInfo) {
 	s.peerMutex.Lock()
 	// Replace our current pickers
 	oldLocalPicker := s.conf.LocalPicker
+	oldRegionPicker := s.conf.RegionPicker
 	s.conf.LocalPicker = localPicker
 	s.conf.RegionPicker = regionPicker
 	s.peerMutex.Unlock()
@@ -360,6 +363,14 @@ func (s *Instance) SetPeers(peerInfo []PeerInfo) {
 	for _, peer := range oldLocalPicker.Peers() {
 		if peerInfo := s.conf.LocalPicker.GetByPeerInfo(peer.info); peerInfo == nil {
 			shutdownPeers = append(shutdownPeers, peer)
+		}
+	}
+
+	for _, regionPicker := range oldRegionPicker.Pickers() {
+		for _, peer := range regionPicker.Peers() {
+			if peerInfo := s.conf.RegionPicker.GetByPeerInfo(peer.info); peerInfo == nil {
+				shutdownPeers = append(shutdownPeers, peer)
+			}
 		}
 	}
 
@@ -397,6 +408,12 @@ func (s *Instance) GetPeerList() []*PeerClient {
 	s.peerMutex.RLock()
 	defer s.peerMutex.RUnlock()
 	return s.conf.LocalPicker.Peers()
+}
+
+func (s *Instance) GetRegionPickers() map[string]PeerPicker {
+	s.peerMutex.RLock()
+	defer s.peerMutex.RUnlock()
+	return s.conf.RegionPicker.Pickers()
 }
 
 // Describe fetches prometheus metrics to be registered

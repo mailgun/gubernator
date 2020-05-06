@@ -74,9 +74,11 @@ type BehaviorConfig struct {
 	// The max number of global updates we can batch into a single peer request
 	GlobalBatchLimit int
 
-	// How long
-	MultiRegionSyncWait   time.Duration
-	MultiRegionTimeout    time.Duration
+	// How long the current region will collect request before pushing them to other regions
+	MultiRegionSyncWait time.Duration
+	// How long the current region will wait for responses from other regions
+	MultiRegionTimeout time.Duration
+	// The max number of requests the current region will collect
 	MultiRegionBatchLimit int
 }
 

@@ -32,16 +32,16 @@ type globalManager struct {
 	broadcastQueue chan *RateLimitReq
 	wg             syncutil.WaitGroup
 	conf           BehaviorConfig
-	log            *logrus.Entry
-	instance       *Instance
+	log            logrus.FieldLogger
+	instance       *V1Instance
 
 	asyncMetrics     prometheus.Histogram
 	broadcastMetrics prometheus.Histogram
 }
 
-func newGlobalManager(conf BehaviorConfig, instance *Instance) *globalManager {
+func newGlobalManager(conf BehaviorConfig, instance *V1Instance) *globalManager {
 	gm := globalManager{
-		log: log.WithField("category", "global-manager"),
+		log: instance.log,
 		asyncMetrics: prometheus.NewHistogram(prometheus.HistogramOpts{
 			Name: "async_durations",
 			Help: "The duration of GLOBAL async sends in seconds.",
@@ -129,11 +129,11 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 			continue
 		}
 
-		p, ok := peerRequests[peer.info.Address]
+		p, ok := peerRequests[peer.info.GRPCAddress]
 		if ok {
 			p.req.Requests = append(p.req.Requests, r)
 		} else {
-			peerRequests[peer.info.Address] = &pair{
+			peerRequests[peer.info.GRPCAddress] = &pair{
 				client: peer,
 				req:    GetPeerRateLimitsReq{Requests: []*RateLimitReq{r}},
 			}
@@ -148,7 +148,7 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 
 		if err != nil {
 			gm.log.WithError(err).
-				Errorf("error sending global hits to '%s'", p.client.info.Address)
+				Errorf("error sending global hits to '%s'", p.client.info.GRPCAddress)
 			continue
 		}
 	}
@@ -167,7 +167,7 @@ func (gm *globalManager) runBroadcasts() {
 
 			// Send the hits if we reached our batch limit
 			if len(updates) == gm.conf.GlobalBatchLimit {
-				gm.updatePeers(updates)
+				gm.broadcastPeers(updates)
 				updates = make(map[string]*RateLimitReq)
 				return true
 			}
@@ -180,7 +180,7 @@ func (gm *globalManager) runBroadcasts() {
 
 		case <-interval.C:
 			if len(updates) != 0 {
-				gm.updatePeers(updates)
+				gm.broadcastPeers(updates)
 				updates = make(map[string]*RateLimitReq)
 			}
 		case <-done:
@@ -190,8 +190,8 @@ func (gm *globalManager) runBroadcasts() {
 	})
 }
 
-// updatePeers broadcasts global rate limit statuses to all other peers
-func (gm *globalManager) updatePeers(updates map[string]*RateLimitReq) {
+// broadcastPeers broadcasts global rate limit statuses to all other peers
+func (gm *globalManager) broadcastPeers(updates map[string]*RateLimitReq) {
 	var req UpdatePeerGlobalsReq
 	start := time.Now()
 
@@ -205,7 +205,7 @@ func (gm *globalManager) updatePeers(updates map[string]*RateLimitReq) {
 
 		status, err := gm.instance.getRateLimit(&rl)
 		if err != nil {
-			gm.log.WithError(err).Errorf("while sending global updates to peers for: '%s'", rl.HashKey())
+			gm.log.WithError(err).Errorf("while broadcasting update to peers for: '%s'", rl.HashKey())
 			continue
 		}
 		// Build an UpdatePeerGlobalsReq
@@ -229,7 +229,7 @@ func (gm *globalManager) updatePeers(updates map[string]*RateLimitReq) {
 		if err != nil {
 			// Skip peers that are not in a ready state
 			if !IsNotReady(err) {
-				gm.log.WithError(err).Errorf("error sending global updates to '%s'", peer.info.Address)
+				gm.log.WithError(err).Errorf("while broadcasting global updates to '%s'", peer.info.GRPCAddress)
 			}
 			continue
 		}

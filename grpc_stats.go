@@ -22,7 +22,6 @@ import (
 
 	"github.com/mailgun/holster/v3/syncutil"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"google.golang.org/grpc/stats"
 )
 
@@ -39,22 +38,21 @@ var statsContextKey = contextKey{}
 
 // Implements the Prometheus collector interface. Such that when the /metrics handler is
 // called this collector pulls all the stats from
-type Collector struct {
+type GRPCStatsHandler struct {
 	reqCh chan *GRPCStats
 	wg    syncutil.WaitGroup
 
-	// Metrics collectors
 	grpcRequestCount    *prometheus.CounterVec
 	grpcRequestDuration *prometheus.HistogramVec
 }
 
-func NewGRPCStatsHandler() *Collector {
-	c := &Collector{
-		grpcRequestCount: promauto.NewCounterVec(prometheus.CounterOpts{
+func NewGRPCStatsHandler() *GRPCStatsHandler {
+	c := &GRPCStatsHandler{
+		grpcRequestCount: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "grpc_request_counts",
 			Help: "GRPC requests by status."},
 			[]string{"status", "method"}),
-		grpcRequestDuration: promauto.NewHistogramVec(prometheus.HistogramOpts{
+		grpcRequestDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name: "grpc_request_duration_milliseconds",
 			Help: "GRPC request durations in milliseconds.",
 		}, []string{"method"}),
@@ -63,7 +61,7 @@ func NewGRPCStatsHandler() *Collector {
 	return c
 }
 
-func (c *Collector) run() {
+func (c *GRPCStatsHandler) run() {
 	c.reqCh = make(chan *GRPCStats, 10000)
 
 	c.wg.Until(func(done chan struct{}) bool {
@@ -98,11 +96,21 @@ func (c *Collector) run() {
 	})
 }
 
-func (c *Collector) Close() {
+func (c *GRPCStatsHandler) Describe(ch chan<- *prometheus.Desc) {
+	c.grpcRequestCount.Describe(ch)
+	c.grpcRequestDuration.Describe(ch)
+}
+
+func (c *GRPCStatsHandler) Collect(ch chan<- prometheus.Metric) {
+	c.grpcRequestCount.Collect(ch)
+	c.grpcRequestDuration.Collect(ch)
+}
+
+func (c *GRPCStatsHandler) Close() {
 	c.wg.Stop()
 }
 
-func (c *Collector) HandleRPC(ctx context.Context, s stats.RPCStats) {
+func (c *GRPCStatsHandler) HandleRPC(ctx context.Context, s stats.RPCStats) {
 	rs := StatsFromContext(ctx)
 	if rs == nil {
 		return
@@ -127,13 +135,13 @@ func (c *Collector) HandleRPC(ctx context.Context, s stats.RPCStats) {
 	}
 }
 
-func (c *Collector) HandleConn(ctx context.Context, s stats.ConnStats) {}
+func (c *GRPCStatsHandler) HandleConn(ctx context.Context, s stats.ConnStats) {}
 
-func (c *Collector) TagConn(ctx context.Context, _ *stats.ConnTagInfo) context.Context {
+func (c *GRPCStatsHandler) TagConn(ctx context.Context, _ *stats.ConnTagInfo) context.Context {
 	return ctx
 }
 
-func (c *Collector) TagRPC(ctx context.Context, tagInfo *stats.RPCTagInfo) context.Context {
+func (c *GRPCStatsHandler) TagRPC(ctx context.Context, tagInfo *stats.RPCTagInfo) context.Context {
 	return ContextWithStats(ctx, &GRPCStats{Method: tagInfo.FullMethodName})
 }
 

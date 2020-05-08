@@ -58,7 +58,7 @@ type ServerConfig struct {
 	K8PoolConf gubernator.K8sPoolConfig
 
 	// Memberlist configuration used to find peers
-	MemberlistPoolConf gubernator.MemberlistPoolConfig
+	MemberlistPoolConf gubernator.MemberListPoolConfig
 
 	// The PeerPicker as selected by `GUBER_PEER_PICKER`
 	Picker gubernator.PeerPicker

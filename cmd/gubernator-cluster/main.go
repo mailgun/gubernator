@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/mailgun/gubernator"
 	"github.com/mailgun/gubernator/cluster"
 	"github.com/sirupsen/logrus"
 )
@@ -29,13 +30,13 @@ import (
 func main() {
 	logrus.SetLevel(logrus.InfoLevel)
 	// Start a local cluster
-	err := cluster.StartWith([]string{
-		"127.0.0.1:9090",
-		"127.0.0.1:9091",
-		"127.0.0.1:9092",
-		"127.0.0.1:9093",
-		"127.0.0.1:9094",
-		"127.0.0.1:9095",
+	err := cluster.StartWith([]gubernator.PeerInfo{
+		{GRPCAddress: "127.0.0.1:9090"},
+		{GRPCAddress: "127.0.0.1:9091"},
+		{GRPCAddress: "127.0.0.1:9092"},
+		{GRPCAddress: "127.0.0.1:9093"},
+		{GRPCAddress: "127.0.0.1:9094"},
+		{GRPCAddress: "127.0.0.1:9095"},
 	})
 	if err != nil {
 		fmt.Println(err)

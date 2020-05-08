@@ -74,10 +74,10 @@ func (ch *ReplicatedConsistantHash) Peers() []*PeerClient {
 
 // Adds a peer to the hash
 func (ch *ReplicatedConsistantHash) Add(peer *PeerClient) {
-	ch.peers[peer.info.Address] = peer
+	ch.peers[peer.info.GRPCAddress] = peer
 
 	for i := 0; i < ch.replicas; i++ {
-		hash := ch.hashFunc(strToBytesUnsafe(strconv.Itoa(i) + peer.info.Address))
+		hash := ch.hashFunc(strToBytesUnsafe(strconv.Itoa(i) + peer.info.GRPCAddress))
 		ch.peerKeys = append(ch.peerKeys, peerInfo{
 			hash: hash,
 			peer: peer,
@@ -94,7 +94,7 @@ func (ch *ReplicatedConsistantHash) Size() int {
 
 // Returns the peer by hostname
 func (ch *ReplicatedConsistantHash) GetByPeerInfo(peer PeerInfo) *PeerClient {
-	return ch.peers[peer.Address]
+	return ch.peers[peer.GRPCAddress]
 }
 
 // Given a key, return the peer that key is assigned too

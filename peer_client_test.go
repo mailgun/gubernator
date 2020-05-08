@@ -40,7 +40,6 @@ func TestPeerClientShutdown(t *testing.T) {
 		c := cases[i]
 
 		t.Run(c.Name, func(t *testing.T) {
-
 			client := gubernator.NewPeerClient(config, cluster.GetRandomPeer())
 
 			wg := sync.WaitGroup{}

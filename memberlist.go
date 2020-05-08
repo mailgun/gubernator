@@ -12,15 +12,18 @@ import (
 
 	ml "github.com/hashicorp/memberlist"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/log"
+	"github.com/sirupsen/logrus"
 )
 
-type MemberlistPool struct {
-	memberlist *ml.Memberlist
-	conf       MemberlistPoolConfig
-	events     *memberlistEventHandler
+type MemberListPool struct {
+	log        *logrus.Entry
+	memberList *ml.Memberlist
+	conf       MemberListPoolConfig
+	events     *memberListEventHandler
 }
 
-type MemberlistPoolConfig struct {
+type MemberListPoolConfig struct {
 	AdvertiseAddress string
 	AdvertisePort    int
 	NodeName         string
@@ -33,15 +36,18 @@ type MemberlistPoolConfig struct {
 	Enabled          bool
 }
 
-func NewMemberlistPool(conf MemberlistPoolConfig) (*MemberlistPool, error) {
-	memberlistPool := &MemberlistPool{conf: conf}
+func NewMemberListPool(conf MemberListPoolConfig) (*MemberListPool, error) {
+	m := &MemberListPool{
+		log:  logrus.WithField("category", "member-list"),
+		conf: conf,
+	}
 
-	// Configure memberlist event handler
-	memberlistPool.events = newMemberListEventHandler(conf.OnUpdate)
+	// Configure member list event handler
+	m.events = newMemberListEventHandler(m.log, conf.OnUpdate)
 
-	// Configure memberlist
+	// Configure member list
 	config := ml.DefaultWANConfig()
-	config.Events = memberlistPool.events
+	config.Events = m.events
 	config.AdvertiseAddr = conf.AdvertiseAddress
 	config.AdvertisePort = conf.AdvertisePort
 
@@ -57,37 +63,37 @@ func NewMemberlistPool(conf MemberlistPoolConfig) (*MemberlistPool, error) {
 		config.Logger = conf.Logger
 	}
 
-	// Create and set memberlist
+	// Create and set member list
 	memberlist, err := ml.Create(config)
 	if err != nil {
 		return nil, err
 	}
-	memberlistPool.memberlist = memberlist
+	m.memberList = memberlist
 
 	// Prep metadata
-	gob.Register(memberlistMetadata{})
-	metadata := memberlistMetadata{DataCenter: conf.DataCenter, GubernatorPort: conf.GubernatorPort}
+	gob.Register(memberListMetadata{})
+	metadata := memberListMetadata{DataCenter: conf.DataCenter, GubernatorPort: conf.GubernatorPort}
 
-	// Join memberlist pool
-	err = memberlistPool.joinPool(conf.KnownNodes, metadata)
+	// Join member list pool
+	err = m.joinPool(conf.KnownNodes, metadata)
 	if err != nil {
 		return nil, err
 	}
 
-	return memberlistPool, nil
+	return m, nil
 }
 
-func (m *MemberlistPool) joinPool(knownNodes []string, metadata memberlistMetadata) error {
+func (m *MemberListPool) joinPool(knownNodes []string, metadata memberListMetadata) error {
 	// Get local node and set metadata
-	node := m.memberlist.LocalNode()
-	serializedMetadata, err := serializeMemberlistMetadata(metadata)
+	node := m.memberList.LocalNode()
+	serializedMetadata, err := serializeMemberListMetadata(metadata)
 	if err != nil {
 		return err
 	}
 	node.Meta = serializedMetadata
 
-	// Join memberlist
-	_, err = m.memberlist.Join(knownNodes)
+	// Join member list
+	_, err = m.memberList.Join(knownNodes)
 	if err != nil {
 		return errors.Wrap(err, "while joining memberlist")
 	}
@@ -98,44 +104,48 @@ func (m *MemberlistPool) joinPool(knownNodes []string, metadata memberlistMetada
 	return nil
 }
 
-func (m *MemberlistPool) Close() {
-	err := m.memberlist.Leave(time.Second)
+func (m *MemberListPool) Close() {
+	err := m.memberList.Leave(time.Second)
 	if err != nil {
-		log.Warn(errors.Wrap(err, "while leaving memberlist"))
+		m.log.Warn(errors.Wrap(err, "while leaving memberlist"))
 	}
 }
 
-type memberlistEventHandler struct {
+type memberListEventHandler struct {
 	peers    map[string]PeerInfo
+	log      *logrus.Entry
 	OnUpdate UpdateFunc
 }
 
-func newMemberListEventHandler(onUpdate UpdateFunc) *memberlistEventHandler {
-	eventhandler := memberlistEventHandler{OnUpdate: onUpdate}
-	eventhandler.peers = make(map[string]PeerInfo)
-	return &eventhandler
+func newMemberListEventHandler(log *logrus.Entry, onUpdate UpdateFunc) *memberListEventHandler {
+	handler := memberListEventHandler{
+		OnUpdate: onUpdate,
+		log:      log,
+	}
+	handler.peers = make(map[string]PeerInfo)
+	return &handler
 }
 
-func (e *memberlistEventHandler) addPeer(node *ml.Node) {
+func (e *memberListEventHandler) addPeer(node *ml.Node) {
 	ip := getIP(node.Address())
 
 	// Deserialize metadata
-	metadata, err := deserializeMemberlistMetadata(node.Meta)
+	metadata, err := deserializeMemberListMetadata(node.Meta)
 	if err != nil {
-		log.Warn(errors.Wrap(err, "while adding to peers"))
+		e.log.Warn(errors.Wrap(err, "while adding to peers"))
 	} else {
 		// Construct Gubernator address and create PeerInfo
 		gubernatorAddress := makeAddress(ip, metadata.GubernatorPort)
-		e.peers[ip] = PeerInfo{Address: gubernatorAddress, DataCenter: metadata.DataCenter}
+		e.peers[ip] = PeerInfo{GRPCAddress: gubernatorAddress, DataCenter: metadata.DataCenter}
 		e.callOnUpdate()
 	}
 }
 
-func (e *memberlistEventHandler) NotifyJoin(node *ml.Node) {
+func (e *memberListEventHandler) NotifyJoin(node *ml.Node) {
 	ip := getIP(node.Address())
 
 	// Deserialize metadata
-	metadata, err := deserializeMemberlistMetadata(node.Meta)
+	metadata, err := deserializeMemberListMetadata(node.Meta)
 	if err != nil {
 		// This is called during memberlist initialization due to the fact that the local node
 		// has no metadata yet
@@ -143,12 +153,12 @@ func (e *memberlistEventHandler) NotifyJoin(node *ml.Node) {
 	} else {
 		// Construct Gubernator address and create PeerInfo
 		gubernatorAddress := makeAddress(ip, metadata.GubernatorPort)
-		e.peers[ip] = PeerInfo{Address: gubernatorAddress, DataCenter: metadata.DataCenter}
+		e.peers[ip] = PeerInfo{GRPCAddress: gubernatorAddress, DataCenter: metadata.DataCenter}
 		e.callOnUpdate()
 	}
 }
 
-func (e *memberlistEventHandler) NotifyLeave(node *ml.Node) {
+func (e *memberListEventHandler) NotifyLeave(node *ml.Node) {
 	ip := getIP(node.Address())
 
 	// Remove PeerInfo
@@ -157,23 +167,23 @@ func (e *memberlistEventHandler) NotifyLeave(node *ml.Node) {
 	e.callOnUpdate()
 }
 
-func (e *memberlistEventHandler) NotifyUpdate(node *ml.Node) {
+func (e *memberListEventHandler) NotifyUpdate(node *ml.Node) {
 	ip := getIP(node.Address())
 
 	// Deserialize metadata
-	metadata, err := deserializeMemberlistMetadata(node.Meta)
+	metadata, err := deserializeMemberListMetadata(node.Meta)
 	if err != nil {
 		log.Warn(errors.Wrap(err, "while updating memberlist"))
 	} else {
 		// Construct Gubernator address and create PeerInfo
 		gubernatorAddress := makeAddress(ip, metadata.GubernatorPort)
-		e.peers[ip] = PeerInfo{Address: gubernatorAddress, DataCenter: metadata.DataCenter}
+		e.peers[ip] = PeerInfo{GRPCAddress: gubernatorAddress, DataCenter: metadata.DataCenter}
 		e.callOnUpdate()
 	}
 }
 
-func (e *memberlistEventHandler) callOnUpdate() {
-	var peers = []PeerInfo{}
+func (e *memberListEventHandler) callOnUpdate() {
+	var peers []PeerInfo
 
 	for _, p := range e.peers {
 		peers = append(peers, p)
@@ -190,12 +200,12 @@ func makeAddress(ip string, port int) string {
 	return fmt.Sprintf("%s:%s", ip, strconv.Itoa(port))
 }
 
-type memberlistMetadata struct {
+type memberListMetadata struct {
 	DataCenter     string
 	GubernatorPort int
 }
 
-func serializeMemberlistMetadata(metadata memberlistMetadata) ([]byte, error) {
+func serializeMemberListMetadata(metadata memberListMetadata) ([]byte, error) {
 	buf := bytes.Buffer{}
 	encoder := gob.NewEncoder(&buf)
 
@@ -208,8 +218,8 @@ func serializeMemberlistMetadata(metadata memberlistMetadata) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func deserializeMemberlistMetadata(metadataAsByteSlice []byte) (*memberlistMetadata, error) {
-	metadata := memberlistMetadata{}
+func deserializeMemberListMetadata(metadataAsByteSlice []byte) (*memberListMetadata, error) {
+	metadata := memberListMetadata{}
 	buf := bytes.Buffer{}
 
 	buf.Write(metadataAsByteSlice)

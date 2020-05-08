@@ -19,6 +19,7 @@ package gubernator
 import (
 	"context"
 	"fmt"
+	"github.com/mailgun/holster/v3/setter"
 	"strings"
 	"sync"
 
@@ -36,30 +37,32 @@ const (
 	UnHealthy    = "unhealthy"
 )
 
-var log *logrus.Entry
-
-type Instance struct {
+type V1Instance struct {
 	health      HealthCheckResp
 	global      *globalManager
 	mutliRegion *mutliRegionManager
 	peerMutex   sync.RWMutex
+	log         logrus.FieldLogger
 	conf        Config
 	isClosed    bool
 }
 
-func New(conf Config) (*Instance, error) {
+// NewV1Instance instantiate a single instance of a gubernator peer and registers this
+// instance with the provided GRPCServer.
+func NewV1Instance(conf Config) (*V1Instance, error) {
 	if conf.GRPCServer == nil {
 		return nil, errors.New("GRPCServer instance is required")
 	}
 
-	log = logrus.WithField("category", "gubernator")
 	if err := conf.SetDefaults(); err != nil {
 		return nil, err
 	}
 
-	s := Instance{
+	s := V1Instance{
+		log:  conf.Logger,
 		conf: conf,
 	}
+	setter.SetDefault(&s.log, logrus.WithField("category", "gubernator"))
 
 	s.global = newGlobalManager(conf.Behaviors, &s)
 	s.mutliRegion = newMultiRegionManager(conf.Behaviors, &s)
@@ -83,7 +86,7 @@ func New(conf Config) (*Instance, error) {
 	return &s, nil
 }
 
-func (s *Instance) Close() error {
+func (s *V1Instance) Close() error {
 	if s.isClosed {
 		return nil
 	}
@@ -106,7 +109,7 @@ func (s *Instance) Close() error {
 // GetRateLimits is the public interface used by clients to request rate limits from the system. If the
 // rate limit `Name` and `UniqueKey` is not owned by this instance then we forward the request to the
 // peer that does.
-func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*GetRateLimitsResp, error) {
+func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*GetRateLimitsResp, error) {
 	var resp GetRateLimitsResp
 
 	if len(r.Requests) > maxBatchSize {
@@ -181,7 +184,7 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*Get
 						}
 
 						// Inform the client of the owner key of the key
-						inOut.Out.Metadata = map[string]string{"owner": peer.info.Address}
+						inOut.Out.Metadata = map[string]string{"owner": peer.info.GRPCAddress}
 
 						out <- inOut
 						return nil
@@ -200,7 +203,7 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*Get
 					}
 
 					// Inform the client of the owner key of the key
-					inOut.Out.Metadata = map[string]string{"owner": peer.info.Address}
+					inOut.Out.Metadata = map[string]string{"owner": peer.info.GRPCAddress}
 				}
 
 				out <- inOut
@@ -222,7 +225,7 @@ func (s *Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*Get
 
 // getGlobalRateLimit handles rate limits that are marked as `Behavior = GLOBAL`. Rate limit responses
 // are returned from the local cache and the hits are queued to be sent to the owning peer.
-func (s *Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, error) {
+func (s *V1Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, error) {
 	// Queue the hit for async update
 	s.global.QueueHit(req)
 
@@ -247,7 +250,7 @@ func (s *Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, error)
 
 // UpdatePeerGlobals updates the local cache with a list of global rate limits. This method should only
 // be called by a peer who is the owner of a global rate limit.
-func (s *Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
+func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
 	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
 
@@ -263,7 +266,7 @@ func (s *Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsRe
 }
 
 // GetPeerRateLimits is called by other peers to get the rate limits owned by this peer.
-func (s *Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
+func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
 	var resp GetPeerRateLimitsResp
 
 	if len(r.Requests) > maxBatchSize {
@@ -283,7 +286,7 @@ func (s *Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsRe
 }
 
 // HealthCheck Returns the health of our instance.
-func (s *Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*HealthCheckResp, error) {
+func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*HealthCheckResp, error) {
 	var errs []string
 
 	s.peerMutex.RLock()
@@ -323,7 +326,7 @@ func (s *Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*HealthC
 	return &s.health, nil
 }
 
-func (s *Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
+func (s *V1Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
 	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
 
@@ -345,7 +348,7 @@ func (s *Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
 }
 
 // SetPeers is called by the implementor to indicate the pool of peers has changed
-func (s *Instance) SetPeers(peerInfo []PeerInfo) {
+func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 	localPicker := s.conf.LocalPicker.New()
 	regionPicker := s.conf.RegionPicker.New()
 
@@ -403,7 +406,7 @@ func (s *Instance) SetPeers(peerInfo []PeerInfo) {
 			pc := obj.(*PeerClient)
 			err := pc.Shutdown(ctx)
 			if err != nil {
-				log.WithError(err).WithField("peer", pc).Error("while shutting down peer")
+				s.log.WithError(err).WithField("peer", pc).Error("while shutting down peer")
 			}
 			return nil
 		}, p)
@@ -411,12 +414,12 @@ func (s *Instance) SetPeers(peerInfo []PeerInfo) {
 	wg.Wait()
 
 	if len(shutdownPeers) > 0 {
-		log.WithField("peers", shutdownPeers).Info("Peers shutdown")
+		s.log.WithField("peers", shutdownPeers).Info("Peers shutdown")
 	}
 }
 
 // GetPeers returns a peer client for the hash key provided
-func (s *Instance) GetPeer(key string) (*PeerClient, error) {
+func (s *V1Instance) GetPeer(key string) (*PeerClient, error) {
 	s.peerMutex.RLock()
 	peer, err := s.conf.LocalPicker.Get(key)
 	if err != nil {
@@ -427,26 +430,26 @@ func (s *Instance) GetPeer(key string) (*PeerClient, error) {
 	return peer, nil
 }
 
-func (s *Instance) GetPeerList() []*PeerClient {
+func (s *V1Instance) GetPeerList() []*PeerClient {
 	s.peerMutex.RLock()
 	defer s.peerMutex.RUnlock()
 	return s.conf.LocalPicker.Peers()
 }
 
-func (s *Instance) GetRegionPickers() map[string]PeerPicker {
+func (s *V1Instance) GetRegionPickers() map[string]PeerPicker {
 	s.peerMutex.RLock()
 	defer s.peerMutex.RUnlock()
 	return s.conf.RegionPicker.Pickers()
 }
 
 // Describe fetches prometheus metrics to be registered
-func (s *Instance) Describe(ch chan<- *prometheus.Desc) {
+func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
 	ch <- s.global.asyncMetrics.Desc()
 	ch <- s.global.broadcastMetrics.Desc()
 }
 
 // Collect fetches metrics from the server for use by prometheus
-func (s *Instance) Collect(ch chan<- prometheus.Metric) {
+func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
 	ch <- s.global.asyncMetrics
 	ch <- s.global.broadcastMetrics
 }

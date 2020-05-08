@@ -144,7 +144,7 @@ func (e *K8sPool) updatePeers() {
 
 		for _, s := range endpoint.Subsets {
 			for _, addr := range s.Addresses {
-				peer := PeerInfo{Address: fmt.Sprintf("%s:%s", addr.IP, e.conf.PodPort)}
+				peer := PeerInfo{GRPCAddress: fmt.Sprintf("%s:%s", addr.IP, e.conf.PodPort)}
 
 				if addr.IP == e.conf.PodIP {
 					peer.IsOwner = true

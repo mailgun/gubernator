@@ -108,10 +108,10 @@ func (c *PeerClient) connect() error {
 		}
 
 		var err error
-		// c.conn, err = grpc.Dial(fmt.Sprintf("%s:%s", c.info.Address, ""), grpc.WithInsecure())
-		c.conn, err = grpc.Dial(c.info.Address, grpc.WithInsecure())
+		// c.conn, err = grpc.Dial(fmt.Sprintf("%s:%s", c.info.GRPCAddress, ""), grpc.WithInsecure())
+		c.conn, err = grpc.Dial(c.info.GRPCAddress, grpc.WithInsecure())
 		if err != nil {
-			return c.setLastErr(&PeerErr{err: errors.Wrapf(err, "failed to dial peer %s", c.info.Address)})
+			return c.setLastErr(&PeerErr{err: errors.Wrapf(err, "failed to dial peer %s", c.info.GRPCAddress)})
 		}
 		c.client = NewPeersV1Client(c.conn)
 		c.status = peerConnected
@@ -120,6 +120,11 @@ func (c *PeerClient) connect() error {
 	}
 	c.mutex.RUnlock()
 	return nil
+}
+
+// PeerInfo returns PeerInfo struct that describes this PeerClient
+func (c *PeerClient) PeerInfo() PeerInfo {
+	return c.info
 }
 
 // GetPeerRateLimit forwards a rate limit request to a peer. If the rate limit has `behavior == BATCHING` configured
@@ -196,7 +201,7 @@ func (c *PeerClient) setLastErr(err error) error {
 	}
 
 	// Prepend client address to error
-	errWithHostname := errors.Wrap(err, fmt.Sprintf("from host %s", c.info.Address))
+	errWithHostname := errors.Wrap(err, fmt.Sprintf("from host %s", c.info.GRPCAddress))
 	key := err.Error()
 
 	// Add error to the cache with a TTL of 5 minutes

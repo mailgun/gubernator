@@ -51,7 +51,7 @@ func BenchmarkServer_GetPeerRateLimitNoBatching(b *testing.B) {
 }
 
 func BenchmarkServer_GetRateLimit(b *testing.B) {
-	client, err := guber.DialV1Server(cluster.GetRandomPeer().Address)
+	client, err := guber.DialV1Server(cluster.GetRandomPeer().GRPCAddress)
 	if err != nil {
 		b.Errorf("NewV1Client err: %s", err)
 	}
@@ -77,7 +77,7 @@ func BenchmarkServer_GetRateLimit(b *testing.B) {
 }
 
 func BenchmarkServer_Ping(b *testing.B) {
-	client, err := guber.DialV1Server(cluster.GetRandomPeer().Address)
+	client, err := guber.DialV1Server(cluster.GetRandomPeer().GRPCAddress)
 	if err != nil {
 		b.Errorf("NewV1Client err: %s", err)
 	}
@@ -105,7 +105,7 @@ func BenchmarkServer_Ping(b *testing.B) {
 }*/
 
 func BenchmarkServer_ThunderingHeard(b *testing.B) {
-	client, err := guber.DialV1Server(cluster.GetRandomPeer().Address)
+	client, err := guber.DialV1Server(cluster.GetRandomPeer().GRPCAddress)
 	if err != nil {
 		b.Errorf("NewV1Client err: %s", err)
 	}

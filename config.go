@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/mailgun/holster/v3/setter"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
 
@@ -57,6 +58,9 @@ type Config struct {
 	// deciding who we should immediately connect too for our local picker. Should remain empty if not
 	// using multi data center support.
 	DataCenter string
+
+	// (Optional) Logger to be used when
+	Logger logrus.FieldLogger
 }
 
 type BehaviorConfig struct {

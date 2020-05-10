@@ -8,7 +8,6 @@ import (
 
 	"github.com/segmentio/fasthash/fnv1"
 	"github.com/segmentio/fasthash/fnv1a"
-	"github.com/segmentio/fasthash/jody"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -55,7 +54,6 @@ func TestConsistantHash(t *testing.T) {
 		hashFuncs := map[string]HashFunc{
 			"fasthash/fnv1a": fnv1a.HashBytes64,
 			"fasthash/fnv1":  fnv1.HashBytes64,
-			"fasthash/jody":  jody.HashBytes64,
 		}
 
 		for name, hashFunc := range hashFuncs {
@@ -86,7 +84,6 @@ func BenchmarkConsistantHash(b *testing.B) {
 	hashFuncs := map[string]HashFunc{
 		"fasthash/fnv1a": fnv1a.HashBytes64,
 		"fasthash/fnv1":  fnv1.HashBytes64,
-		"fasthash/jody":  jody.HashBytes64,
 	}
 
 	for name, hashFunc := range hashFuncs {

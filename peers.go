@@ -99,10 +99,14 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 		c.mutex.RUnlock()
 		return nil, ErrClosing
 	}
-	c.mutex.RUnlock()
 
+	// NOTE: This must be done within the RLock since calling Wait() in Shutdown() causes
+	// a race condition if called within a separate go routine if the internal wg is `0`
+	// when Wait() is called then Add(1) is called concurrently.
 	c.wg.Add(1)
 	defer c.wg.Done()
+
+	c.mutex.RUnlock()
 
 	resp, err := c.client.GetPeerRateLimits(ctx, r)
 	if err != nil {
@@ -123,10 +127,12 @@ func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 		c.mutex.RUnlock()
 		return nil, ErrClosing
 	}
-	c.mutex.RUnlock()
 
+	// See NOTE above about RLock and wg.Add(1)
 	c.wg.Add(1)
 	defer c.wg.Done()
+
+	c.mutex.RUnlock()
 
 	return c.client.UpdatePeerGlobals(ctx, r)
 }
@@ -143,11 +149,12 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	// Enqueue the request to be sent
 	c.queue <- &req
 
-	// Unlock to prevent the chan from being closed
-	c.mutex.RUnlock()
-
+	// See NOTE above about RLock and wg.Add(1)
 	c.wg.Add(1)
 	defer c.wg.Done()
+
+	// Unlock to prevent the chan from being closed
+	c.mutex.RUnlock()
 
 	// Wait for a response or context cancel
 	select {
@@ -260,12 +267,11 @@ func (c *PeerClient) Shutdown(ctx context.Context) error {
 		c.mutex.Unlock()
 		return nil
 	}
+	defer c.mutex.Unlock()
 
 	c.isClosing = true
 	// We need to close the chan here to prevent a possible race
 	close(c.queue)
-
-	c.mutex.Unlock()
 
 	defer func() {
 		if c.conn != nil {

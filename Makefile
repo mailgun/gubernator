@@ -5,6 +5,9 @@ VERSION=$(shell cat version)
 
 LDFLAGS="-X main.Version=$(VERSION)"
 
+test:
+	go test ./... -race -count=1
+
 docker:
 	docker build --build-arg VERSION=$(VERSION) -t thrawn01/gubernator:$(VERSION) .
 	docker tag thrawn01/gubernator:$(VERSION) thrawn01/gubernator:latest

@@ -38,7 +38,7 @@ func NewInterval(d time.Duration) *Interval {
 		C:  make(chan struct{}, 1),
 		in: make(chan struct{}),
 	}
-	go i.run(d)
+	i.run(d)
 	return &i
 }
 

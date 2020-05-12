@@ -19,7 +19,9 @@ package gubernator
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/mailgun/holster/v3/syncutil"
 	"github.com/pkg/errors"
@@ -284,7 +286,36 @@ func (s *Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsRe
 
 // HealthCheck Returns the health of our instance.
 func (s *Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*HealthCheckResp, error) {
+	var errs []string
+	expiration := time.Minute * 5
+
 	s.peerMutex.RLock()
+
+	// Iterate through peers and get their last errors
+	peers := s.conf.LocalPicker.Peers()
+	for _, peer := range peers {
+		lastError := peer.GetLastError()
+
+		if lastError != nil {
+			for err, timestamp := range lastError {
+				// If the error has occurred in the last five minutes add it to errs
+				if time.Now().Before(timestamp.Add(expiration)) {
+					errs = append(errs, err.Error())
+				} else {
+					// Sets lastError to nil to prevent further checking
+					peer.ClearLastError()
+				}
+			}
+		}
+	}
+
+	s.health.Status = Healthy
+	if len(errs) != 0 {
+		s.health.Status = UnHealthy
+		s.health.Message = strings.Join(errs, "|")
+		s.health.PeerCount = int32(s.conf.LocalPicker.Size())
+	}
+
 	defer s.peerMutex.RUnlock()
 	return &s.health, nil
 }
@@ -341,17 +372,6 @@ func (s *Instance) SetPeers(peerInfo []PeerInfo) {
 	s.conf.LocalPicker = localPicker
 	s.conf.RegionPicker = regionPicker
 	s.peerMutex.Unlock()
-
-	// TODO: We should run this in a routine and query the PeerPickers for their last errors, If any errors then
-	//  cluster is unhealthy. When our node is talking to other nodes, we should record all their errors for a time.
-	//  Some type of expire cache I think, where errors will eventually expire, but if someone hits our `/healthy`
-	//  endpoint we should return un-healthy if there are errors in the error cache
-	/*s.health.Status = Healthy
-	if len(errs) != 0 {
-		s.health.Status = UnHealthy
-		s.health.Message = strings.Join(errs, "|")
-		s.health.PeerCount = int32(localPicker.Size())
-	}*/
 
 	//TODO: This should include the regions peers? log.WithField("peers", peers).Info("Peers updated")
 

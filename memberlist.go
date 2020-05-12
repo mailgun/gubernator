@@ -14,6 +14,7 @@ import (
 type MemberlistPool struct {
 	memberlist *ml.Memberlist
 	conf       MemberlistPoolConfig
+	events     *memberlistEventHandler
 }
 
 type MemberlistPoolConfig struct {
@@ -23,17 +24,18 @@ type MemberlistPoolConfig struct {
 	DataCenter              string
 	GubernatorListenAddress string
 	OnUpdate                UpdateFunc
+	Enabled                 bool
 }
 
 func NewMemberlistPool(conf MemberlistPoolConfig) (*MemberlistPool, error) {
 	memberlistPool := &MemberlistPool{conf: conf}
 
 	// Configure memberlist event handler
-	events := newMemberListEventHandler(conf.OnUpdate)
+	memberlistPool.events = newMemberListEventHandler(conf.OnUpdate)
 
 	// Configure memberlist
 	config := ml.DefaultWANConfig()
-	config.Events = events
+	config.Events = memberlistPool.events
 	config.AdvertiseAddr = conf.AdvertiseAddress
 	config.AdvertisePort = conf.AdvertisePort
 
@@ -73,6 +75,9 @@ func (m *MemberlistPool) joinPool(knownNodes []string, metadata memberlistMetada
 		return errors.Wrap(err, "while joining memberlist")
 	}
 
+	// Add the local node to the event handler's peer list
+	m.events.addPeer(node)
+
 	return nil
 }
 
@@ -94,8 +99,23 @@ func newMemberListEventHandler(onUpdate UpdateFunc) *memberlistEventHandler {
 	return &eventhandler
 }
 
+func (e *memberlistEventHandler) addPeer(node *ml.Node) {
+	ip := getIP(node.Address())
+
+	// Deserialize metadata
+	metadata, err := deserializeMemberlistMetadata(node.Meta)
+	if err != nil {
+		log.Warn(errors.Wrap(err, "while adding to peers"))
+	} else {
+		// Construct Gubernator address and create PeerInfo
+		gubernatorAddress := makeAddress(ip, metadata.GubernatorPort)
+		e.peers[ip] = PeerInfo{Address: gubernatorAddress, DataCenter: metadata.DataCenter}
+		e.callOnUpdate()
+	}
+}
+
 func (e *memberlistEventHandler) NotifyJoin(node *ml.Node) {
-	address := strings.Split(node.Address(), ":")[0]
+	ip := getIP(node.Address())
 
 	// Deserialize metadata
 	metadata, err := deserializeMemberlistMetadata(node.Meta)
@@ -105,23 +125,23 @@ func (e *memberlistEventHandler) NotifyJoin(node *ml.Node) {
 		log.Warn(errors.Wrap(err, "while joining memberlist"))
 	} else {
 		// Construct Gubernator address and create PeerInfo
-		gubernatorAddress := fmt.Sprintf("%s:%s", address, metadata.GubernatorPort)
-		e.peers[address] = PeerInfo{Address: gubernatorAddress, DataCenter: metadata.DataCenter}
+		gubernatorAddress := makeAddress(ip, metadata.GubernatorPort)
+		e.peers[ip] = PeerInfo{Address: gubernatorAddress, DataCenter: metadata.DataCenter}
 		e.callOnUpdate()
 	}
 }
 
 func (e *memberlistEventHandler) NotifyLeave(node *ml.Node) {
-	address := node.Address()
+	ip := getIP(node.Address())
 
 	// Remove PeerInfo
-	delete(e.peers, address)
+	delete(e.peers, ip)
 
 	e.callOnUpdate()
 }
 
 func (e *memberlistEventHandler) NotifyUpdate(node *ml.Node) {
-	address := strings.Split(node.Address(), ":")[0]
+	ip := getIP(node.Address())
 
 	// Deserialize metadata
 	metadata, err := deserializeMemberlistMetadata(node.Meta)
@@ -129,8 +149,8 @@ func (e *memberlistEventHandler) NotifyUpdate(node *ml.Node) {
 		log.Warn(errors.Wrap(err, "while updating memberlist"))
 	} else {
 		// Construct Gubernator address and create PeerInfo
-		gubernatorAddress := fmt.Sprintf("%s:%s", address, metadata.GubernatorPort)
-		e.peers[address] = PeerInfo{Address: gubernatorAddress, DataCenter: metadata.DataCenter}
+		gubernatorAddress := makeAddress(ip, metadata.GubernatorPort)
+		e.peers[ip] = PeerInfo{Address: gubernatorAddress, DataCenter: metadata.DataCenter}
 		e.callOnUpdate()
 	}
 }
@@ -143,6 +163,14 @@ func (e *memberlistEventHandler) callOnUpdate() {
 	}
 
 	e.OnUpdate(peers)
+}
+
+func getIP(address string) string {
+	return strings.Split(address, ":")[0]
+}
+
+func makeAddress(ip string, port string) string {
+	return fmt.Sprintf("%s:%s", ip, port)
 }
 
 type memberlistMetadata struct {

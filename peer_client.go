@@ -18,7 +18,9 @@ package gubernator
 
 import (
 	"context"
+	"fmt"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -42,11 +44,12 @@ const (
 )
 
 type PeerClient struct {
-	client PeersV1Client
-	conn   *grpc.ClientConn
-	conf   BehaviorConfig
-	queue  chan *request
-	info   PeerInfo
+	client    PeersV1Client
+	conn      *grpc.ClientConn
+	conf      BehaviorConfig
+	queue     chan *request
+	info      PeerInfo
+	lastError map[error]time.Time
 
 	mutex  sync.RWMutex   // This mutex is for verifying the closing state of the client
 	status peerStatus     // Keep the current status of the peer
@@ -106,6 +109,7 @@ func (c *PeerClient) Connect() error {
 		// c.conn, err = grpc.Dial(fmt.Sprintf("%s:%s", c.info.Address, ""), grpc.WithInsecure())
 		c.conn, err = grpc.Dial(c.info.Address, grpc.WithInsecure())
 		if err != nil {
+			c.setLastError(err, time.Now(), c.info.Address)
 			return &PeerErr{err: errors.Wrapf(err, "failed to dial peer %s", c.info.Address)}
 		}
 		c.client = NewPeersV1Client(c.conn)
@@ -127,6 +131,7 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 			Requests: []*RateLimitReq{r},
 		})
 		if err != nil {
+			c.setLastError(err, time.Now(), c.info.Address)
 			return nil, err
 		}
 		return resp.RateLimits[0], nil
@@ -137,6 +142,7 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 // GetPeerRateLimits requests a list of rate limit statuses from a peer
 func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
 	if err := c.Connect(); err != nil {
+		c.setLastError(err, time.Now(), c.info.Address)
 		return nil, err
 	}
 
@@ -146,10 +152,9 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	c.wg.Add(1)
 	defer c.wg.Done()
 
-	c.mutex.RUnlock()
-
 	resp, err := c.client.GetPeerRateLimits(ctx, r)
 	if err != nil {
+		c.setLastError(err, time.Now(), c.info.Address)
 		return nil, err
 	}
 
@@ -163,6 +168,7 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 // UpdatePeerGlobals sends global rate limit status updates to a peer
 func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
 	if err := c.Connect(); err != nil {
+		c.setLastError(err, time.Now(), c.info.Address)
 		return nil, err
 	}
 
@@ -170,13 +176,25 @@ func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 	c.wg.Add(1)
 	defer c.wg.Done()
 
-	c.mutex.RUnlock()
-
 	return c.client.UpdatePeerGlobals(ctx, r)
+}
+
+func (c *PeerClient) setLastError(err error, timestamp time.Time, address string) {
+	errWithHostname := errors.Wrap(err, fmt.Sprintf("on %s", address))
+	c.lastError = map[error]time.Time{errWithHostname: timestamp}
+}
+
+func (c *PeerClient) GetLastError() map[error]time.Time {
+	return c.lastError
+}
+
+func (c *PeerClient) ClearLastError() {
+	c.lastError = nil
 }
 
 func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
 	if err := c.Connect(); err != nil {
+		c.setLastError(err, time.Now(), c.info.Address)
 		return nil, err
 	}
 
@@ -192,17 +210,19 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	c.wg.Add(1)
 	defer c.wg.Done()
 
-	// Unlock to prevent the chan from being closed
-	c.mutex.RUnlock()
-
 	// Wait for a response or context cancel
 	select {
 	case resp := <-req.resp:
 		if resp.err != nil {
+			c.setLastError(resp.err, time.Now(), c.info.Address)
 			return nil, resp.err
 		}
 		return resp.rl, nil
 	case <-ctx.Done():
+		err := ctx.Err()
+		if err != nil {
+			c.setLastError(err, time.Now(), c.info.Address)
+		}
 		return nil, ctx.Err()
 	}
 }
@@ -265,6 +285,7 @@ func (c *PeerClient) sendQueue(queue []*request) {
 
 	// An error here indicates the entire request failed
 	if err != nil {
+		c.setLastError(err, time.Now(), c.info.Address)
 		for _, r := range queue {
 			r.resp <- &response{err: err}
 		}

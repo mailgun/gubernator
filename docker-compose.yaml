@@ -1,7 +1,7 @@
 version: '3'
 services:
   gubernator-1:
-    image: mbond/gubernator:latest
+    image: mkbond/gubernator:latest
     command: "/gubernator"
     environment:
       # The address GRPC requests will listen on
@@ -18,7 +18,7 @@ services:
       - "8080:80"
 
   gubernator-2:
-    image: mbond/gubernator:latest
+    image: mkbond/gubernator:latest
     command: "/gubernator"
     environment:
       # The address GRPC requests will listen on
@@ -35,7 +35,7 @@ services:
       - "8180:80"
 
   gubernator-3:
-    image: mbond/gubernator:latest
+    image: mkbond/gubernator:latest
     command: "/gubernator"
     environment:
       # The address GRPC requests will listen on
@@ -52,7 +52,7 @@ services:
       - "8280:80"
 
   gubernator-4:
-    image: mbond/gubernator:latest
+    image: mkbond/gubernator:latest
     command: "/gubernator"
     environment:
       # The address GRPC requests will listen on

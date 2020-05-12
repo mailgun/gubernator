@@ -61,7 +61,7 @@ type ServerConfig struct {
 	Picker gubernator.PeerPicker
 
 	// Memberlist configuration used to find peers
-	MemberlistPoolConfig gubernator.MemberlistPoolConfig
+	MemberlistPoolConf gubernator.MemberlistPoolConfig
 }
 
 func confFromEnv() (ServerConfig, error) {
@@ -123,9 +123,9 @@ func confFromEnv() (ServerConfig, error) {
 	setter.SetDefault(&conf.EtcdConf.Password, os.Getenv("GUBER_ETCD_PASSWORD"))
 
 	// Memberlist Config
-	setter.SetDefault(&conf.MemberlistPoolConfig.AdvertiseAddress, os.Getenv("GUBER_MEMBERLIST_ADVERTISE_ADDRESS"), "")
-	setter.SetDefault(&conf.MemberlistPoolConfig.AdvertisePort, os.Getenv("GUBER_MEMBERLIST_ADVERTISE_PORT"), 7946)
-	setter.SetDefault(&conf.MemberlistPoolConfig.KnownNodes, getEnvSlice("GUBER_MEMBERLIST_KNOWN_NODES"), "")
+	setter.SetDefault(&conf.MemberlistPoolConf.AdvertiseAddress, os.Getenv("GUBER_MEMBERLIST_ADVERTISE_ADDRESS"), "")
+	setter.SetDefault(&conf.MemberlistPoolConf.AdvertisePort, os.Getenv("GUBER_MEMBERLIST_ADVERTISE_PORT"), 7946)
+	setter.SetDefault(&conf.MemberlistPoolConf.KnownNodes, getEnvSlice("GUBER_MEMBERLIST_KNOWN_NODES"), []string{})
 
 	// Kubernetes Config
 	setter.SetDefault(&conf.K8PoolConf.Namespace, os.Getenv("GUBER_K8S_NAMESPACE"), "default")
@@ -177,11 +177,25 @@ func confFromEnv() (ServerConfig, error) {
 		}
 	}
 
+	if anyHasPrefix("GUBER_MEMBERLIST_", os.Environ()) {
+		logrus.Debug("Memberlist pool config found")
+		conf.MemberlistPoolConf.Enabled = true
+		if conf.K8PoolConf.Enabled {
+			return conf, errors.New("refusing to register gubernator peers with both memberlist and k8s;" +
+				" remove either `GUBER_MEMBERLIST_*` or `GUBER_K8S_*` variables from the environment")
+		}
+
+		if len(conf.MemberlistPoolConf.KnownNodes) == 0 {
+			return conf, errors.New("when using memberlist for peer discovery, you MUST provide a " +
+				"hostname of a known host in the cluster via `GUBER_MEMBERLIST_KNOWN_NODES`")
+		}
+	}
+
 	if anyHasPrefix("GUBER_ETCD_", os.Environ()) {
 		logrus.Debug("ETCD peer pool config found")
-		if conf.K8PoolConf.Enabled {
-			return conf, errors.New("refusing to register gubernator peers with both etcd and k8s;" +
-				" remove either `GUBER_ETCD_*` or `GUBER_K8S_*` variables from the environment")
+		if conf.K8PoolConf.Enabled || conf.MemberlistPoolConf.Enabled {
+			return conf, errors.New("refusing to register gubernator peers with both etcd, memberlist and k8s;" +
+				" remove all but one of `GUBER_MEMBERLIST_*`, `GUBER_ETCD_*` or `GUBER_K8S_*` variables from the environment")
 		}
 	}
 

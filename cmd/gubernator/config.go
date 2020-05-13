@@ -44,7 +44,6 @@ type ServerConfig struct {
 	HTTPListenAddress    string
 	EtcdKeyPrefix        string
 	CacheSize            int
-	HashReplicas         int
 
 	// Etcd configuration used to find peers
 	EtcdConf etcd.Config
@@ -54,6 +53,9 @@ type ServerConfig struct {
 
 	// K8s configuration used to find peers inside a K8s cluster
 	K8PoolConf gubernator.K8sPoolConfig
+
+	// The PeerPicker as selected by `GUBER_PEER_PICKER`
+	Picker gubernator.PeerPicker
 }
 
 func confFromEnv() (ServerConfig, error) {
@@ -91,7 +93,6 @@ func confFromEnv() (ServerConfig, error) {
 	setter.SetDefault(&conf.GRPCListenAddress, os.Getenv("GUBER_GRPC_ADDRESS"), "0.0.0.0:81")
 	setter.SetDefault(&conf.HTTPListenAddress, os.Getenv("GUBER_HTTP_ADDRESS"), "0.0.0.0:80")
 	setter.SetDefault(&conf.CacheSize, getEnvInteger("GUBER_CACHE_SIZE"), 50000)
-	setter.SetDefault(&conf.HashReplicas, getEnvInteger("GUBER_HASH_REPLICAS"), 1)
 
 	// Behaviors
 	setter.SetDefault(&conf.Behaviors.BatchTimeout, getEnvDuration("GUBER_BATCH_TIMEOUT"))
@@ -115,6 +116,20 @@ func confFromEnv() (ServerConfig, error) {
 	conf.K8PoolConf.PodIP = os.Getenv("GUBER_K8S_POD_IP")
 	conf.K8PoolConf.PodPort = os.Getenv("GUBER_K8S_POD_PORT")
 	conf.K8PoolConf.Selector = os.Getenv("GUBER_K8S_ENDPOINTS_SELECTOR")
+
+	// PeerPicker Config
+	if pp := os.Getenv("GUBER_PEER_PICKER"); pp != "" {
+		switch pp {
+		case "consistent-hash":
+			// Gubernator defaults to this picker if not defined
+			conf.Picker = nil
+		case "replicated-hash":
+			conf.Picker = nil
+			var replicas int
+			setter.SetDefault(&replicas, getEnvInteger("GUBER_REPLICATED_HASH_REPLICAS"), 1)
+			conf.Picker = gubernator.NewReplicatedConsistantHash(nil, replicas)
+		}
+	}
 
 	if anyHasPrefix("GUBER_K8S_", os.Environ()) {
 		logrus.Debug("K8s peer pool config found")

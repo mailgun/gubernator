@@ -17,43 +17,31 @@ limitations under the License.
 package gubernator
 
 import (
+	"hash/crc32"
 	"reflect"
 	"sort"
-	"strconv"
 	"unsafe"
 
 	"github.com/pkg/errors"
-	"github.com/segmentio/fasthash/fnv1"
 )
 
-const DefaultReplicas = 512
-
-type HashFunc func(data []byte) uint64
-
-var DefaultHash HashFunc = fnv1.HashBytes64
+type HashFunc func(data []byte) uint32
 
 // Implements PeerPicker
 type ConsistantHash struct {
 	hashFunc HashFunc
-	peerKeys []peerInfo
-	peers    map[string]*PeerClient
-	replicas int
-}
-
-type peerInfo struct {
-	hash uint64
-	peer *PeerClient
+	peerKeys []int
+	peerMap  map[int]*PeerClient
 }
 
 func NewConsistantHash(fn HashFunc) *ConsistantHash {
 	ch := &ConsistantHash{
 		hashFunc: fn,
-		peers:    make(map[string]*PeerClient),
-		replicas: DefaultReplicas,
+		peerMap:  make(map[int]*PeerClient),
 	}
 
 	if ch.hashFunc == nil {
-		ch.hashFunc = DefaultHash
+		ch.hashFunc = crc32.ChecksumIEEE
 	}
 	return ch
 }
@@ -61,14 +49,13 @@ func NewConsistantHash(fn HashFunc) *ConsistantHash {
 func (ch *ConsistantHash) New() PeerPicker {
 	return &ConsistantHash{
 		hashFunc: ch.hashFunc,
-		peers:    make(map[string]*PeerClient),
-		replicas: ch.replicas,
+		peerMap:  make(map[int]*PeerClient),
 	}
 }
 
 func (ch *ConsistantHash) Peers() []*PeerClient {
 	var results []*PeerClient
-	for _, v := range ch.peers {
+	for _, v := range ch.peerMap {
 		results = append(results, v)
 	}
 	return results
@@ -76,27 +63,20 @@ func (ch *ConsistantHash) Peers() []*PeerClient {
 
 // Adds a peer to the hash
 func (ch *ConsistantHash) Add(peer *PeerClient) {
-	ch.peers[peer.host] = peer
-
-	for i := 0; i < ch.replicas; i++ {
-		hash := ch.hashFunc(bytes(strconv.Itoa(i) + peer.host))
-		ch.peerKeys = append(ch.peerKeys, peerInfo{
-			hash: hash,
-			peer: peer,
-		})
-	}
-
-	sort.Slice(ch.peerKeys, func(i, j int) bool { return ch.peerKeys[i].hash < ch.peerKeys[j].hash })
+	hash := int(ch.hashFunc(bytes(peer.host)))
+	ch.peerKeys = append(ch.peerKeys, hash)
+	ch.peerMap[hash] = peer
+	sort.Ints(ch.peerKeys)
 }
 
 // Returns number of peers in the picker
 func (ch *ConsistantHash) Size() int {
-	return len(ch.peers)
+	return len(ch.peerKeys)
 }
 
 // Returns the peer by hostname
 func (ch *ConsistantHash) GetPeerByHost(host string) *PeerClient {
-	return ch.peers[host]
+	return ch.peerMap[int(ch.hashFunc(bytes(host)))]
 }
 
 // Given a key, return the peer that key is assigned too
@@ -105,17 +85,17 @@ func (ch *ConsistantHash) Get(key string) (*PeerClient, error) {
 		return nil, errors.New("unable to pick a peer; pool is empty")
 	}
 
-	hash := ch.hashFunc(bytes(key))
+	hash := int(ch.hashFunc(bytes(key)))
 
 	// Binary search for appropriate peer
-	idx := sort.Search(len(ch.peerKeys), func(i int) bool { return ch.peerKeys[i].hash >= hash })
+	idx := sort.Search(len(ch.peerKeys), func(i int) bool { return ch.peerKeys[i] >= hash })
 
 	// Means we have cycled back to the first peer
 	if idx == len(ch.peerKeys) {
 		idx = 0
 	}
 
-	return ch.peerKeys[idx].peer, nil
+	return ch.peerMap[ch.peerKeys[idx]], nil
 }
 
 // unsafely return the underlying bytes of a string

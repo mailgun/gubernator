@@ -11,33 +11,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestConsistantHash(t *testing.T) {
+func TestReplicatedConsistantHash(t *testing.T) {
 	hosts := []string{"a.svc.local", "b.svc.local", "c.svc.local"}
 
-	t.Run("Add", func(t *testing.T) {
-		cases := map[string]string{
-			"a":                                    hosts[1],
-			"foobar":                               hosts[0],
-			"192.168.1.2":                          hosts[1],
-			"5f46bb53-6c30-49dc-adb4-b7355058adb6": hosts[1],
-		}
-		hash := NewConsistantHash(nil)
-		for _, h := range hosts {
-			hash.Add(&PeerClient{host: h})
-		}
-
-		for input, addr := range cases {
-			t.Run(input, func(t *testing.T) {
-				peer, err := hash.Get(input)
-				assert.Nil(t, err)
-				assert.Equal(t, addr, peer.host)
-			})
-		}
-
-	})
-
 	t.Run("Size", func(t *testing.T) {
-		hash := NewConsistantHash(nil)
+		hash := NewReplicatedConsistantHash(nil, DefaultReplicas)
 
 		for _, h := range hosts {
 			hash.Add(&PeerClient{host: h})
@@ -47,7 +25,7 @@ func TestConsistantHash(t *testing.T) {
 	})
 
 	t.Run("Host", func(t *testing.T) {
-		hash := NewConsistantHash(nil)
+		hash := NewReplicatedConsistantHash(nil, DefaultReplicas)
 		hostMap := map[string]*PeerClient{}
 
 		for _, h := range hosts {
@@ -73,15 +51,14 @@ func TestConsistantHash(t *testing.T) {
 			strings[i] = ip.String()
 		}
 
-		hashFuncs := map[string]HashFunc{
-			"fasthash/fnv1a": fnv1a.HashBytes32,
-			"fasthash/fnv1":  fnv1.HashBytes32,
-			"crc32":          nil,
+		hashFuncs := map[string]HashFunc64{
+			"fasthash/fnv1a": fnv1a.HashBytes64,
+			"fasthash/fnv1":  fnv1.HashBytes64,
 		}
 
 		for name, hashFunc := range hashFuncs {
 			t.Run(name, func(t *testing.T) {
-				hash := NewConsistantHash(hashFunc)
+				hash := NewReplicatedConsistantHash(hashFunc, DefaultReplicas)
 				hostMap := map[string]int{}
 
 				for _, h := range hosts {
@@ -103,11 +80,10 @@ func TestConsistantHash(t *testing.T) {
 
 }
 
-func BenchmarkConsistantHash(b *testing.B) {
-	hashFuncs := map[string]HashFunc{
-		"fasthash/fnv1a": fnv1a.HashBytes32,
-		"fasthash/fnv1":  fnv1.HashBytes32,
-		"crc32":          nil,
+func BenchmarkReplicatedConsistantHash(b *testing.B) {
+	hashFuncs := map[string]HashFunc64{
+		"fasthash/fnv1a": fnv1a.HashBytes64,
+		"fasthash/fnv1":  fnv1.HashBytes64,
 	}
 
 	for name, hashFunc := range hashFuncs {
@@ -117,7 +93,7 @@ func BenchmarkConsistantHash(b *testing.B) {
 				ips[i] = net.IPv4(byte(i>>24), byte(i>>16), byte(i>>8), byte(i)).String()
 			}
 
-			hash := NewConsistantHash(hashFunc)
+			hash := NewReplicatedConsistantHash(hashFunc, DefaultReplicas)
 			hosts := []string{"a.svc.local", "b.svc.local", "c.svc.local"}
 			for _, h := range hosts {
 				hash.Add(&PeerClient{host: h})

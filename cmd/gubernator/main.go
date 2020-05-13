@@ -61,14 +61,11 @@ func main() {
 
 	// Registers a new gubernator instance with the GRPC server
 	guber, err := gubernator.New(gubernator.Config{
+		Picker:     conf.Picker,
 		GRPCServer: grpcSrv,
 		Cache:      cache,
 	})
 	checkErr(err, "while creating new gubernator instance")
-
-	if conf.HashReplicas != 1 {
-		guber.Picker = gubernator.NewReplicatedConsistantHash(nil, conf.HashReplicas)
-	}
 
 	// guber instance also implements prometheus.Collector interface
 	prometheus.MustRegister(guber)

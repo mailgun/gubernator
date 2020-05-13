@@ -44,6 +44,7 @@ type ServerConfig struct {
 	HTTPListenAddress    string
 	EtcdKeyPrefix        string
 	CacheSize            int
+	HashReplicas         int
 
 	// Etcd configuration used to find peers
 	EtcdConf etcd.Config
@@ -90,6 +91,7 @@ func confFromEnv() (ServerConfig, error) {
 	setter.SetDefault(&conf.GRPCListenAddress, os.Getenv("GUBER_GRPC_ADDRESS"), "0.0.0.0:81")
 	setter.SetDefault(&conf.HTTPListenAddress, os.Getenv("GUBER_HTTP_ADDRESS"), "0.0.0.0:80")
 	setter.SetDefault(&conf.CacheSize, getEnvInteger("GUBER_CACHE_SIZE"), 50000)
+	setter.SetDefault(&conf.HashReplicas, getEnvInteger("GUBER_HASH_REPLICAS"), 1)
 
 	// Behaviors
 	setter.SetDefault(&conf.Behaviors.BatchTimeout, getEnvDuration("GUBER_BATCH_TIMEOUT"))

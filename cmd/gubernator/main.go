@@ -66,6 +66,10 @@ func main() {
 	})
 	checkErr(err, "while creating new gubernator instance")
 
+	if conf.HashReplicas != 1 {
+		guber.Picker = gubernator.NewReplicatedConsistantHash(nil, conf.HashReplicas)
+	}
+
 	// guber instance also implements prometheus.Collector interface
 	prometheus.MustRegister(guber)
 

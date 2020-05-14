@@ -64,10 +64,7 @@ func FromUnixMilliseconds(ts int64) time.Time {
 
 // Given a list of peers, return a random peer
 func RandomPeer(peers []string) string {
-	rand.Shuffle(len(peers), func(i, j int) {
-		peers[i], peers[j] = peers[j], peers[i]
-	})
-	return peers[0]
+	return peers[rand.Intn(len(peers))]
 }
 
 // Return a random alpha string of 'n' length

@@ -32,6 +32,8 @@ import (
 	"github.com/mailgun/gubernator"
 	"github.com/mailgun/holster/v3/setter"
 	"github.com/pkg/errors"
+	"github.com/segmentio/fasthash/fnv1"
+	"github.com/segmentio/fasthash/fnv1a"
 	"github.com/sirupsen/logrus"
 	"k8s.io/klog"
 )
@@ -53,6 +55,9 @@ type ServerConfig struct {
 
 	// K8s configuration used to find peers inside a K8s cluster
 	K8PoolConf gubernator.K8sPoolConfig
+
+	// The PeerPicker as selected by `GUBER_PEER_PICKER`
+	Picker gubernator.PeerPicker
 }
 
 func confFromEnv() (ServerConfig, error) {
@@ -113,6 +118,41 @@ func confFromEnv() (ServerConfig, error) {
 	conf.K8PoolConf.PodIP = os.Getenv("GUBER_K8S_POD_IP")
 	conf.K8PoolConf.PodPort = os.Getenv("GUBER_K8S_POD_PORT")
 	conf.K8PoolConf.Selector = os.Getenv("GUBER_K8S_ENDPOINTS_SELECTOR")
+
+	// PeerPicker Config
+	if pp := os.Getenv("GUBER_PEER_PICKER"); pp != "" {
+		var replicas int
+		var hash string
+
+		switch pp {
+		case "consistent-hash":
+			setter.SetDefault(&hash, os.Getenv("GUBER_PEER_PICKER_HASH"), "crc32")
+			hashFuncs := map[string]gubernator.HashFunc{
+				"fnv1a": fnv1a.HashBytes32,
+				"fnv1":  fnv1.HashBytes32,
+				"crc32": nil,
+			}
+			if fn, ok := hashFuncs[hash]; ok {
+				conf.Picker = gubernator.NewConsistantHash(fn)
+			}
+			return conf, errors.Errorf("'GUBER_PEER_PICKER_HASH=%s' is invalid; choices are [%s]",
+				hash, validHashKeys(hashFuncs))
+
+		case "replicated-hash":
+			setter.SetDefault(&replicas, getEnvInteger("GUBER_REPLICATED_HASH_REPLICAS"), 1)
+			conf.Picker = gubernator.NewReplicatedConsistantHash(nil, replicas)
+			setter.SetDefault(&hash, os.Getenv("GUBER_PEER_PICKER_HASH"), "fnv1a")
+			hashFuncs := map[string]gubernator.HashFunc64{
+				"fnv1a": fnv1a.HashBytes64,
+				"fnv1":  fnv1.HashBytes64,
+			}
+			if fn, ok := hashFuncs[hash]; ok {
+				conf.Picker = gubernator.NewReplicatedConsistantHash(fn, replicas)
+			}
+			return conf, errors.Errorf("'GUBER_PEER_PICKER_HASH=%s' is invalid; choices are [%s]",
+				hash, validHash64Keys(hashFuncs))
+		}
+	}
 
 	if anyHasPrefix("GUBER_K8S_", os.Environ()) {
 		logrus.Debug("K8s peer pool config found")
@@ -263,4 +303,20 @@ func fromEnvFile(configFile string) error {
 		}
 	}
 	return nil
+}
+
+func validHashKeys(m map[string]gubernator.HashFunc) string {
+	var rs []string
+	for k, _ := range m {
+		rs = append(rs, k)
+	}
+	return strings.Join(rs, ",")
+}
+
+func validHash64Keys(m map[string]gubernator.HashFunc64) string {
+	var rs []string
+	for k, _ := range m {
+		rs = append(rs, k)
+	}
+	return strings.Join(rs, ",")
 }

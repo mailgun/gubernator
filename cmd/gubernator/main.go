@@ -61,6 +61,7 @@ func main() {
 
 	// Registers a new gubernator instance with the GRPC server
 	guber, err := gubernator.New(gubernator.Config{
+		Picker:     conf.Picker,
 		GRPCServer: grpcSrv,
 		Cache:      cache,
 	})

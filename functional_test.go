@@ -571,4 +571,68 @@ func TestResetRemaining(t *testing.T) {
 	}
 }
 
+func TestHealthCheck(t *testing.T) {
+	client, errs := guber.DialV1Server(cluster.InstanceAt(0).Address)
+	require.Nil(t, errs)
+
+	// Check that the cluster is healthy to start with
+	healthResp, err := client.HealthCheck(context.Background(), &guber.HealthCheckReq{})
+	require.Nil(t, err)
+
+	assert.Equal(t, "healthy", healthResp.GetStatus())
+
+	// Create a global rate limit that will need to be sent to all peers in the cluster
+	_, err = client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+		Requests: []*guber.RateLimitReq{
+			{
+				Name:      "test_health_check",
+				UniqueKey: "account:12345",
+				Algorithm: guber.Algorithm_TOKEN_BUCKET,
+				Behavior:  guber.Behavior_GLOBAL,
+				Duration:  guber.Second * 3,
+				Hits:      1,
+				Limit:     5,
+			},
+		},
+	})
+	require.Nil(t, err)
+
+	// Stop the rest of the cluster to ensure errors occur on our instance and
+	// collect addresses to restart the stopped instances after the test completes
+	var addresses []string
+	for i := 1; i < cluster.NumOfInstances(); i++ {
+		addresses = append(addresses, cluster.InstanceAt(i).Address)
+		cluster.StopInstanceAt(i)
+	}
+	time.Sleep(time.Second)
+
+	// Hit the global rate limit again this time causing a connection error
+	_, err = client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+		Requests: []*guber.RateLimitReq{
+			{
+				Name:      "test_health_check",
+				UniqueKey: "account:12345",
+				Algorithm: guber.Algorithm_TOKEN_BUCKET,
+				Behavior:  guber.Behavior_GLOBAL,
+				Duration:  guber.Second * 3,
+				Hits:      1,
+				Limit:     5,
+			},
+		},
+	})
+	require.Nil(t, err)
+
+	// Check the health again to get back the connection error
+	healthResp, err = client.HealthCheck(context.Background(), &guber.HealthCheckReq{})
+	require.Nil(t, err)
+
+	assert.Equal(t, "unhealthy", healthResp.GetStatus())
+	assert.Contains(t, healthResp.GetMessage(), "connect: connection refused")
+
+	// Restart stopped instances
+	for i := 1; i < cluster.NumOfInstances(); i++ {
+		cluster.StartInstance(addresses[i-1], cluster.GetDefaultConfig())
+	}
+}
+
 // TODO: Add a test for sending no rate limits RateLimitReqList.RateLimits = nil

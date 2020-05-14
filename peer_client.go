@@ -22,8 +22,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mailgun/holster/v3/collections"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"k8s.io/apimachinery/pkg/util/uuid"
 )
 
 type PeerPicker interface {
@@ -44,12 +46,12 @@ const (
 )
 
 type PeerClient struct {
-	client    PeersV1Client
-	conn      *grpc.ClientConn
-	conf      BehaviorConfig
-	queue     chan *request
-	info      PeerInfo
-	lastError map[error]time.Time
+	client   PeersV1Client
+	conn     *grpc.ClientConn
+	conf     BehaviorConfig
+	queue    chan *request
+	info     PeerInfo
+	lastErrs *collections.LRUCache
 
 	mutex  sync.RWMutex   // This mutex is for verifying the closing state of the client
 	status peerStatus     // Keep the current status of the peer
@@ -68,15 +70,16 @@ type request struct {
 
 func NewPeerClient(conf BehaviorConfig, info PeerInfo) *PeerClient {
 	return &PeerClient{
-		queue:  make(chan *request, 1000),
-		status: peerNotConnected,
-		conf:   conf,
-		info:   info,
+		queue:    make(chan *request, 1000),
+		status:   peerNotConnected,
+		conf:     conf,
+		info:     info,
+		lastErrs: collections.NewLRUCache(100),
 	}
 }
 
 // Connect establishes a GRPC connection to a peer
-func (c *PeerClient) Connect() error {
+func (c *PeerClient) connect() error {
 	// NOTE: To future self, this mutex is used here because we need to know if the peer is disconnecting and
 	// handle ErrClosing. Since this mutex MUST be here we take this opportunity to also see if we are connected.
 	// Doing this here encapsulates managing the connected state to the PeerClient struct. Previously a PeerClient
@@ -109,8 +112,7 @@ func (c *PeerClient) Connect() error {
 		// c.conn, err = grpc.Dial(fmt.Sprintf("%s:%s", c.info.Address, ""), grpc.WithInsecure())
 		c.conn, err = grpc.Dial(c.info.Address, grpc.WithInsecure())
 		if err != nil {
-			c.setLastError(err, time.Now(), c.info.Address)
-			return &PeerErr{err: errors.Wrapf(err, "failed to dial peer %s", c.info.Address)}
+			return c.setLastErr(&PeerErr{err: errors.Wrapf(err, "failed to dial peer %s", c.info.Address)})
 		}
 		c.client = NewPeersV1Client(c.conn)
 		c.status = peerConnected
@@ -131,8 +133,7 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 			Requests: []*RateLimitReq{r},
 		})
 		if err != nil {
-			c.setLastError(err, time.Now(), c.info.Address)
-			return nil, err
+			return nil, c.setLastErr(err)
 		}
 		return resp.RateLimits[0], nil
 	}
@@ -141,8 +142,7 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 
 // GetPeerRateLimits requests a list of rate limit statuses from a peer
 func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
-	if err := c.Connect(); err != nil {
-		c.setLastError(err, time.Now(), c.info.Address)
+	if err := c.connect(); err != nil {
 		return nil, err
 	}
 
@@ -154,8 +154,7 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 
 	resp, err := c.client.GetPeerRateLimits(ctx, r)
 	if err != nil {
-		c.setLastError(err, time.Now(), c.info.Address)
-		return nil, err
+		return nil, c.setLastErr(err)
 	}
 
 	// Unlikely, but this avoids a panic if something wonky happens
@@ -167,8 +166,7 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 
 // UpdatePeerGlobals sends global rate limit status updates to a peer
 func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
-	if err := c.Connect(); err != nil {
-		c.setLastError(err, time.Now(), c.info.Address)
+	if err := c.connect(); err != nil {
 		return nil, err
 	}
 
@@ -176,34 +174,54 @@ func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 	c.wg.Add(1)
 	defer c.wg.Done()
 
-	return c.client.UpdatePeerGlobals(ctx, r)
+	resp, err := c.client.UpdatePeerGlobals(ctx, r)
+	if err != nil {
+		c.setLastErr(err)
+	}
+
+	return resp, err
 }
 
-func (c *PeerClient) setLastError(err error, timestamp time.Time, address string) {
-	errWithHostname := errors.Wrap(err, fmt.Sprintf("on %s", address))
-	c.lastError = map[error]time.Time{errWithHostname: timestamp}
+func (c *PeerClient) setLastErr(err error) error {
+	// If we get a nil error return without caching it
+	if err == nil {
+		return err
+	}
+
+	// Prepend client address to error
+	errWithHostname := errors.Wrap(err, fmt.Sprintf("from host %s", c.info.Address))
+	// UUID to prevent overwritting existing errors
+	key := uuid.NewUUID()
+
+	// Add error to the cache with a TTL of 5 minutes
+	c.lastErrs.AddWithTTL(key, errWithHostname, time.Minute*5)
+
+	return err
 }
 
-func (c *PeerClient) GetLastError() map[error]time.Time {
-	return c.lastError
-}
+func (c *PeerClient) GetLastErr() []string {
+	var errs []string
+	keys := c.lastErrs.Keys()
 
-func (c *PeerClient) ClearLastError() {
-	c.lastError = nil
+	// Get errors from each key in the cache
+	for _, key := range keys {
+		err, ok := c.lastErrs.Get(key)
+		if ok {
+			errs = append(errs, err.(error).Error())
+		}
+	}
+
+	return errs
 }
 
 func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
-	if err := c.Connect(); err != nil {
-		c.setLastError(err, time.Now(), c.info.Address)
+	if err := c.connect(); err != nil {
 		return nil, err
 	}
 
 	req := request{request: r, resp: make(chan *response, 1)}
 
-	// Check that peer is not closing before enqueueing the request to be sent
-	if c.status == peerClosing {
-		return nil, &PeerErr{err: errors.New("peer closing")}
-	}
+	// Enqueue the request to be sent
 	c.queue <- &req
 
 	// See NOTE above about RLock and wg.Add(1)
@@ -214,16 +232,11 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	select {
 	case resp := <-req.resp:
 		if resp.err != nil {
-			c.setLastError(resp.err, time.Now(), c.info.Address)
-			return nil, resp.err
+			return nil, c.setLastErr(resp.err)
 		}
 		return resp.rl, nil
 	case <-ctx.Done():
-		err := ctx.Err()
-		if err != nil {
-			c.setLastError(err, time.Now(), c.info.Address)
-		}
-		return nil, ctx.Err()
+		return nil, c.setLastErr(ctx.Err())
 	}
 }
 
@@ -285,7 +298,7 @@ func (c *PeerClient) sendQueue(queue []*request) {
 
 	// An error here indicates the entire request failed
 	if err != nil {
-		c.setLastError(err, time.Now(), c.info.Address)
+		c.setLastErr(err)
 		for _, r := range queue {
 			r.resp <- &response{err: err}
 		}

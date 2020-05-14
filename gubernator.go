@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/mailgun/holster/v3/syncutil"
 	"github.com/pkg/errors"
@@ -287,24 +286,17 @@ func (s *Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsRe
 // HealthCheck Returns the health of our instance.
 func (s *Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*HealthCheckResp, error) {
 	var errs []string
-	expiration := time.Minute * 5
 
 	s.peerMutex.RLock()
 
 	// Iterate through peers and get their last errors
 	peers := s.conf.LocalPicker.Peers()
 	for _, peer := range peers {
-		lastError := peer.GetLastError()
+		lastErr := peer.GetLastErr()
 
-		if lastError != nil {
-			for err, timestamp := range lastError {
-				// If the error has occurred in the last five minutes add it to errs
-				if time.Now().Before(timestamp.Add(expiration)) {
-					errs = append(errs, err.Error())
-				} else {
-					// Sets lastError to nil to prevent further checking
-					peer.ClearLastError()
-				}
+		if lastErr != nil {
+			for _, err := range lastErr {
+				errs = append(errs, err)
 			}
 		}
 	}

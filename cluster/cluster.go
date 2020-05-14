@@ -53,6 +53,16 @@ func (i *instance) Stop() error {
 var instances []*instance
 var peers []gubernator.PeerInfo
 
+// Returns default testing configuration
+func GetDefaultConfig() gubernator.Config {
+	return gubernator.Config{
+		Behaviors: gubernator.BehaviorConfig{
+			GlobalSyncWait: time.Millisecond * 50, // Suitable for testing but not production
+			GlobalTimeout:  time.Second,
+		},
+	}
+}
+
 // Returns a random peer from the cluster
 func GetRandomPeer() gubernator.PeerInfo {
 	return gubernator.RandomPeer(peers)
@@ -78,6 +88,16 @@ func InstanceForHost(host string) *instance {
 	return nil
 }
 
+// Stop an instance without updating peers, used to cause connection errors
+func StopInstanceAt(idx int) {
+	instances[idx].Stop()
+}
+
+// Returns the number of instances
+func NumOfInstances() int {
+	return len(instances)
+}
+
 // Start a local cluster of gubernator servers
 func Start(numInstances int) error {
 	addresses := make([]string, numInstances, numInstances)
@@ -86,15 +106,9 @@ func Start(numInstances int) error {
 
 // Start a local cluster with specific addresses
 func StartWith(addresses []string) error {
+	config := GetDefaultConfig()
 	for _, address := range addresses {
-		ins, err := StartInstance(address, gubernator.Config{
-			Behaviors: gubernator.BehaviorConfig{
-				GlobalSyncWait:      time.Millisecond * 50, // Suitable for testing but not production
-				GlobalTimeout:       time.Second,
-				MultiRegionSyncWait: time.Millisecond * 50,
-				MultiRegionTimeout:  time.Second,
-			},
-		})
+		ins, err := StartInstance(address, config)
 		if err != nil {
 			return errors.Wrapf(err, "while starting instance for addr '%s'", address)
 		}

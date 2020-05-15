@@ -14,7 +14,7 @@ type RegionPeerPicker interface {
 
 // RegionPicker encapsulates pickers for a set of regions
 type RegionPicker struct {
-	*ConsistentHash
+	*ConsistantHash
 
 	// A map of all the pickers by region
 	regions map[string]PeerPicker
@@ -28,17 +28,17 @@ func NewRegionPicker(fn HashFunc) *RegionPicker {
 	rp := &RegionPicker{
 		regions:        make(map[string]PeerPicker),
 		reqQueue:       make(chan *RateLimitReq, 0),
-		ConsistentHash: NewConsistentHash(fn),
+		ConsistantHash: NewConsistantHash(fn),
 	}
 	return rp
 }
 
 func (rp *RegionPicker) New() RegionPeerPicker {
-	hash := rp.ConsistentHash.New().(*ConsistentHash)
+	hash := rp.ConsistantHash.New().(*ConsistantHash)
 	return &RegionPicker{
 		regions:        make(map[string]PeerPicker),
 		reqQueue:       make(chan *RateLimitReq, 0),
-		ConsistentHash: hash,
+		ConsistantHash: hash,
 	}
 }
 
@@ -75,7 +75,7 @@ func (rp *RegionPicker) Pickers() map[string]PeerPicker {
 func (rp *RegionPicker) Add(peer *PeerClient) {
 	picker, ok := rp.regions[peer.info.DataCenter]
 	if !ok {
-		picker = rp.ConsistentHash.New()
+		picker = rp.ConsistantHash.New()
 		rp.regions[peer.info.DataCenter] = picker
 	}
 	picker.Add(peer)

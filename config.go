@@ -95,7 +95,7 @@ func (c *Config) SetDefaults() error {
 	setter.SetDefault(&c.Behaviors.MultiRegionBatchLimit, maxBatchSize)
 	setter.SetDefault(&c.Behaviors.MultiRegionSyncWait, time.Second)
 
-	setter.SetDefault(&c.LocalPicker, NewConsistentHash(nil))
+	setter.SetDefault(&c.LocalPicker, NewConsistantHash(nil))
 	setter.SetDefault(&c.RegionPicker, NewRegionPicker(nil))
 	setter.SetDefault(&c.Cache, NewLRUCache(0))
 

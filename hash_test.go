@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestConsistentHash(t *testing.T) {
+func TestConsistantHash(t *testing.T) {
 	hosts := []string{"a.svc.local", "b.svc.local", "c.svc.local"}
 
 	t.Run("Add", func(t *testing.T) {
@@ -21,7 +21,7 @@ func TestConsistentHash(t *testing.T) {
 			"192.168.1.2":                          hosts[1],
 			"5f46bb53-6c30-49dc-adb4-b7355058adb6": hosts[1],
 		}
-		hash := NewConsistentHash(nil)
+		hash := NewConsistantHash(nil)
 		for _, h := range hosts {
 			hash.Add(&PeerClient{info: PeerInfo{Address: h}})
 		}
@@ -37,7 +37,7 @@ func TestConsistentHash(t *testing.T) {
 	})
 
 	t.Run("Size", func(t *testing.T) {
-		hash := NewConsistentHash(nil)
+		hash := NewConsistantHash(nil)
 
 		for _, h := range hosts {
 			hash.Add(&PeerClient{info: PeerInfo{Address: h}})
@@ -47,7 +47,7 @@ func TestConsistentHash(t *testing.T) {
 	})
 
 	t.Run("Host", func(t *testing.T) {
-		hash := NewConsistentHash(nil)
+		hash := NewConsistantHash(nil)
 		hostMap := map[string]*PeerClient{}
 
 		for _, h := range hosts {
@@ -81,7 +81,7 @@ func TestConsistentHash(t *testing.T) {
 
 		for name, hashFunc := range hashFuncs {
 			t.Run(name, func(t *testing.T) {
-				hash := NewConsistentHash(hashFunc)
+				hash := NewConsistantHash(hashFunc)
 				hostMap := map[string]int{}
 
 				for _, h := range hosts {
@@ -117,7 +117,7 @@ func BenchmarkConsistantHash(b *testing.B) {
 				ips[i] = net.IPv4(byte(i>>24), byte(i>>16), byte(i>>8), byte(i)).String()
 			}
 
-			hash := NewConsistentHash(hashFunc)
+			hash := NewConsistantHash(hashFunc)
 			hosts := []string{"a.svc.local", "b.svc.local", "c.svc.local"}
 			for _, h := range hosts {
 				hash.Add(&PeerClient{info: PeerInfo{Address: h}})

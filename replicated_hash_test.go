@@ -15,7 +15,7 @@ func TestReplicatedConsistantHash(t *testing.T) {
 	hosts := []string{"a.svc.local", "b.svc.local", "c.svc.local"}
 
 	t.Run("Size", func(t *testing.T) {
-		hash := NewReplicatedConsistentHash(nil, DefaultReplicas)
+		hash := NewReplicatedConsistantHash(nil, DefaultReplicas)
 
 		for _, h := range hosts {
 			hash.Add(&PeerClient{info: PeerInfo{Address: h}})
@@ -25,7 +25,7 @@ func TestReplicatedConsistantHash(t *testing.T) {
 	})
 
 	t.Run("Host", func(t *testing.T) {
-		hash := NewReplicatedConsistentHash(nil, DefaultReplicas)
+		hash := NewReplicatedConsistantHash(nil, DefaultReplicas)
 		hostMap := map[string]*PeerClient{}
 
 		for _, h := range hosts {
@@ -58,7 +58,7 @@ func TestReplicatedConsistantHash(t *testing.T) {
 
 		for name, hashFunc := range hashFuncs {
 			t.Run(name, func(t *testing.T) {
-				hash := NewReplicatedConsistentHash(hashFunc, DefaultReplicas)
+				hash := NewReplicatedConsistantHash(hashFunc, DefaultReplicas)
 				hostMap := map[string]int{}
 
 				for _, h := range hosts {
@@ -93,7 +93,7 @@ func BenchmarkReplicatedConsistantHash(b *testing.B) {
 				ips[i] = net.IPv4(byte(i>>24), byte(i>>16), byte(i>>8), byte(i)).String()
 			}
 
-			hash := NewReplicatedConsistentHash(hashFunc, DefaultReplicas)
+			hash := NewReplicatedConsistantHash(hashFunc, DefaultReplicas)
 			hosts := []string{"a.svc.local", "b.svc.local", "c.svc.local"}
 			for _, h := range hosts {
 				hash.Add(&PeerClient{info: PeerInfo{Address: h}})

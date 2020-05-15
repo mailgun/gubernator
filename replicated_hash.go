@@ -31,7 +31,7 @@ type HashFunc64 func(data []byte) uint64
 var DefaultHash64 HashFunc64 = fnv1.HashBytes64
 
 // Implements PeerPicker
-type ReplicatedConsistentHash struct {
+type ReplicatedConsistantHash struct {
 	hashFunc HashFunc64
 	peerKeys []peerInfo
 	peers    map[string]*PeerClient
@@ -43,8 +43,8 @@ type peerInfo struct {
 	peer *PeerClient
 }
 
-func NewReplicatedConsistentHash(fn HashFunc64, replicas int) *ReplicatedConsistentHash {
-	ch := &ReplicatedConsistentHash{
+func NewReplicatedConsistantHash(fn HashFunc64, replicas int) *ReplicatedConsistantHash {
+	ch := &ReplicatedConsistantHash{
 		hashFunc: fn,
 		peers:    make(map[string]*PeerClient),
 		replicas: replicas,
@@ -56,15 +56,15 @@ func NewReplicatedConsistentHash(fn HashFunc64, replicas int) *ReplicatedConsist
 	return ch
 }
 
-func (ch *ReplicatedConsistentHash) New() PeerPicker {
-	return &ReplicatedConsistentHash{
+func (ch *ReplicatedConsistantHash) New() PeerPicker {
+	return &ReplicatedConsistantHash{
 		hashFunc: ch.hashFunc,
 		peers:    make(map[string]*PeerClient),
 		replicas: ch.replicas,
 	}
 }
 
-func (ch *ReplicatedConsistentHash) Peers() []*PeerClient {
+func (ch *ReplicatedConsistantHash) Peers() []*PeerClient {
 	var results []*PeerClient
 	for _, v := range ch.peers {
 		results = append(results, v)
@@ -73,7 +73,7 @@ func (ch *ReplicatedConsistentHash) Peers() []*PeerClient {
 }
 
 // Adds a peer to the hash
-func (ch *ReplicatedConsistentHash) Add(peer *PeerClient) {
+func (ch *ReplicatedConsistantHash) Add(peer *PeerClient) {
 	ch.peers[peer.info.Address] = peer
 
 	for i := 0; i < ch.replicas; i++ {
@@ -88,17 +88,17 @@ func (ch *ReplicatedConsistentHash) Add(peer *PeerClient) {
 }
 
 // Returns number of peers in the picker
-func (ch *ReplicatedConsistentHash) Size() int {
+func (ch *ReplicatedConsistantHash) Size() int {
 	return len(ch.peers)
 }
 
 // Returns the peer by hostname
-func (ch *ReplicatedConsistentHash) GetByPeerInfo(peer PeerInfo) *PeerClient {
+func (ch *ReplicatedConsistantHash) GetByPeerInfo(peer PeerInfo) *PeerClient {
 	return ch.peers[peer.Address]
 }
 
 // Given a key, return the peer that key is assigned too
-func (ch *ReplicatedConsistentHash) Get(key string) (*PeerClient, error) {
+func (ch *ReplicatedConsistantHash) Get(key string) (*PeerClient, error) {
 	if ch.Size() == 0 {
 		return nil, errors.New("unable to pick a peer; pool is empty")
 	}

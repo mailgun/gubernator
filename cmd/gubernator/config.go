@@ -57,11 +57,11 @@ type ServerConfig struct {
 	// K8s configuration used to find peers inside a K8s cluster
 	K8PoolConf gubernator.K8sPoolConfig
 
-	// The PeerPicker as selected by `GUBER_PEER_PICKER`
-	Picker gubernator.PeerPicker
-
 	// Memberlist configuration used to find peers
 	MemberlistPoolConf gubernator.MemberlistPoolConfig
+
+	// The PeerPicker as selected by `GUBER_PEER_PICKER`
+	Picker gubernator.PeerPicker
 }
 
 func confFromEnv() (ServerConfig, error) {
@@ -147,21 +147,21 @@ func confFromEnv() (ServerConfig, error) {
 				"crc32": nil,
 			}
 			if fn, ok := hashFuncs[hash]; ok {
-				conf.Picker = gubernator.NewConsistantHash(fn)
+				conf.Picker = gubernator.NewConsistentHash(fn)
 			}
 			return conf, errors.Errorf("'GUBER_PEER_PICKER_HASH=%s' is invalid; choices are [%s]",
 				hash, validHashKeys(hashFuncs))
 
 		case "replicated-hash":
 			setter.SetDefault(&replicas, getEnvInteger("GUBER_REPLICATED_HASH_REPLICAS"), 1)
-			conf.Picker = gubernator.NewReplicatedConsistantHash(nil, replicas)
+			conf.Picker = gubernator.NewReplicatedConsistentHash(nil, replicas)
 			setter.SetDefault(&hash, os.Getenv("GUBER_PEER_PICKER_HASH"), "fnv1a")
 			hashFuncs := map[string]gubernator.HashFunc64{
 				"fnv1a": fnv1a.HashBytes64,
 				"fnv1":  fnv1.HashBytes64,
 			}
 			if fn, ok := hashFuncs[hash]; ok {
-				conf.Picker = gubernator.NewReplicatedConsistantHash(fn, replicas)
+				conf.Picker = gubernator.NewReplicatedConsistentHash(fn, replicas)
 			}
 			return conf, errors.Errorf("'GUBER_PEER_PICKER_HASH=%s' is invalid; choices are [%s]",
 				hash, validHash64Keys(hashFuncs))

@@ -28,7 +28,7 @@ func NewRegionPicker(fn HashFunc) *RegionPicker {
 	rp := &RegionPicker{
 		regions:        make(map[string]PeerPicker),
 		reqQueue:       make(chan *RateLimitReq, 0),
-		ConsistentHash: NewConsistantHash(fn),
+		ConsistentHash: NewConsistentHash(fn),
 	}
 	return rp
 }

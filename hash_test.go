@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestConsistantHash(t *testing.T) {
+func TestConsistentHash(t *testing.T) {
 	hosts := []string{"a.svc.local", "b.svc.local", "c.svc.local"}
 
 	t.Run("Add", func(t *testing.T) {
@@ -21,43 +21,43 @@ func TestConsistantHash(t *testing.T) {
 			"192.168.1.2":                          hosts[1],
 			"5f46bb53-6c30-49dc-adb4-b7355058adb6": hosts[1],
 		}
-		hash := NewConsistantHash(nil)
+		hash := NewConsistentHash(nil)
 		for _, h := range hosts {
-			hash.Add(&PeerClient{host: h})
+			hash.Add(&PeerClient{info: PeerInfo{Address: h}})
 		}
 
 		for input, addr := range cases {
 			t.Run(input, func(t *testing.T) {
 				peer, err := hash.Get(input)
 				assert.Nil(t, err)
-				assert.Equal(t, addr, peer.host)
+				assert.Equal(t, addr, peer.info.Address)
 			})
 		}
 
 	})
 
 	t.Run("Size", func(t *testing.T) {
-		hash := NewConsistantHash(nil)
+		hash := NewConsistentHash(nil)
 
 		for _, h := range hosts {
-			hash.Add(&PeerClient{host: h})
+			hash.Add(&PeerClient{info: PeerInfo{Address: h}})
 		}
 
 		assert.Equal(t, len(hosts), hash.Size())
 	})
 
 	t.Run("Host", func(t *testing.T) {
-		hash := NewConsistantHash(nil)
+		hash := NewConsistentHash(nil)
 		hostMap := map[string]*PeerClient{}
 
 		for _, h := range hosts {
-			peer := &PeerClient{host: h}
+			peer := &PeerClient{info: PeerInfo{Address: h}}
 			hash.Add(peer)
 			hostMap[h] = peer
 		}
 
 		for host, peer := range hostMap {
-			assert.Equal(t, peer, hash.GetPeerByHost(host))
+			assert.Equal(t, peer, hash.GetByPeerInfo(PeerInfo{Address: host}))
 		}
 	})
 
@@ -81,17 +81,17 @@ func TestConsistantHash(t *testing.T) {
 
 		for name, hashFunc := range hashFuncs {
 			t.Run(name, func(t *testing.T) {
-				hash := NewConsistantHash(hashFunc)
+				hash := NewConsistentHash(hashFunc)
 				hostMap := map[string]int{}
 
 				for _, h := range hosts {
-					hash.Add(&PeerClient{host: h})
+					hash.Add(&PeerClient{info: PeerInfo{Address: h}})
 					hostMap[h] = 0
 				}
 
 				for i := range strings {
 					peer, _ := hash.Get(strings[i])
-					hostMap[peer.host]++
+					hostMap[peer.info.Address]++
 				}
 
 				for host, a := range hostMap {
@@ -117,10 +117,10 @@ func BenchmarkConsistantHash(b *testing.B) {
 				ips[i] = net.IPv4(byte(i>>24), byte(i>>16), byte(i>>8), byte(i)).String()
 			}
 
-			hash := NewConsistantHash(hashFunc)
+			hash := NewConsistentHash(hashFunc)
 			hosts := []string{"a.svc.local", "b.svc.local", "c.svc.local"}
 			for _, h := range hosts {
-				hash.Add(&PeerClient{host: h})
+				hash.Add(&PeerClient{info: PeerInfo{Address: h}})
 			}
 
 			b.ResetTimer()

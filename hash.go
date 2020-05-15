@@ -34,7 +34,7 @@ type ConsistentHash struct {
 	peerMap  map[int]*PeerClient
 }
 
-func NewConsistantHash(fn HashFunc) *ConsistentHash {
+func NewConsistentHash(fn HashFunc) *ConsistentHash {
 	ch := &ConsistentHash{
 		hashFunc: fn,
 		peerMap:  make(map[int]*PeerClient),
@@ -62,8 +62,8 @@ func (ch *ConsistentHash) Peers() []*PeerClient {
 }
 
 // Adds a peer to the hash
-func (ch *ConsistantHash) Add(peer *PeerClient) {
-	hash := int(ch.hashFunc(bytes(peer.host)))
+func (ch *ConsistentHash) Add(peer *PeerClient) {
+	hash := int(ch.hashFunc(strToBytes(peer.info.HashKey())))
 	ch.peerKeys = append(ch.peerKeys, hash)
 	ch.peerMap[hash] = peer
 	sort.Ints(ch.peerKeys)
@@ -74,9 +74,9 @@ func (ch *ConsistentHash) Size() int {
 	return len(ch.peerKeys)
 }
 
-// Returns the peer by hostname
-func (ch *ConsistantHash) GetPeerByHost(host string) *PeerClient {
-	return ch.peerMap[int(ch.hashFunc(bytes(host)))]
+// Returns the peer by peer info
+func (ch *ConsistentHash) GetByPeerInfo(peer PeerInfo) *PeerClient {
+	return ch.peerMap[int(ch.hashFunc(strToBytes(peer.HashKey())))]
 }
 
 // Given a key, return the peer that key is assigned too
@@ -85,7 +85,7 @@ func (ch *ConsistentHash) Get(key string) (*PeerClient, error) {
 		return nil, errors.New("unable to pick a peer; pool is empty")
 	}
 
-	hash := int(ch.hashFunc(bytes(key)))
+	hash := int(ch.hashFunc(strToBytes(key)))
 
 	// Binary search for appropriate peer
 	idx := sort.Search(len(ch.peerKeys), func(i int) bool { return ch.peerKeys[i] >= hash })
@@ -100,7 +100,7 @@ func (ch *ConsistentHash) Get(key string) (*PeerClient, error) {
 
 // unsafely return the underlying bytes of a string
 // the caller cannot alter the returned byte slice
-func bytes(str string) []byte {
+func strToBytes(str string) []byte {
 	hdr := *(*reflect.StringHeader)(unsafe.Pointer(&str))
 	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
 		Data: hdr.Data,

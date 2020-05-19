@@ -5,7 +5,6 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/fatih/structs v1.1.0 // indirect
 	github.com/golang/protobuf v1.3.2
-	github.com/google/uuid v1.1.1
 	github.com/grpc-ecosystem/grpc-gateway v1.11.1
 	github.com/hashicorp/memberlist v0.2.0
 	github.com/mailgun/holster v3.0.0+incompatible

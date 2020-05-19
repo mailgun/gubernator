@@ -25,7 +25,6 @@ import (
 	"github.com/mailgun/holster/v3/collections"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
-	"k8s.io/apimachinery/pkg/util/uuid"
 )
 
 type PeerPicker interface {
@@ -190,8 +189,7 @@ func (c *PeerClient) setLastErr(err error) error {
 
 	// Prepend client address to error
 	errWithHostname := errors.Wrap(err, fmt.Sprintf("from host %s", c.info.Address))
-	// UUID to prevent overwritting existing errors
-	key := uuid.NewUUID()
+	key := err.Error()
 
 	// Add error to the cache with a TTL of 5 minutes
 	c.lastErrs.AddWithTTL(key, errWithHostname, time.Minute*5)

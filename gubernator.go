@@ -289,9 +289,21 @@ func (s *Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*HealthC
 
 	s.peerMutex.RLock()
 
-	// Iterate through peers and get their last errors
-	peers := s.conf.LocalPicker.Peers()
-	for _, peer := range peers {
+	// Iterate through local peers and get their last errors
+	localPeers := s.conf.LocalPicker.Peers()
+	for _, peer := range localPeers {
+		lastErr := peer.GetLastErr()
+
+		if lastErr != nil {
+			for _, err := range lastErr {
+				errs = append(errs, err)
+			}
+		}
+	}
+
+	// Do the same for region peers
+	regionPeers := s.conf.RegionPicker.Peers()
+	for _, peer := range regionPeers {
 		lastErr := peer.GetLastErr()
 
 		if lastErr != nil {

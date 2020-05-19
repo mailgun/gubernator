@@ -8,6 +8,7 @@ type RegionPeerPicker interface {
 	GetClients(string) ([]*PeerClient, error)
 	GetByPeerInfo(PeerInfo) *PeerClient
 	Pickers() map[string]PeerPicker
+	Peers() []*PeerClient
 	Add(*PeerClient)
 	New() RegionPeerPicker
 }
@@ -70,6 +71,18 @@ func (rp *RegionPicker) GetByPeerInfo(info PeerInfo) *PeerClient {
 // Pickers returns a map of each region and its respective PeerPicker
 func (rp *RegionPicker) Pickers() map[string]PeerPicker {
 	return rp.regions
+}
+
+func (rp *RegionPicker) Peers() []*PeerClient {
+	var peers []*PeerClient
+
+	for _, picker := range rp.regions {
+		for _, peer := range picker.Peers() {
+			peers = append(peers, peer)
+		}
+	}
+
+	return peers
 }
 
 func (rp *RegionPicker) Add(peer *PeerClient) {

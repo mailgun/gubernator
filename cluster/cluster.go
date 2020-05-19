@@ -57,8 +57,10 @@ var peers []gubernator.PeerInfo
 func GetDefaultConfig() gubernator.Config {
 	return gubernator.Config{
 		Behaviors: gubernator.BehaviorConfig{
-			GlobalSyncWait: time.Millisecond * 50, // Suitable for testing but not production
-			GlobalTimeout:  time.Second,
+			GlobalSyncWait:      time.Millisecond * 50, // Suitable for testing but not production
+			GlobalTimeout:       time.Second,
+			MultiRegionSyncWait: time.Millisecond * 50, // Suitable for testing but not production
+			MultiRegionTimeout:  time.Second,
 		},
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,13 +19,13 @@ type MemberlistPool struct {
 }
 
 type MemberlistPoolConfig struct {
-	AdvertiseAddress        string
-	AdvertisePort           int
-	KnownNodes              []string
-	DataCenter              string
-	GubernatorListenAddress string
-	OnUpdate                UpdateFunc
-	Enabled                 bool
+	AdvertiseAddress string
+	AdvertisePort    int
+	KnownNodes       []string
+	DataCenter       string
+	GubernatorPort   int
+	OnUpdate         UpdateFunc
+	Enabled          bool
 }
 
 func NewMemberlistPool(conf MemberlistPoolConfig) (*MemberlistPool, error) {
@@ -48,8 +49,7 @@ func NewMemberlistPool(conf MemberlistPoolConfig) (*MemberlistPool, error) {
 
 	// Prep metadata
 	gob.Register(memberlistMetadata{})
-	gubernatorPort := strings.Split(conf.GubernatorListenAddress, ":")[1]
-	metadata := memberlistMetadata{DataCenter: conf.DataCenter, GubernatorPort: gubernatorPort}
+	metadata := memberlistMetadata{DataCenter: conf.DataCenter, GubernatorPort: conf.GubernatorPort}
 
 	// Join memberlist pool
 	err = memberlistPool.joinPool(conf.KnownNodes, metadata)
@@ -169,13 +169,13 @@ func getIP(address string) string {
 	return strings.Split(address, ":")[0]
 }
 
-func makeAddress(ip string, port string) string {
-	return fmt.Sprintf("%s:%s", ip, port)
+func makeAddress(ip string, port int) string {
+	return fmt.Sprintf("%s:%s", ip, strconv.Itoa(port))
 }
 
 type memberlistMetadata struct {
 	DataCenter     string
-	GubernatorPort string
+	GubernatorPort int
 }
 
 func serializeMemberlistMetadata(metadata memberlistMetadata) ([]byte, error) {

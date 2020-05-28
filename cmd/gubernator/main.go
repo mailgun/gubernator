@@ -22,6 +22,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/mailgun/gubernator"
@@ -89,14 +91,17 @@ func main() {
 		checkErr(err, "while querying kubernetes API")
 
 	} else if conf.MemberlistPoolConf.Enabled {
+		gubernatorPort, err := strconv.Atoi(strings.Split(conf.GRPCListenAddress, ":")[1])
+		checkErr(err, "while converting gubernator port to int")
+
 		// Register peer on memberlist
 		pool, err = gubernator.NewMemberlistPool(gubernator.MemberlistPoolConfig{
-			AdvertiseAddress:        conf.MemberlistPoolConf.AdvertiseAddress,
-			AdvertisePort:           conf.MemberlistPoolConf.AdvertisePort,
-			KnownNodes:              conf.MemberlistPoolConf.KnownNodes,
-			DataCenter:              conf.DataCenter,
-			GubernatorListenAddress: conf.GRPCListenAddress,
-			OnUpdate:                guber.SetPeers,
+			AdvertiseAddress: conf.MemberlistPoolConf.AdvertiseAddress,
+			AdvertisePort:    conf.MemberlistPoolConf.AdvertisePort,
+			KnownNodes:       conf.MemberlistPoolConf.KnownNodes,
+			DataCenter:       conf.DataCenter,
+			GubernatorPort:   gubernatorPort,
+			OnUpdate:         guber.SetPeers,
 		})
 		checkErr(err, "while creating memberlist")
 

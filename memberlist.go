@@ -23,6 +23,7 @@ type MemberlistPool struct {
 type MemberlistPoolConfig struct {
 	AdvertiseAddress string
 	AdvertisePort    int
+	NodeName         string
 	KnownNodes       []string
 	LoggerOutput     io.Writer
 	Logger           *l.Logger
@@ -43,6 +44,10 @@ func NewMemberlistPool(conf MemberlistPoolConfig) (*MemberlistPool, error) {
 	config.Events = memberlistPool.events
 	config.AdvertiseAddr = conf.AdvertiseAddress
 	config.AdvertisePort = conf.AdvertisePort
+
+	if conf.NodeName != "" {
+		config.Name = conf.NodeName
+	}
 
 	if conf.LoggerOutput != nil {
 		config.LogOutput = conf.LoggerOutput

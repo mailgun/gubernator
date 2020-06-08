@@ -99,6 +99,7 @@ func main() {
 			AdvertiseAddress: conf.MemberlistPoolConf.AdvertiseAddress,
 			AdvertisePort:    conf.MemberlistPoolConf.AdvertisePort,
 			KnownNodes:       conf.MemberlistPoolConf.KnownNodes,
+			LoggerOutput:     logrus.WithField("category", "memberlist").Writer(),
 			DataCenter:       conf.DataCenter,
 			GubernatorPort:   gubernatorPort,
 			OnUpdate:         guber.SetPeers,

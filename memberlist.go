@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"io"
+	l "log"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +24,8 @@ type MemberlistPoolConfig struct {
 	AdvertiseAddress string
 	AdvertisePort    int
 	KnownNodes       []string
+	LoggerOutput     io.Writer
+	Logger           *l.Logger
 	DataCenter       string
 	GubernatorPort   int
 	OnUpdate         UpdateFunc
@@ -39,6 +43,14 @@ func NewMemberlistPool(conf MemberlistPoolConfig) (*MemberlistPool, error) {
 	config.Events = memberlistPool.events
 	config.AdvertiseAddr = conf.AdvertiseAddress
 	config.AdvertisePort = conf.AdvertisePort
+
+	if conf.LoggerOutput != nil {
+		config.LogOutput = conf.LoggerOutput
+	}
+
+	if conf.Logger != nil {
+		config.Logger = conf.Logger
+	}
 
 	// Create and set memberlist
 	memberlist, err := ml.Create(config)

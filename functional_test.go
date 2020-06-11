@@ -86,8 +86,6 @@ func TestOverTheLimit(t *testing.T) {
 		})
 		require.Nil(t, err)
 
-		fmt.Println("got some response")
-
 		rl := resp.Responses[0]
 
 		assert.Equal(t, test.Status, rl.Status)

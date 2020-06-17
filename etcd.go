@@ -28,8 +28,20 @@ import (
 )
 
 type PeerInfo struct {
+
+	// (Optional) The name of the data center this peer is in. Leave blank if not using multi data center support.
+	DataCenter string
+
+	// (Required) The IP address of the peer which will field peer requests
 	Address string
+
+	// (Optional) Is true if PeerInfo is for this instance of gubernator
 	IsOwner bool
+}
+
+// Returns the hash key used to identify this peer in the Picker.
+func (p PeerInfo) HashKey() string {
+	return p.Address
 }
 
 type UpdateFunc func([]PeerInfo)
@@ -290,7 +302,7 @@ func (e *EtcdPool) register(name string) error {
 
 			if _, err := e.conf.Client.Revoke(ctx, lease.ID); err != nil {
 				e.log.WithError(err).
-					Warn("during lease revoke ")
+					Warn("during lease revoke")
 			}
 			cancel()
 			return false

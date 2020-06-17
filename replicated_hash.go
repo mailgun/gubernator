@@ -74,10 +74,10 @@ func (ch *ReplicatedConsistantHash) Peers() []*PeerClient {
 
 // Adds a peer to the hash
 func (ch *ReplicatedConsistantHash) Add(peer *PeerClient) {
-	ch.peers[peer.host] = peer
+	ch.peers[peer.info.Address] = peer
 
 	for i := 0; i < ch.replicas; i++ {
-		hash := ch.hashFunc(bytes(strconv.Itoa(i) + peer.host))
+		hash := ch.hashFunc(strToBytesUnsafe(strconv.Itoa(i) + peer.info.Address))
 		ch.peerKeys = append(ch.peerKeys, peerInfo{
 			hash: hash,
 			peer: peer,
@@ -93,8 +93,8 @@ func (ch *ReplicatedConsistantHash) Size() int {
 }
 
 // Returns the peer by hostname
-func (ch *ReplicatedConsistantHash) GetPeerByHost(host string) *PeerClient {
-	return ch.peers[host]
+func (ch *ReplicatedConsistantHash) GetByPeerInfo(peer PeerInfo) *PeerClient {
+	return ch.peers[peer.Address]
 }
 
 // Given a key, return the peer that key is assigned too
@@ -102,7 +102,7 @@ func (ch *ReplicatedConsistantHash) Get(key string) (*PeerClient, error) {
 	if ch.Size() == 0 {
 		return nil, errors.New("unable to pick a peer; pool is empty")
 	}
-	hash := ch.hashFunc(bytes(key))
+	hash := ch.hashFunc(strToBytesUnsafe(key))
 
 	// Binary search for appropriate peer
 	idx := sort.Search(len(ch.peerKeys), func(i int) bool { return ch.peerKeys[i].hash >= hash })

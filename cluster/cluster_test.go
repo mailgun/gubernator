@@ -27,13 +27,13 @@ func Test_instance_Peers(t *testing.T) {
 	tests := []struct {
 		name     string
 		instance *instance
-		peers    []string
+		peers    []gubernator.PeerInfo
 		want     []gubernator.PeerInfo
 	}{
 		{
 			name:     "Happy path",
 			instance: &instance{Address: "mailgun.com"},
-			peers:    []string{"mailgun.com"},
+			peers:    []gubernator.PeerInfo{{Address: "mailgun.com"}},
 			want: []gubernator.PeerInfo{
 				{Address: "mailgun.com", IsOwner: true},
 			},
@@ -41,7 +41,7 @@ func Test_instance_Peers(t *testing.T) {
 		{
 			name:     "Get multy peers",
 			instance: &instance{Address: "mailgun.com"},
-			peers:    []string{"localhost:11111", "mailgun.com"},
+			peers:    []gubernator.PeerInfo{{Address: "localhost:11111"}, {Address: "mailgun.com"}},
 			want: []gubernator.PeerInfo{
 				{Address: "localhost:11111"},
 				{Address: "mailgun.com", IsOwner: true},
@@ -50,7 +50,7 @@ func Test_instance_Peers(t *testing.T) {
 		{
 			name:     "No Peers",
 			instance: &instance{Address: "www.mailgun.com:11111"},
-			peers:    []string{},
+			peers:    []gubernator.PeerInfo{},
 			want:     []gubernator.PeerInfo(nil),
 		},
 		{
@@ -62,7 +62,7 @@ func Test_instance_Peers(t *testing.T) {
 		{
 			name:     "Owner does not exist",
 			instance: &instance{Address: "mailgun.com"},
-			peers:    []string{"localhost:11111"},
+			peers:    []gubernator.PeerInfo{{Address: "localhost:11111"}},
 			want: []gubernator.PeerInfo{
 				{Address: "localhost:11111"},
 			},
@@ -82,36 +82,33 @@ func Test_instance_Peers(t *testing.T) {
 func TestGetPeer(t *testing.T) {
 	tests := []struct {
 		name  string
-		peers []string
+		peers []gubernator.PeerInfo
 		oneOf map[string]bool
 	}{
 		{
 			name:  "Happy path",
-			peers: []string{"mailgun.com"},
+			peers: []gubernator.PeerInfo{{Address: "mailgun.com"}},
 		},
 		{
 			name:  "Get one peer from multiple peers",
-			peers: []string{"mailgun.com", "localhost", "test.com"},
+			peers: []gubernator.PeerInfo{{Address: "mailgun.com"}, {Address: "localhost"}, {Address: "test.com"}},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			peers = tt.peers
-			got := GetPeer()
+			got := GetRandomPeer()
 
-			if !stringInSlice(got, peers) {
-				t.Errorf("expected one of: %v", tt.peers)
-				t.Errorf("got:             %s", got)
-			}
+			assert.Contains(t, peers, got)
 		})
 	}
 }
 
 func TestPeerAt(t *testing.T) {
-	peers = []string{"mailgun.com"}
+	peers = []gubernator.PeerInfo{{Address: "mailgun.com"}}
 
 	got := PeerAt(0)
-	want := "mailgun.com"
+	want := gubernator.PeerInfo{Address: "mailgun.com"}
 
 	assert.Equal(t, want, got)
 }
@@ -186,7 +183,7 @@ func TestStartMultipleInstancesWithAddresses(t *testing.T) {
 	err := StartWith(addresses)
 	assert.Nil(t, err)
 
-	wantPeers := []string{"127.0.0.1:11111", "127.0.0.1:22222"}
+	wantPeers := []gubernator.PeerInfo{{Address: "127.0.0.1:11111"}, {Address: "127.0.0.1:22222"}}
 	wantInstances := []*instance{
 		{Address: "127.0.0.1:11111"},
 		{Address: "127.0.0.1:22222"},

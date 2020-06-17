@@ -22,10 +22,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/mailgun/gubernator"
-	"github.com/mailgun/holster/v3/etcdutil"
+	"github.com/mailgun/holster/etcdutil"
 	"github.com/mailgun/holster/v3/syncutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -61,9 +63,10 @@ func main() {
 
 	// Registers a new gubernator instance with the GRPC server
 	guber, err := gubernator.New(gubernator.Config{
-		Picker:     conf.Picker,
-		GRPCServer: grpcSrv,
-		Cache:      cache,
+		LocalPicker: conf.Picker,
+		GRPCServer:  grpcSrv,
+		Cache:       cache,
+		DataCenter:  conf.DataCenter,
 	})
 	checkErr(err, "while creating new gubernator instance")
 
@@ -86,6 +89,23 @@ func main() {
 		conf.K8PoolConf.OnUpdate = guber.SetPeers
 		pool, err = gubernator.NewK8sPool(conf.K8PoolConf)
 		checkErr(err, "while querying kubernetes API")
+
+	} else if conf.MemberlistPoolConf.Enabled {
+		gubernatorPort, err := strconv.Atoi(strings.Split(conf.GRPCListenAddress, ":")[1])
+		checkErr(err, "while converting gubernator port to int")
+
+		// Register peer on memberlist
+		pool, err = gubernator.NewMemberlistPool(gubernator.MemberlistPoolConfig{
+			AdvertiseAddress: conf.MemberlistPoolConf.AdvertiseAddress,
+			AdvertisePort:    conf.MemberlistPoolConf.AdvertisePort,
+			KnownNodes:       conf.MemberlistPoolConf.KnownNodes,
+			LoggerOutput:     logrus.WithField("category", "memberlist").Writer(),
+			DataCenter:       conf.DataCenter,
+			GubernatorPort:   gubernatorPort,
+			OnUpdate:         guber.SetPeers,
+		})
+		checkErr(err, "while creating memberlist")
+
 	} else {
 		// Register ourselves with other peers via ETCD
 		etcdClient, err := etcdutil.NewClient(&conf.EtcdConf)

@@ -95,7 +95,6 @@ func (s *Instance) Close() error {
 	out := make(chan *CacheItem, 500)
 	go func() {
 		for item := range s.conf.Cache.Each() {
-			fmt.Printf("Each: %+v\n", item)
 			out <- item
 		}
 		close(out)

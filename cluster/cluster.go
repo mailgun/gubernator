@@ -155,6 +155,16 @@ func StartInstance(address string, conf gubernator.Config) (*instance, error) {
 		}
 	}()
 
+	// Wait until the instance responds to connect
+	for i := 0; i < 10; i++ {
+		conn, err := net.Dial("tcp", address)
+		if err != nil {
+			break
+		}
+		conn.Close()
+		time.Sleep(time.Millisecond * 50)
+	}
+
 	guber.SetPeers([]gubernator.PeerInfo{{Address: listener.Addr().String(), IsOwner: true}})
 
 	return &instance{

@@ -69,11 +69,12 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 
 		// Update the limit if it changed
 		if t.Limit != r.Limit {
-			t.Limit = r.Limit
-			// If our remaining is greater than our new limit
-			if t.Remaining > t.Limit {
-				t.Remaining = t.Limit
+			// Add difference to remaining
+			t.Remaining += r.Limit - t.Limit
+			if t.Remaining < 0 {
+				t.Remaining = 0
 			}
+			t.Limit = r.Limit
 		}
 
 		rl := &RateLimitResp{

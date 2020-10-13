@@ -124,7 +124,7 @@ func confFromEnv() (ServerConfig, error) {
 
 	// Memberlist Config
 	setter.SetDefault(&conf.MemberlistPoolConf.AdvertiseAddress, os.Getenv("GUBER_MEMBERLIST_ADVERTISE_ADDRESS"), "")
-	setter.SetDefault(&conf.MemberlistPoolConf.AdvertisePort, os.Getenv("GUBER_MEMBERLIST_ADVERTISE_PORT"), 7946)
+	setter.SetDefault(&conf.MemberlistPoolConf.AdvertisePort, getEnvInteger("GUBER_MEMBERLIST_ADVERTISE_PORT"), 7946)
 	setter.SetDefault(&conf.MemberlistPoolConf.KnownNodes, getEnvSlice("GUBER_MEMBERLIST_KNOWN_NODES"), []string{})
 
 	// Kubernetes Config

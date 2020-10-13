@@ -20,7 +20,6 @@ package gubernator
 
 import (
 	"container/list"
-	"fmt"
 	"sync"
 	"time"
 
@@ -103,7 +102,6 @@ func (c *LRUCache) Unlock() {
 
 func (c *LRUCache) Each() chan *CacheItem {
 	out := make(chan *CacheItem)
-	fmt.Printf("Each size: %d\n", len(c.cache))
 	go func() {
 		for _, ele := range c.cache {
 			out <- ele.Value.(*CacheItem)

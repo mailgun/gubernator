@@ -1,5 +1,5 @@
 # Build image
-FROM golang:1.13 as build
+FROM golang:1.15.1 as build
 
 WORKDIR /go/src
 

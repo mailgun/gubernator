@@ -148,8 +148,12 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	// NOTE: This must be done within the RLock since calling Wait() in Shutdown() causes
 	// a race condition if called within a separate go routine if the internal wg is `0`
 	// when Wait() is called then Add(1) is called concurrently.
+	c.mutex.RLock()
 	c.wg.Add(1)
-	defer c.wg.Done()
+	defer func() {
+		c.mutex.RUnlock()
+		defer c.wg.Done()
+	}()
 
 	resp, err := c.client.GetPeerRateLimits(ctx, r)
 	if err != nil {
@@ -170,8 +174,12 @@ func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 	}
 
 	// See NOTE above about RLock and wg.Add(1)
+	c.mutex.RLock()
 	c.wg.Add(1)
-	defer c.wg.Done()
+	defer func() {
+		c.mutex.RUnlock()
+		defer c.wg.Done()
+	}()
 
 	resp, err := c.client.UpdatePeerGlobals(ctx, r)
 	if err != nil {
@@ -223,8 +231,12 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	c.queue <- &req
 
 	// See NOTE above about RLock and wg.Add(1)
+	c.mutex.RLock()
 	c.wg.Add(1)
-	defer c.wg.Done()
+	defer func() {
+		c.mutex.RUnlock()
+		c.wg.Done()
+	}()
 
 	// Wait for a response or context cancel
 	select {

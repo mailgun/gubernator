@@ -373,15 +373,22 @@ func TestChangeLimit(t *testing.T) {
 			Name:      "Should subtract 1 from remaining and change limit to 10",
 			Algorithm: guber.Algorithm_TOKEN_BUCKET,
 			Status:    guber.Status_UNDER_LIMIT,
-			Remaining: 9,
+			Remaining: 7,
 			Limit:     10,
 		},
 		{
 			Name:      "Should subtract 1 from remaining with new limit of 10",
 			Algorithm: guber.Algorithm_TOKEN_BUCKET,
 			Status:    guber.Status_UNDER_LIMIT,
-			Remaining: 8,
+			Remaining: 6,
 			Limit:     10,
+		},
+		{
+			Name:      "Should subtract 1 from remaining with new limit of 200",
+			Algorithm: guber.Algorithm_TOKEN_BUCKET,
+			Status:    guber.Status_UNDER_LIMIT,
+			Remaining: 195,
+			Limit:     200,
 		},
 		{
 			Name:      "Should subtract 1 from remaining for leaky bucket",
@@ -566,6 +573,45 @@ func TestHealthCheck(t *testing.T) {
 	for i := 1; i < cluster.NumOfInstances(); i++ {
 		cluster.StartInstance(addresses[i-1], cluster.GetDefaultConfig())
 	}
+}
+
+func TestLeakyBucketDivBug(t *testing.T) {
+	client, errs := guber.DialV1Server(cluster.GetRandomPeer().Address)
+	require.Nil(t, errs)
+
+	resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+		Requests: []*guber.RateLimitReq{
+			{
+				Name:      "test_leaky_bucket",
+				UniqueKey: "account:1234",
+				Algorithm: guber.Algorithm_LEAKY_BUCKET,
+				Duration:  guber.Millisecond * 1000,
+				Hits:      1,
+				Limit:     2000,
+			},
+		},
+	})
+	assert.Equal(t, guber.Status_UNDER_LIMIT, resp.Responses[0].Status)
+	assert.Equal(t, int64(1999), resp.Responses[0].Remaining)
+	assert.Equal(t, int64(2000), resp.Responses[0].Limit)
+	require.Nil(t, err)
+
+	// Should result in a rate of 0.5
+	resp, err = client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+		Requests: []*guber.RateLimitReq{
+			{
+				Name:      "test_leaky_bucket",
+				UniqueKey: "account:1234",
+				Algorithm: guber.Algorithm_LEAKY_BUCKET,
+				Duration:  guber.Millisecond * 1000,
+				Hits:      100,
+				Limit:     2000,
+			},
+		},
+	})
+	require.Nil(t, err)
+	assert.Equal(t, int64(1900), resp.Responses[0].Remaining)
+	assert.Equal(t, int64(2000), resp.Responses[0].Limit)
 }
 
 // TODO: Add a test for sending no rate limits RateLimitReqList.RateLimits = nil

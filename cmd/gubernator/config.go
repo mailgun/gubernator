@@ -146,12 +146,12 @@ func confFromEnv() (ServerConfig, error) {
 				"fnv1":  fnv1.HashBytes32,
 				"crc32": nil,
 			}
-			if fn, ok := hashFuncs[hash]; ok {
-				conf.Picker = gubernator.NewConsistantHash(fn)
-				return conf, nil
+			fn, ok := hashFuncs[hash]
+			if !ok {
+				return conf, errors.Errorf("'GUBER_PEER_PICKER_HASH=%s' is invalid; choices are [%s]",
+					hash, validHashKeys(hashFuncs))
 			}
-			return conf, errors.Errorf("'GUBER_PEER_PICKER_HASH=%s' is invalid; choices are [%s]",
-				hash, validHashKeys(hashFuncs))
+			conf.Picker = gubernator.NewConsistantHash(fn)
 
 		case "replicated-hash":
 			setter.SetDefault(&replicas, getEnvInteger("GUBER_REPLICATED_HASH_REPLICAS"), 1)
@@ -161,12 +161,14 @@ func confFromEnv() (ServerConfig, error) {
 				"fnv1a": fnv1a.HashBytes64,
 				"fnv1":  fnv1.HashBytes64,
 			}
-			if fn, ok := hashFuncs[hash]; ok {
-				conf.Picker = gubernator.NewReplicatedConsistantHash(fn, replicas)
-				return conf, nil
+			fn, ok := hashFuncs[hash]
+			if !ok {
+				return conf, errors.Errorf("'GUBER_PEER_PICKER_HASH=%s' is invalid; choices are [%s]",
+					hash, validHash64Keys(hashFuncs))
 			}
-			return conf, errors.Errorf("'GUBER_PEER_PICKER_HASH=%s' is invalid; choices are [%s]",
-				hash, validHash64Keys(hashFuncs))
+			conf.Picker = gubernator.NewReplicatedConsistantHash(fn, replicas)
+		default:
+			return conf, errors.Errorf("'GUBER_PEER_PICKER=%s' is invalid; choices are ['replicated-hash', 'consistent-hash']", pp)
 		}
 	}
 
@@ -328,7 +330,7 @@ func fromEnvFile(configFile string) error {
 			return errors.Errorf("malformed key=value on line '%d'", i)
 		}
 
-		if err := os.Setenv(parts[0], parts[1]); err != nil {
+		if err := os.Setenv(strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])); err != nil {
 			return errors.Wrapf(err, "while settings environ for '%s=%s'", parts[0], parts[1])
 		}
 	}

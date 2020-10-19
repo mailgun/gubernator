@@ -140,7 +140,7 @@ func confFromEnv() (ServerConfig, error) {
 
 		switch pp {
 		case "consistent-hash":
-			setter.SetDefault(&hash, os.Getenv("GUBER_PEER_PICKER_HASH"), "crc32")
+			setter.SetDefault(&hash, os.Getenv("GUBER_PEER_PICKER_HASH"), "fnv1a")
 			hashFuncs := map[string]gubernator.HashFunc{
 				"fnv1a": fnv1a.HashBytes32,
 				"fnv1":  fnv1.HashBytes32,
@@ -148,6 +148,7 @@ func confFromEnv() (ServerConfig, error) {
 			}
 			if fn, ok := hashFuncs[hash]; ok {
 				conf.Picker = gubernator.NewConsistantHash(fn)
+				return conf, nil
 			}
 			return conf, errors.Errorf("'GUBER_PEER_PICKER_HASH=%s' is invalid; choices are [%s]",
 				hash, validHashKeys(hashFuncs))
@@ -162,6 +163,7 @@ func confFromEnv() (ServerConfig, error) {
 			}
 			if fn, ok := hashFuncs[hash]; ok {
 				conf.Picker = gubernator.NewReplicatedConsistantHash(fn, replicas)
+				return conf, nil
 			}
 			return conf, errors.Errorf("'GUBER_PEER_PICKER_HASH=%s' is invalid; choices are [%s]",
 				hash, validHash64Keys(hashFuncs))

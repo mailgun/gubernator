@@ -71,10 +71,34 @@ immediate response to the client will not include the most accurate remaining
 counts. As that count will only get updated after the async call to the owner
 peer is complete and the owning peer has had time to update all the peers in
 the cluster. As a result the use of GLOBAL allows for greater scale but at the
-cost of consistency. Using `GLOBAL` can increase the amount of traffic per rate
-limit request if the cluster is large enough. GLOBAL should only be used for
-extremely high volume rate limits that don't scale well with the traditional
-non `GLOBAL` behavior.
+cost of consistency.
 
+##### Network considerations
+Global requests are forwarded asynchronously to the owning peer, then the
+owning peer will update every node in the cluster with the rate limit status.
+So assuming a single node cluster, for each request that comes in, there is a
+minimum of 2 additional (3 if the receiving node isn't the owner) network
+updates before all nodes have the `Hit` updated in their cache.
 
+To calculate the WORST case scenario, we total the number of network updates
+that must occur for each global rate limit.
 
+Count 1 incoming request to the node
+Count 1 request when forwarding to the owning node
+Count 1 + (number of nodes in cluster) to update all the nodes with the current Hit count.
+
+Remember this is the WORST case, as the node that recieved the request might be
+the owning node thus no need to forward to the owner. Additionally we improve
+the worst case by having the owning node batch Hits when forwarding to all the
+nodes in the cluster. Such that 1,000 individual requests of Hit = 1 each for a
+unique key will result in batched request from the owner to each node with a
+single Hit = 1,000 update.
+
+Additionally thousands of hits to different unique keys will also be batched
+such that network usage doesn't increase until the number of requests in an
+update batch exceeds the `BehaviorConfig.GlobalBatchLimit` or when the number of
+nodes in the cluster increases. (thus more batch updates) When that occurs you
+could increase the `GlobalBatchLimit` (defaults to 1,000) to increase the number
+of unique key Hit updates that are batched into a single update request. This
+will lower the number of update requests made to each node in the cluster, thus
+increase network efficiency.

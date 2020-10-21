@@ -1,9 +1,10 @@
 module github.com/mailgun/gubernator
 
+go 1.14
+
 require (
 	github.com/coreos/etcd v3.3.15+incompatible
 	github.com/davecgh/go-spew v1.1.1
-	github.com/fatih/structs v1.1.0 // indirect
 	github.com/golang/protobuf v1.3.2
 	github.com/grpc-ecosystem/grpc-gateway v1.11.1
 	github.com/hashicorp/memberlist v0.2.0
@@ -23,4 +24,3 @@ require (
 	k8s.io/klog v0.3.1
 )
 
-go 1.13

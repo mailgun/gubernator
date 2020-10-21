@@ -1,5 +1,5 @@
 /*
-Copyright 2018-2020 Technologies Inc
+Copyright 2018-2020 Mailgun Technologies Inc
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"strings"
 
-	etcd "github.com/coreos/etcd/clientv3"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/mailgun/holster/v3/etcdutil"
 	"github.com/mailgun/holster/v3/setter"
@@ -37,25 +36,43 @@ import (
 var DebugEnabled = false
 
 type DaemonConfig struct {
+	// (Required) The `address:port` that will accept GRPC requests
 	GRPCListenAddress string
+
+	// (Required) The `address:port` that will accept HTTP requests
 	HTTPListenAddress string
-	AdvertiseAddress  string
-	EtcdKeyPrefix     string
-	CacheSize         int
 
-	// Deprecated, use AdvertiseAddress instead
-	EtcdAdvertiseAddress string
+	// (Optional) The `address:port` that is advertised to other Gubernator peers.
+	// Defaults to `GRPCListenAddress`
+	AdvertiseAddress string
 
-	// Etcd configuration used to find peers
-	EtcdConf etcd.Config
+	// (Optional) The number of items in the cache. Defaults to 50,000
+	CacheSize int
 
-	// Configure how behaviours behave
+	// (Optional) Configure how behaviours behave
 	Behaviors BehaviorConfig
 
-	// K8s configuration used to find peers inside a K8s cluster
+	// (Optional) Identifies the datacenter this instance is running in. For
+	// use with multi-region support
+	DataCenter string
+
+	// (Optional) Which pool to use when discovering other Gubernator peers
+	//  Valid options are [etcd, k8s, member-list] (Defaults to 'member-list')
+	PeerDiscoveryType string
+
+	// (Optional) Etcd configuration used for peer discovery
+	EtcdPoolConf EtcdPoolConfig
+
+	// (Optional) K8s configuration used for peer discovery
 	K8PoolConf K8sPoolConfig
 
-	// A Logger from logrus
+	// (Optional) Member list configuration used for peer discovery
+	MemberListPoolConf MemberListPoolConfig
+
+	// (Optional) The PeerPicker as selected by `GUBER_PEER_PICKER`
+	Picker PeerPicker
+
+	// (Optional) A Logger which implements the declared logger interface (typically *logrus.Entry)
 	Logger logrus.FieldLogger
 }
 
@@ -85,9 +102,6 @@ func SpawnDaemon(ctx context.Context, conf DaemonConfig) (*Daemon, error) {
 	}
 	setter.SetDefault(&s.log, logrus.WithField("category", "gubernator"))
 
-	// Handle deprecated advertise address
-	s.conf.AdvertiseAddress = s.conf.EtcdAdvertiseAddress
-
 	if err := s.Start(ctx); err != nil {
 		return nil, err
 	}
@@ -115,15 +129,17 @@ func (s *Daemon) Start(ctx context.Context) error {
 
 	// Registers a new gubernator instance with the GRPC server
 	s.V1Server, err = NewV1Instance(Config{
-		GRPCServer: s.grpcSrv,
-		Cache:      cache,
-		Logger:     s.log,
+		DataCenter:  s.conf.DataCenter,
+		LocalPicker: s.conf.Picker,
+		GRPCServer:  s.grpcSrv,
+		Logger:      s.log,
+		Cache:       cache,
 	})
 	if err != nil {
 		return errors.Wrap(err, "while creating new gubernator instance")
 	}
 
-	// v1Server instance also implements prometheus.Collector interface
+	// V1Server instance also implements prometheus.Collector interface
 	s.promRegister.Register(s.V1Server)
 
 	s.GRPCListener, err = net.Listen("tcp", s.conf.GRPCListenAddress)
@@ -139,30 +155,33 @@ func (s *Daemon) Start(ctx context.Context) error {
 		}
 	})
 
-	if s.conf.K8PoolConf.Enabled {
+	switch s.conf.PeerDiscoveryType {
+	case "k8s":
 		// Source our list of peers from kubernetes endpoint API
 		s.conf.K8PoolConf.OnUpdate = s.V1Server.SetPeers
 		s.pool, err = NewK8sPool(s.conf.K8PoolConf)
 		if err != nil {
 			return errors.Wrap(err, "while querying kubernetes API")
 		}
-	}
-
-	if s.conf.EtcdConf.Endpoints != nil {
+	case "etcd":
+		s.conf.EtcdPoolConf.OnUpdate = s.V1Server.SetPeers
 		// Register ourselves with other peers via ETCD
-		etcdClient, err := etcdutil.NewClient(&s.conf.EtcdConf)
+		s.conf.EtcdPoolConf.Client, err = etcdutil.NewClient(s.conf.EtcdPoolConf.EtcdConfig)
 		if err != nil {
 			return errors.Wrap(err, "while connecting to etcd")
 		}
 
-		s.pool, err = NewEtcdPool(EtcdPoolConfig{
-			AdvertiseAddress: s.conf.AdvertiseAddress,
-			OnUpdate:         s.V1Server.SetPeers,
-			Client:           etcdClient,
-			BaseKey:          s.conf.EtcdKeyPrefix,
-		})
+		s.pool, err = NewEtcdPool(s.conf.EtcdPoolConf)
 		if err != nil {
-			return errors.Wrap(err, "while registering with ETCD API")
+			return errors.Wrap(err, "while creating etcd pool")
+		}
+	case "member-list":
+		s.conf.MemberListPoolConf.OnUpdate = s.V1Server.SetPeers
+		s.conf.MemberListPoolConf.Logger = s.log
+		// Register peer on member list
+		s.pool, err = NewMemberListPool(s.conf.MemberListPoolConf)
+		if err != nil {
+			return errors.Wrap(err, "while creating member list pool")
 		}
 	}
 
@@ -193,7 +212,9 @@ func (s *Daemon) Start(ctx context.Context) error {
 	s.wg.Go(func() {
 		s.log.Infof("HTTP Gateway Listening on %s ...", s.conf.HTTPListenAddress)
 		if err := s.httpSrv.Serve(s.HTTPListener); err != nil {
-			s.log.WithError(err).Error("while starting HTTP server")
+			if err != http.ErrServerClosed {
+				s.log.WithError(err).Error("while starting HTTP server")
+			}
 		}
 	})
 

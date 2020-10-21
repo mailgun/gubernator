@@ -26,18 +26,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type Address struct {
-	HTTPAddress string
-	GRPCAddress string
-}
-
-func (a *Address) PeerInfo() gubernator.PeerInfo {
-	return gubernator.PeerInfo{
-		HTTPAddress: a.GRPCAddress,
-		GRPCAddress: a.GRPCAddress,
-	}
-}
-
 var daemons []*gubernator.Daemon
 var peers []gubernator.PeerInfo
 

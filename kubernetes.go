@@ -51,7 +51,6 @@ type K8sPoolConfig struct {
 	Selector  string
 	PodIP     string
 	PodPort   string
-	Enabled   bool
 }
 
 func NewK8sPool(conf K8sPoolConfig) (*K8sPool, error) {

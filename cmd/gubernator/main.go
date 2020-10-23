@@ -29,11 +29,11 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
 
 	etcd "github.com/coreos/etcd/clientv3"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/mailgun/gubernator"
+	"github.com/mailgun/holster/v3/clock"
 	"github.com/mailgun/holster/v3/setter"
 	"github.com/mailgun/holster/v3/slice"
 	"github.com/pkg/errors"
@@ -59,7 +59,7 @@ func main() {
 	conf, err := confFromFile(configFile)
 	checkErr(err, "while getting config")
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
 	defer cancel()
 
 	// Start the daemon
@@ -142,7 +142,7 @@ func confFromFile(configFile string) (gubernator.DaemonConfig, error) {
 	setter.SetDefault(&conf.EtcdPoolConf.KeyPrefix, os.Getenv("GUBER_ETCD_KEY_PREFIX"), "/gubernator-peers")
 	setter.SetDefault(&conf.EtcdPoolConf.EtcdConfig, &etcd.Config{})
 	setter.SetDefault(&conf.EtcdPoolConf.EtcdConfig.Endpoints, getEnvSlice("GUBER_ETCD_ENDPOINTS"), []string{"localhost:2379"})
-	setter.SetDefault(&conf.EtcdPoolConf.EtcdConfig.DialTimeout, getEnvDuration("GUBER_ETCD_DIAL_TIMEOUT"), time.Second*5)
+	setter.SetDefault(&conf.EtcdPoolConf.EtcdConfig.DialTimeout, getEnvDuration("GUBER_ETCD_DIAL_TIMEOUT"), clock.Second*5)
 	setter.SetDefault(&conf.EtcdPoolConf.EtcdConfig.Username, os.Getenv("GUBER_ETCD_USER"))
 	setter.SetDefault(&conf.EtcdPoolConf.EtcdConfig.Password, os.Getenv("GUBER_ETCD_PASSWORD"))
 	setter.SetDefault(&conf.EtcdPoolConf.AdvertiseAddress, os.Getenv("GUBER_ETCD_ADVERTISE_ADDRESS"), conf.AdvertiseAddress)
@@ -319,12 +319,12 @@ func getEnvInteger(name string) int {
 	return int(i)
 }
 
-func getEnvDuration(name string) time.Duration {
+func getEnvDuration(name string) clock.Duration {
 	v := os.Getenv(name)
 	if v == "" {
 		return 0
 	}
-	d, err := time.ParseDuration(v)
+	d, err := clock.ParseDuration(v)
 	if err != nil {
 		log.WithError(err).Errorf("while parsing '%s' as a duration", name)
 		return 0

@@ -19,14 +19,14 @@ package gubernator_test
 import (
 	"context"
 	"fmt"
-	"google.golang.org/grpc"
 	"net"
 	"testing"
-	"time"
 
 	"github.com/mailgun/gubernator"
+	"github.com/mailgun/holster/v3/clock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 )
 
 type v1Server struct {
@@ -59,7 +59,7 @@ func newV1Server(t *testing.T, address string, conf gubernator.Config) *v1Server
 
 	srv.SetPeers([]gubernator.PeerInfo{{GRPCAddress: listener.Addr().String(), IsOwner: true}})
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
 
 	err = gubernator.WaitForConnect(ctx, []string{listener.Addr().String()})
 	require.NoError(t, err)
@@ -77,8 +77,8 @@ func TestLoader(t *testing.T) {
 
 	srv := newV1Server(t, "", gubernator.Config{
 		Behaviors: gubernator.BehaviorConfig{
-			GlobalSyncWait: time.Millisecond * 50, // Suitable for testing but not production
-			GlobalTimeout:  time.Second,
+			GlobalSyncWait: clock.Millisecond * 50, // Suitable for testing but not production
+			GlobalTimeout:  clock.Second,
 		},
 		Loader: loader,
 	})
@@ -209,8 +209,8 @@ func TestStore(t *testing.T) {
 
 			srv := newV1Server(t, "", gubernator.Config{
 				Behaviors: gubernator.BehaviorConfig{
-					GlobalSyncWait: time.Millisecond * 50, // Suitable for testing but not production
-					GlobalTimeout:  time.Second,
+					GlobalSyncWait: clock.Millisecond * 50, // Suitable for testing but not production
+					GlobalTimeout:  clock.Second,
 				},
 				Store: store,
 			})

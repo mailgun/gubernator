@@ -26,9 +26,9 @@ import (
 	"net"
 	"runtime"
 	"strconv"
-	"time"
 
 	ml "github.com/hashicorp/memberlist"
+	"github.com/mailgun/holster/v3/clock"
 	"github.com/mailgun/holster/v3/retry"
 	"github.com/mailgun/holster/v3/setter"
 	"github.com/pkg/errors"
@@ -142,7 +142,7 @@ func (m *MemberListPool) joinPool(ctx context.Context, knownNodes []string, meta
 	}
 	node.Meta = serializedMetadata
 
-	err = retry.Until(ctx, retry.Interval(time.Millisecond*300), func(ctx context.Context, i int) error {
+	err = retry.Until(ctx, retry.Interval(clock.Millisecond*300), func(ctx context.Context, i int) error {
 		// Join member list
 		_, err = m.memberList.Join(knownNodes)
 		if err != nil {
@@ -161,7 +161,7 @@ func (m *MemberListPool) joinPool(ctx context.Context, knownNodes []string, meta
 }
 
 func (m *MemberListPool) Close() {
-	err := m.memberList.Leave(time.Second)
+	err := m.memberList.Leave(clock.Second)
 	if err != nil {
 		m.log.Warn(errors.Wrap(err, "while leaving member-list"))
 	}

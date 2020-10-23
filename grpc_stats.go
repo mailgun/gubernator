@@ -18,15 +18,15 @@ package gubernator
 
 import (
 	"context"
-	"time"
 
+	"github.com/mailgun/holster/v3/clock"
 	"github.com/mailgun/holster/v3/syncutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc/stats"
 )
 
 type GRPCStats struct {
-	Duration time.Duration
+	Duration clock.Duration
 	Method   string
 	Failed   int64
 	Success  int64

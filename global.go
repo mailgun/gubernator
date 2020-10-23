@@ -18,8 +18,8 @@ package gubernator
 
 import (
 	"context"
-	"time"
 
+	"github.com/mailgun/holster/v3/clock"
 	"github.com/mailgun/holster/v3/syncutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
@@ -119,7 +119,7 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 		req    GetPeerRateLimitsReq
 	}
 	peerRequests := make(map[string]*pair)
-	start := time.Now()
+	start := clock.Now()
 
 	// Assign each request to a peer
 	for _, r := range hits {
@@ -152,7 +152,7 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 			continue
 		}
 	}
-	gm.asyncMetrics.Observe(time.Since(start).Seconds())
+	gm.asyncMetrics.Observe(clock.Since(start).Seconds())
 }
 
 // runBroadcasts collects status changes for global rate limits and broadcasts the changes to each peer in the cluster.
@@ -193,7 +193,7 @@ func (gm *globalManager) runBroadcasts() {
 // broadcastPeers broadcasts global rate limit statuses to all other peers
 func (gm *globalManager) broadcastPeers(updates map[string]*RateLimitReq) {
 	var req UpdatePeerGlobalsReq
-	start := time.Now()
+	start := clock.Now()
 
 	for _, r := range updates {
 		// Copy the original since we removing the GLOBAL behavior
@@ -235,5 +235,5 @@ func (gm *globalManager) broadcastPeers(updates map[string]*RateLimitReq) {
 		}
 	}
 
-	gm.broadcastMetrics.Observe(time.Since(start).Seconds())
+	gm.broadcastMetrics.Observe(clock.Since(start).Seconds())
 }

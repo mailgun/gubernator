@@ -19,9 +19,9 @@ package gubernator
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	etcd "github.com/coreos/etcd/clientv3"
+	"github.com/mailgun/holster/v3/clock"
 	"github.com/mailgun/holster/v3/setter"
 	"github.com/mailgun/holster/v3/syncutil"
 	"github.com/pkg/errors"
@@ -29,8 +29,8 @@ import (
 )
 
 const (
-	etcdTimeout    = time.Second * 10
-	backOffTimeout = time.Second * 5
+	etcdTimeout    = clock.Second * 10
+	backOffTimeout = clock.Second * 5
 	leaseTTL       = 30
 	defaultBaseKey = "/gubernator/peers/"
 )
@@ -135,7 +135,7 @@ func (e *EtcdPool) watchPeers() error {
 	select {
 	case <-ready:
 		e.log.Infof("watching for peer changes '%s' at revision %d", e.conf.KeyPrefix, revision)
-	case <-time.After(etcdTimeout):
+	case <-clock.After(etcdTimeout):
 		return errors.New("timed out while waiting for watcher.Watch() to start")
 	}
 	return nil
@@ -221,7 +221,7 @@ func (e *EtcdPool) watch() error {
 			e.log.WithError(err).
 				Error("while attempting to restart watch")
 			select {
-			case <-time.After(backOffTimeout):
+			case <-clock.After(backOffTimeout):
 				return true
 			case <-done:
 				return false
@@ -269,7 +269,7 @@ func (e *EtcdPool) register(name string) error {
 		return nil
 	}
 
-	var lastKeepAlive time.Time
+	var lastKeepAlive clock.Time
 
 	// Attempt to register our instance with etcd
 	if err = register(); err != nil {
@@ -283,7 +283,7 @@ func (e *EtcdPool) register(name string) error {
 				e.log.WithError(err).
 					Error("while attempting to re-register peer")
 				select {
-				case <-time.After(backOffTimeout):
+				case <-clock.After(backOffTimeout):
 					return true
 				case <-done:
 					return false
@@ -306,12 +306,12 @@ func (e *EtcdPool) register(name string) error {
 			}
 
 			// Ensure we are getting keep alive's regularly
-			if lastKeepAlive.Sub(time.Now()) > time.Second*leaseTTL {
+			if lastKeepAlive.Sub(clock.Now()) > clock.Second*leaseTTL {
 				e.log.Warn("to long between keep alive heartbeats, re-registering peer")
 				keepAlive = nil
 				return true
 			}
-			lastKeepAlive = time.Now()
+			lastKeepAlive = clock.Now()
 		case <-done:
 			ctx, cancel := context.WithTimeout(context.Background(), etcdTimeout)
 			if _, err := e.conf.Client.Delete(ctx, instanceKey); err != nil {

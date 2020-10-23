@@ -20,8 +20,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
+	"github.com/mailgun/holster/v3/clock"
 	"github.com/mailgun/holster/v3/collections"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -205,7 +205,7 @@ func (c *PeerClient) setLastErr(err error) error {
 	key := err.Error()
 
 	// Add error to the cache with a TTL of 5 minutes
-	c.lastErrs.AddWithTTL(key, errWithHostname, time.Minute*5)
+	c.lastErrs.AddWithTTL(key, errWithHostname, clock.Minute*5)
 
 	return err
 }

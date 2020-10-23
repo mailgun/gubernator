@@ -22,10 +22,10 @@ import (
 	"net/http"
 	"os"
 	"testing"
-	"time"
 
 	guber "github.com/mailgun/gubernator"
 	"github.com/mailgun/gubernator/cluster"
+	"github.com/mailgun/holster/v3/clock"
 	"github.com/mailgun/holster/v3/testutil"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
@@ -98,28 +98,30 @@ func TestOverTheLimit(t *testing.T) {
 }
 
 func TestTokenBucket(t *testing.T) {
+	defer clock.Freeze(clock.Now()).Unfreeze()
+
 	client, errs := guber.DialV1Server(cluster.GetRandomPeer().GRPCAddress)
 	require.Nil(t, errs)
 
 	tests := []struct {
 		Remaining int64
 		Status    guber.Status
-		Sleep     time.Duration
+		Sleep     clock.Duration
 	}{
 		{
 			Remaining: 1,
 			Status:    guber.Status_UNDER_LIMIT,
-			Sleep:     time.Duration(0),
+			Sleep:     clock.Duration(0),
 		},
 		{
 			Remaining: 0,
 			Status:    guber.Status_UNDER_LIMIT,
-			Sleep:     time.Duration(time.Millisecond * 5),
+			Sleep:     clock.Duration(clock.Millisecond * 100),
 		},
 		{
 			Remaining: 1,
 			Status:    guber.Status_UNDER_LIMIT,
-			Sleep:     time.Duration(0),
+			Sleep:     clock.Duration(0),
 		},
 	}
 
@@ -145,11 +147,13 @@ func TestTokenBucket(t *testing.T) {
 		assert.Equal(t, test.Remaining, rl.Remaining)
 		assert.Equal(t, int64(2), rl.Limit)
 		assert.True(t, rl.ResetTime != 0)
-		time.Sleep(test.Sleep)
+		clock.Advance(test.Sleep)
 	}
 }
 
 func TestLeakyBucket(t *testing.T) {
+	defer clock.Freeze(clock.Now()).Unfreeze()
+
 	client, errs := guber.DialV1Server(cluster.PeerAt(0).GRPCAddress)
 	require.Nil(t, errs)
 
@@ -157,31 +161,31 @@ func TestLeakyBucket(t *testing.T) {
 		Hits      int64
 		Remaining int64
 		Status    guber.Status
-		Sleep     time.Duration
+		Sleep     clock.Duration
 	}{
 		{
 			Hits:      5,
 			Remaining: 0,
 			Status:    guber.Status_UNDER_LIMIT,
-			Sleep:     time.Duration(0),
+			Sleep:     clock.Duration(0),
 		},
 		{
 			Hits:      1,
 			Remaining: 0,
 			Status:    guber.Status_OVER_LIMIT,
-			Sleep:     time.Duration(time.Millisecond * 10),
+			Sleep:     clock.Millisecond * 100,
 		},
 		{
 			Hits:      1,
 			Remaining: 0,
 			Status:    guber.Status_UNDER_LIMIT,
-			Sleep:     time.Duration(time.Millisecond * 20),
+			Sleep:     clock.Millisecond * 400,
 		},
 		{
 			Hits:      1,
-			Remaining: 1,
+			Remaining: 4,
 			Status:    guber.Status_UNDER_LIMIT,
-			Sleep:     time.Duration(0),
+			Sleep:     clock.Duration(0),
 		},
 	}
 
@@ -192,13 +196,14 @@ func TestLeakyBucket(t *testing.T) {
 					Name:      "test_leaky_bucket",
 					UniqueKey: "account:1234",
 					Algorithm: guber.Algorithm_LEAKY_BUCKET,
-					Duration:  guber.Millisecond * 50,
+					Duration:  guber.Millisecond * 300,
 					Hits:      test.Hits,
 					Limit:     5,
 				},
 			},
 		})
-		require.Nil(t, err)
+		clock.Freeze(clock.Now())
+		require.NoError(t, err)
 
 		rl := resp.Responses[0]
 
@@ -206,7 +211,7 @@ func TestLeakyBucket(t *testing.T) {
 		assert.Equal(t, test.Remaining, rl.Remaining, i)
 		assert.Equal(t, int64(5), rl.Limit, i)
 		assert.True(t, rl.ResetTime != 0)
-		time.Sleep(test.Sleep)
+		clock.Advance(test.Sleep)
 	}
 }
 
@@ -279,7 +284,7 @@ func TestGlobalRateLimits(t *testing.T) {
 	require.NoError(t, errs)
 
 	sendHit := func(status guber.Status, remain int64, i int) string {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*5)
 		defer cancel()
 		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
 			Requests: []*guber.RateLimitReq{
@@ -316,7 +321,7 @@ func TestGlobalRateLimits(t *testing.T) {
 	// Our second should be processed as if we own it since the async forward hasn't occurred yet
 	sendHit(guber.Status_UNDER_LIMIT, 3, 2)
 
-	testutil.UntilPass(t, 20, time.Millisecond*200, func(t testutil.TestingT) {
+	testutil.UntilPass(t, 20, clock.Millisecond*200, func(t testutil.TestingT) {
 		// Inspect our metrics, ensure they collected the counts we expected during this test
 		d := cluster.DaemonAt(0)
 		metricCh := make(chan prometheus.Metric, 5)
@@ -558,7 +563,7 @@ func TestHealthCheck(t *testing.T) {
 	})
 	require.Nil(t, err)
 
-	testutil.UntilPass(t, 20, time.Millisecond*300, func(t testutil.TestingT) {
+	testutil.UntilPass(t, 20, clock.Millisecond*300, func(t testutil.TestingT) {
 		// Check the health again to get back the connection error
 		healthResp, err = client.HealthCheck(context.Background(), &guber.HealthCheckReq{})
 		if assert.Nil(t, err) {
@@ -570,7 +575,7 @@ func TestHealthCheck(t *testing.T) {
 	})
 
 	// Restart stopped instances
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	ctx, cancel := context.WithTimeout(context.Background(), clock.Second*15)
 	defer cancel()
 	cluster.Restart(ctx)
 

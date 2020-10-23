@@ -18,8 +18,8 @@ package gubernator
 
 import (
 	"math/rand"
-	"time"
 
+	"github.com/mailgun/holster/v3/clock"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
@@ -48,18 +48,18 @@ func DialV1Server(server string) (V1Client, error) {
 	return NewV1Client(conn), nil
 }
 
-// Convert a time.Duration to a unix millisecond timestamp
-func ToTimeStamp(duration time.Duration) int64 {
-	return int64(duration / time.Millisecond)
+// Convert a clock.Duration to a unix millisecond timestamp
+func ToTimeStamp(duration clock.Duration) int64 {
+	return int64(duration / clock.Millisecond)
 }
 
 // Convert a unix millisecond timestamp to a time.Duration
-func FromTimeStamp(ts int64) time.Duration {
-	return time.Now().Sub(FromUnixMilliseconds(ts))
+func FromTimeStamp(ts int64) clock.Duration {
+	return clock.Now().Sub(FromUnixMilliseconds(ts))
 }
 
-func FromUnixMilliseconds(ts int64) time.Time {
-	return time.Unix(0, ts*int64(time.Millisecond))
+func FromUnixMilliseconds(ts int64) clock.Time {
+	return clock.Unix(0, ts*int64(clock.Millisecond))
 }
 
 // Given a list of peers, return a random peer

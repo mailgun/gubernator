@@ -21,8 +21,8 @@ package gubernator
 import (
 	"container/list"
 	"sync"
-	"time"
 
+	"github.com/mailgun/holster/v3/clock"
 	"github.com/mailgun/holster/v3/setter"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -131,7 +131,7 @@ func (c *LRUCache) Add(record *CacheItem) bool {
 
 // Return unix epoch in milliseconds
 func MillisecondNow() int64 {
-	return time.Now().UnixNano() / 1000000
+	return clock.Now().UnixNano() / 1000000
 }
 
 // GetItem returns the item stored in the cache

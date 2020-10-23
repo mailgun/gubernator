@@ -5,10 +5,10 @@ import (
 	"runtime"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/mailgun/gubernator"
 	"github.com/mailgun/gubernator/cluster"
+	"github.com/mailgun/holster/v3/clock"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -27,12 +27,12 @@ func TestPeerClientShutdown(t *testing.T) {
 	}
 
 	config := gubernator.BehaviorConfig{
-		BatchTimeout: 250 * time.Millisecond,
-		BatchWait:    250 * time.Millisecond,
+		BatchTimeout: 250 * clock.Millisecond,
+		BatchWait:    250 * clock.Millisecond,
 		BatchLimit:   100,
 
-		GlobalSyncWait:   250 * time.Millisecond,
-		GlobalTimeout:    250 * time.Millisecond,
+		GlobalSyncWait:   250 * clock.Millisecond,
+		GlobalTimeout:    250 * clock.Millisecond,
 		GlobalBatchLimit: 100,
 	}
 

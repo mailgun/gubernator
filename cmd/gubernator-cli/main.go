@@ -21,10 +21,10 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	guber "github.com/mailgun/gubernator"
+	"github.com/mailgun/holster/v3/clock"
 	"github.com/mailgun/holster/v3/syncutil"
 )
 
@@ -57,7 +57,7 @@ func main() {
 			UniqueKey: guber.RandomString(10),
 			Hits:      1,
 			Limit:     randInt(1, 10),
-			Duration:  randInt(int(time.Millisecond*500), int(time.Second*6)),
+			Duration:  randInt(int(clock.Millisecond*500), int(clock.Second*6)),
 			Algorithm: guber.Algorithm_TOKEN_BUCKET,
 		})
 	}
@@ -67,7 +67,7 @@ func main() {
 		for _, rateLimit := range rateLimits {
 			fan.Run(func(obj interface{}) error {
 				r := obj.(*guber.RateLimitReq)
-				ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*500)
+				ctx, cancel := context.WithTimeout(context.Background(), clock.Millisecond*500)
 				// Now hit our cluster with the rate limits
 				resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
 					Requests: []*guber.RateLimitReq{r},

@@ -4,8 +4,8 @@ import (
 	"math/rand"
 	"net"
 	"testing"
-	"time"
 
+	"github.com/mailgun/holster/v3/clock"
 	"github.com/segmentio/fasthash/fnv1"
 	"github.com/segmentio/fasthash/fnv1a"
 	"github.com/stretchr/testify/assert"
@@ -41,7 +41,7 @@ func TestReplicatedConsistantHash(t *testing.T) {
 
 	t.Run("distribution", func(t *testing.T) {
 		const cases = 10000
-		rand.Seed(time.Now().Unix())
+		rand.Seed(clock.Now().Unix())
 
 		strings := make([]string, cases)
 

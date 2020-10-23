@@ -19,9 +19,9 @@ package cluster
 import (
 	"context"
 	"math/rand"
-	"time"
 
 	"github.com/mailgun/gubernator"
+	"github.com/mailgun/holster/v3/clock"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -76,17 +76,17 @@ func Restart(ctx context.Context) {
 // Start a local cluster with specific addresses
 func StartWith(localPeers []gubernator.PeerInfo) error {
 	for _, peer := range localPeers {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
 		d, err := gubernator.SpawnDaemon(ctx, gubernator.DaemonConfig{
 			Logger:            logrus.WithField("instance", peer.GRPCAddress),
 			GRPCListenAddress: peer.GRPCAddress,
 			HTTPListenAddress: peer.HTTPAddress,
 			Behaviors: gubernator.BehaviorConfig{
 				// Suitable for testing but not production
-				GlobalSyncWait:     time.Millisecond * 50,
-				GlobalTimeout:      time.Second * 5,
-				BatchTimeout:       time.Second * 5,
-				MultiRegionTimeout: time.Second * 5,
+				GlobalSyncWait:     clock.Millisecond * 50,
+				GlobalTimeout:      clock.Second * 5,
+				BatchTimeout:       clock.Second * 5,
+				MultiRegionTimeout: clock.Second * 5,
 			},
 		})
 		cancel()

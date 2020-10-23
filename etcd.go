@@ -18,6 +18,7 @@ package gubernator
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	etcd "github.com/coreos/etcd/clientv3"
@@ -26,24 +27,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
-
-type PeerInfo struct {
-	// (Optional) The name of the data center this peer is in. Leave blank if not using multi data center support.
-	DataCenter string
-	// (Optional) The http address:port of the peer
-	HTTPAddress string
-	// (Required) The grpc address:port of the peer
-	GRPCAddress string
-	// (Optional) Is true if PeerInfo is for this instance of gubernator
-	IsOwner bool
-}
-
-// Returns the hash key used to identify this peer in the Picker.
-func (p PeerInfo) HashKey() string {
-	return p.GRPCAddress
-}
-
-type UpdateFunc func([]PeerInfo)
 
 const (
 	etcdTimeout    = time.Second * 10
@@ -57,7 +40,7 @@ type PoolInterface interface {
 }
 
 type EtcdPool struct {
-	peers     map[string]struct{}
+	peers     map[string]PeerInfo
 	wg        syncutil.WaitGroup
 	ctx       context.Context
 	cancelCtx context.CancelFunc
@@ -85,6 +68,9 @@ type EtcdPoolConfig struct {
 
 	// (Optional) An interface through which logging will occur (Usually *logrus.Entry)
 	Logger logrus.FieldLogger
+
+	// (Optional) The datacenter this instance belongs too
+	DataCenter string
 }
 
 func NewEtcdPool(conf EtcdPoolConfig) (*EtcdPool, error) {
@@ -102,7 +88,7 @@ func NewEtcdPool(conf EtcdPoolConfig) (*EtcdPool, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	pool := &EtcdPool{
 		log:       conf.Logger,
-		peers:     make(map[string]struct{}),
+		peers:     make(map[string]PeerInfo),
 		cancelCtx: cancel,
 		conf:      conf,
 		ctx:       ctx,
@@ -166,11 +152,23 @@ func (e *EtcdPool) collectPeers(revision *int64) error {
 
 	// Collect all the peers
 	for _, v := range resp.Kvs {
-		e.peers[string(v.Value)] = struct{}{}
+		p := e.unMarshallValue(v.Value)
+		e.peers[p.GRPCAddress] = p
 	}
 
 	e.callOnUpdate()
 	return nil
+}
+
+func (e *EtcdPool) unMarshallValue(v []byte) PeerInfo {
+	var p PeerInfo
+
+	// for backward compatible with older gubernator versions
+	if err := json.Unmarshal(v, &p); err != nil {
+		e.log.WithError(err).Errorf("while unmarshalling peer info from key value")
+		return PeerInfo{GRPCAddress: string(v)}
+	}
+	return p
 }
 
 func (e *EtcdPool) watch() error {
@@ -196,7 +194,8 @@ func (e *EtcdPool) watch() error {
 				case etcd.EventTypePut:
 					if event.Kv != nil {
 						e.log.Debugf("new peer [%s]", string(event.Kv.Value))
-						e.peers[string(event.Kv.Value)] = struct{}{}
+						p := e.unMarshallValue(event.Kv.Value)
+						e.peers[p.GRPCAddress] = p
 					}
 				case etcd.EventTypeDelete:
 					if event.PrevKv != nil {
@@ -238,6 +237,14 @@ func (e *EtcdPool) register(name string) error {
 	instanceKey := e.conf.KeyPrefix + name
 	e.log.Infof("Registering peer '%s' with etcd", name)
 
+	b, err := json.Marshal(PeerInfo{
+		GRPCAddress: e.conf.AdvertiseAddress,
+		DataCenter:  e.conf.DataCenter,
+	})
+	if err != nil {
+		return errors.Wrap(err, "while marshalling PeerInfo")
+	}
+
 	var keepAlive <-chan *etcd.LeaseKeepAliveResponse
 	var lease *etcd.LeaseGrantResponse
 
@@ -251,7 +258,7 @@ func (e *EtcdPool) register(name string) error {
 			return errors.Wrapf(err, "during grant lease")
 		}
 
-		_, err = e.conf.Client.Put(ctx, instanceKey, name, etcd.WithLease(lease.ID))
+		_, err = e.conf.Client.Put(ctx, instanceKey, string(b), etcd.WithLease(lease.ID))
 		if err != nil {
 			return errors.Wrap(err, "during put")
 		}
@@ -262,7 +269,6 @@ func (e *EtcdPool) register(name string) error {
 		return nil
 	}
 
-	var err error
 	var lastKeepAlive time.Time
 
 	// Attempt to register our instance with etcd
@@ -334,12 +340,8 @@ func (e *EtcdPool) Close() {
 func (e *EtcdPool) callOnUpdate() {
 	var peers []PeerInfo
 
-	for k := range e.peers {
-		if k == e.conf.AdvertiseAddress {
-			peers = append(peers, PeerInfo{Address: k, IsOwner: true})
-		} else {
-			peers = append(peers, PeerInfo{Address: k})
-		}
+	for _, v := range e.peers {
+		peers = append(peers, v)
 	}
 
 	e.conf.OnUpdate(peers)

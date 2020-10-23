@@ -26,6 +26,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -48,6 +49,7 @@ var Version = "dev-build"
 func main() {
 	var configFile string
 
+	logrus.Infof("Gubernator %s (%s/%s)", Version, runtime.GOARCH, runtime.GOOS)
 	flags := flag.NewFlagSet("gubernator", flag.ContinueOnError)
 	flags.StringVar(&configFile, "config", "", "yaml config file")
 	flags.BoolVar(&gubernator.DebugEnabled, "debug", false, "enable debug")
@@ -85,10 +87,10 @@ func confFromFile(configFile string) (gubernator.DaemonConfig, error) {
 	klog.InitFlags(nil)
 	flag.Set("logtostderr", "true")
 
-	if gubernator.DebugEnabled || os.Getenv("GUBER_DEBUG") != "" {
+	setter.SetDefault(&gubernator.DebugEnabled, getEnvBool("GUBER_DEBUG"))
+	if gubernator.DebugEnabled {
 		logrus.SetLevel(logrus.DebugLevel)
 		logrus.Debug("Debug enabled")
-		gubernator.DebugEnabled = true
 	}
 
 	if configFile != "" {
@@ -103,7 +105,18 @@ func confFromFile(configFile string) (gubernator.DaemonConfig, error) {
 	setter.SetDefault(&conf.HTTPListenAddress, os.Getenv("GUBER_HTTP_ADDRESS"), "localhost:80")
 	setter.SetDefault(&conf.CacheSize, getEnvInteger("GUBER_CACHE_SIZE"), 50_000)
 	setter.SetDefault(&conf.DataCenter, os.Getenv("GUBER_DATA_CENTER"), "")
+
 	setter.SetDefault(&conf.AdvertiseAddress, os.Getenv("GUBER_ADVERTISE_ADDRESS"), conf.GRPCListenAddress)
+
+	advAddr, advPort, err := net.SplitHostPort(conf.AdvertiseAddress)
+	if err != nil {
+		return conf, errors.Wrap(err, "GUBER_ADVERTISE_ADDRESS is invalid; expected format is `address:port`")
+	}
+	advAddr, err = gubernator.ResolveHostIP(advAddr)
+	if err != nil {
+		return conf, errors.Wrap(err, "failed to discover host ip for GUBER_ADVERTISE_ADDRESS")
+	}
+	conf.AdvertiseAddress = net.JoinHostPort(advAddr, advPort)
 
 	// Behaviors
 	setter.SetDefault(&conf.Behaviors.BatchTimeout, getEnvDuration("GUBER_BATCH_TIMEOUT"))
@@ -119,7 +132,7 @@ func confFromFile(configFile string) (gubernator.DaemonConfig, error) {
 	setter.SetDefault(&conf.Behaviors.MultiRegionSyncWait, getEnvDuration("GUBER_MULTI_REGION_SYNC_WAIT"))
 
 	choices := []string{"member-list", "k8s", "etcd"}
-	setter.SetDefault(&conf.PeerDiscoveryType, getEnvDuration("GUBER_PEER_DISCOVERY_TYPE"), "member-list")
+	setter.SetDefault(&conf.PeerDiscoveryType, os.Getenv("GUBER_PEER_DISCOVERY_TYPE"), "member-list")
 	if !slice.ContainsString(conf.PeerDiscoveryType, choices, nil) {
 		return conf, fmt.Errorf("GUBER_PEER_DISCOVERY_TYPE is invalid; choices are [%s]`", strings.Join(choices, ","))
 	}
@@ -132,15 +145,10 @@ func confFromFile(configFile string) (gubernator.DaemonConfig, error) {
 	setter.SetDefault(&conf.EtcdPoolConf.EtcdConfig.Username, os.Getenv("GUBER_ETCD_USER"))
 	setter.SetDefault(&conf.EtcdPoolConf.EtcdConfig.Password, os.Getenv("GUBER_ETCD_PASSWORD"))
 	setter.SetDefault(&conf.EtcdPoolConf.AdvertiseAddress, os.Getenv("GUBER_ETCD_ADVERTISE_ADDRESS"), conf.AdvertiseAddress)
-
-	// Memberlist Config
-	addr, _, err := net.SplitHostPort(conf.GRPCListenAddress)
-	if err != nil {
-		return conf, errors.Wrap(err, "GUBER_GRPC_ADDRESS is invalid; expected format is `address:port`")
-	}
+	setter.SetDefault(&conf.EtcdPoolConf.DataCenter, os.Getenv("GUBER_ETCD_DATA_CENTER"), conf.DataCenter)
 
 	setter.SetDefault(&conf.MemberListPoolConf.AdvertiseAddress, os.Getenv("GUBER_MEMBERLIST_ADVERTISE_ADDRESS"), conf.AdvertiseAddress)
-	setter.SetDefault(&conf.MemberListPoolConf.MemberListAddress, os.Getenv("GUBER_MEMBERLIST_ADDRESS"), fmt.Sprintf("%s:7946", addr))
+	setter.SetDefault(&conf.MemberListPoolConf.MemberListAddress, os.Getenv("GUBER_MEMBERLIST_ADDRESS"), fmt.Sprintf("%s:7946", advAddr))
 	setter.SetDefault(&conf.MemberListPoolConf.KnownNodes, getEnvSlice("GUBER_MEMBERLIST_KNOWN_NODES"), []string{})
 	setter.SetDefault(&conf.MemberListPoolConf.DataCenter, conf.DataCenter)
 
@@ -168,11 +176,11 @@ func confFromFile(configFile string) (gubernator.DaemonConfig, error) {
 				return conf, errors.Errorf("'GUBER_PEER_PICKER_HASH=%s' is invalid; choices are [%s]",
 					hash, validHashKeys(hashFuncs))
 			}
-			conf.Picker = gubernator.NewConsistantHash(fn)
+			conf.Picker = gubernator.NewConsistentHash(fn)
 
 		case "replicated-hash":
-			setter.SetDefault(&replicas, getEnvInteger("GUBER_REPLICATED_HASH_REPLICAS"), 1)
-			conf.Picker = gubernator.NewReplicatedConsistantHash(nil, replicas)
+			setter.SetDefault(&replicas, getEnvInteger("GUBER_REPLICATED_HASH_REPLICAS"), gubernator.DefaultReplicas)
+			conf.Picker = gubernator.NewReplicatedConsistentHash(nil, replicas)
 			setter.SetDefault(&hash, os.Getenv("GUBER_PEER_PICKER_HASH"), "fnv1a")
 			hashFuncs := map[string]gubernator.HashFunc64{
 				"fnv1a": fnv1a.HashBytes64,
@@ -183,7 +191,7 @@ func confFromFile(configFile string) (gubernator.DaemonConfig, error) {
 				return conf, errors.Errorf("'GUBER_PEER_PICKER_HASH=%s' is invalid; choices are [%s]",
 					hash, validHash64Keys(hashFuncs))
 			}
-			conf.Picker = gubernator.NewReplicatedConsistantHash(fn, replicas)
+			conf.Picker = gubernator.NewReplicatedConsistentHash(fn, replicas)
 		default:
 			return conf, errors.Errorf("'GUBER_PEER_PICKER=%s' is invalid; choices are ['replicated-hash', 'consistent-hash']", pp)
 		}
@@ -282,6 +290,19 @@ func anyHasPrefix(prefix string, items []string) bool {
 		}
 	}
 	return false
+}
+
+func getEnvBool(name string) bool {
+	v := os.Getenv(name)
+	if v == "" {
+		return false
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		log.WithError(err).Errorf("while parsing '%s' as an boolean", name)
+		return false
+	}
+	return b
 }
 
 func getEnvInteger(name string) int {

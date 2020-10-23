@@ -316,7 +316,7 @@ func TestGlobalRateLimits(t *testing.T) {
 	// Our second should be processed as if we own it since the async forward hasn't occurred yet
 	sendHit(guber.Status_UNDER_LIMIT, 3, 2)
 
-	testutil.UntilPass(t, 10, time.Millisecond*200, func(t testutil.TestingT) {
+	testutil.UntilPass(t, 20, time.Millisecond*200, func(t testutil.TestingT) {
 		// Inspect our metrics, ensure they collected the counts we expected during this test
 		d := cluster.DaemonAt(0)
 		metricCh := make(chan prometheus.Metric, 5)
@@ -327,8 +327,8 @@ func TestGlobalRateLimits(t *testing.T) {
 		assert.Nil(t, m.Write(&buf))
 		assert.Equal(t, uint64(2), *buf.Histogram.SampleCount)
 
-		// V1Instance 3 should be the owner of our global rate limit
-		d = cluster.DaemonAt(3)
+		// V1Instance 2 should be the owner of our global rate limit
+		d = cluster.DaemonAt(2)
 		metricCh = make(chan prometheus.Metric, 5)
 		d.V1Server.Collect(metricCh)
 

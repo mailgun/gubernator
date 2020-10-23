@@ -19,10 +19,10 @@ package gubernator
 import (
 	"context"
 	"fmt"
-	"github.com/mailgun/holster/v3/setter"
 	"strings"
 	"sync"
 
+	"github.com/mailgun/holster/v3/setter"
 	"github.com/mailgun/holster/v3/syncutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -379,7 +379,7 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 	s.conf.RegionPicker = regionPicker
 	s.peerMutex.Unlock()
 
-	//TODO: This should include the regions peers? log.WithField("peers", peers).Info("Peers updated")
+	s.log.WithField("peers", peerInfo).Debug("peers updated")
 
 	// Shutdown any old peers we no longer need
 	ctx, cancel := context.WithTimeout(context.Background(), s.conf.Behaviors.BatchTimeout)
@@ -414,7 +414,11 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 	wg.Wait()
 
 	if len(shutdownPeers) > 0 {
-		s.log.WithField("peers", shutdownPeers).Info("Peers shutdown")
+		var peers []string
+		for _, p := range shutdownPeers {
+			peers = append(peers, p.info.GRPCAddress)
+		}
+		s.log.WithField("peers", peers).Debug("Peers shutdown")
 	}
 }
 

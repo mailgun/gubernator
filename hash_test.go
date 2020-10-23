@@ -21,7 +21,7 @@ func TestConsistantHash(t *testing.T) {
 			"192.168.1.2":                          hosts[1],
 			"5f46bb53-6c30-49dc-adb4-b7355058adb6": hosts[1],
 		}
-		hash := NewConsistantHash(nil)
+		hash := NewConsistentHash(nil)
 		for _, h := range hosts {
 			hash.Add(&PeerClient{info: PeerInfo{GRPCAddress: h}})
 		}
@@ -37,7 +37,7 @@ func TestConsistantHash(t *testing.T) {
 	})
 
 	t.Run("Size", func(t *testing.T) {
-		hash := NewConsistantHash(nil)
+		hash := NewConsistentHash(nil)
 
 		for _, h := range hosts {
 			hash.Add(&PeerClient{info: PeerInfo{GRPCAddress: h}})
@@ -47,7 +47,7 @@ func TestConsistantHash(t *testing.T) {
 	})
 
 	t.Run("Host", func(t *testing.T) {
-		hash := NewConsistantHash(nil)
+		hash := NewConsistentHash(nil)
 		hostMap := map[string]*PeerClient{}
 
 		for _, h := range hosts {
@@ -81,7 +81,7 @@ func TestConsistantHash(t *testing.T) {
 
 		for name, hashFunc := range hashFuncs {
 			t.Run(name, func(t *testing.T) {
-				hash := NewConsistantHash(hashFunc)
+				hash := NewConsistentHash(hashFunc)
 				hostMap := map[string]int{}
 
 				for _, h := range hosts {
@@ -117,7 +117,7 @@ func BenchmarkConsistantHash(b *testing.B) {
 				ips[i] = net.IPv4(byte(i>>24), byte(i>>16), byte(i>>8), byte(i)).String()
 			}
 
-			hash := NewConsistantHash(hashFunc)
+			hash := NewConsistentHash(hashFunc)
 			hosts := []string{"a.svc.local", "b.svc.local", "c.svc.local"}
 			for _, h := range hosts {
 				hash.Add(&PeerClient{info: PeerInfo{GRPCAddress: h}})

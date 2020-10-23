@@ -1,5 +1,20 @@
 version: '3'
 services:
+  etcd:
+    image: quay.io/coreos/etcd:v3.3.10
+    command: >
+      /usr/local/bin/etcd
+      -name etcd0
+      -advertise-client-urls http://localhost:2379
+      -listen-client-urls http://0.0.0.0:2379
+      -initial-advertise-peer-urls http://0.0.0.0:2380
+      -listen-peer-urls http://0.0.0.0:2380
+      -initial-cluster-token etcd-cluster-1
+      -initial-cluster etcd0=http://0.0.0.0:2380
+      -initial-cluster-state new
+    ports:
+      - "2379:2379"
+
   gubernator-1:
     image: thrawn01/gubernator:latest
     command: "/gubernator"
@@ -8,12 +23,14 @@ services:
       - GUBER_GRPC_ADDRESS=0.0.0.0:81
       # The address HTTP requests will listen on
       - GUBER_HTTP_ADDRESS=0.0.0.0:80
+      # Choose the etcd peer discovery type
+      - GUBER_PEER_DISCOVERY_TYPE=etcd
+      # A comma separated list of etcd nodes
+      - GUBER_ETCD_ENDPOINTS=etcd:2379
+      # The key prefix used in the etcd store
+      - GUBER_ETCD_KEY_PREFIX=/gubernator-docker
       # The address that is advertised to other peers
-      - GUBER_ADVERTISE_ADDRESS=gubernator-1:81
-      # Max size of the cache; The cache size will never grow beyond this size.
-      - GUBER_CACHE_SIZE=50000
-      # A comma separated list of known gubernator nodes
-      - GUBER_MEMBERLIST_KNOWN_NODES=gubernator-1
+      - GUBER_ETCD_ADVERTISE_ADDRESS=gubernator-1:81
       #- GUBER_DATA_CENTER=us-east-1
     ports:
       - "9081:81"
@@ -27,12 +44,14 @@ services:
       - GUBER_GRPC_ADDRESS=0.0.0.0:81
       # The address HTTP requests will listen on
       - GUBER_HTTP_ADDRESS=0.0.0.0:80
+      # Choose the etcd peer discovery type
+      - GUBER_PEER_DISCOVERY_TYPE=etcd
+      # A comma separated list of etcd nodes
+      - GUBER_ETCD_ENDPOINTS=etcd:2379
+      # The key prefix used in the etcd store
+      - GUBER_ETCD_KEY_PREFIX=/gubernator-docker
       # The address that is advertised to other peers
-      - GUBER_ADVERTISE_ADDRESS=gubernator-2:81
-      # Max size of the cache; The cache size will never grow beyond this size.
-      - GUBER_CACHE_SIZE=50000
-      # A comma separated list of known gubernator nodes
-      - GUBER_MEMBERLIST_KNOWN_NODES=gubernator-1
+      - GUBER_ETCD_ADVERTISE_ADDRESS=gubernator-2:81
       #- GUBER_DATA_CENTER=us-east-1
     ports:
       - "9181:81"
@@ -46,12 +65,14 @@ services:
       - GUBER_GRPC_ADDRESS=0.0.0.0:81
       # The address HTTP requests will listen on
       - GUBER_HTTP_ADDRESS=0.0.0.0:80
+      # Choose the etcd peer discovery type
+      - GUBER_PEER_DISCOVERY_TYPE=etcd
+      # A comma separated list of etcd nodes
+      - GUBER_ETCD_ENDPOINTS=etcd:2379
+      # The key prefix used in the etcd store
+      - GUBER_ETCD_KEY_PREFIX=/gubernator-docker
       # The address that is advertised to other peers
-      - GUBER_ADVERTISE_ADDRESS=gubernator-3:81
-      # Max size of the cache; The cache size will never grow beyond this size.
-      - GUBER_CACHE_SIZE=50000
-      # A comma separated list of known gubernator nodes
-      - GUBER_MEMBERLIST_KNOWN_NODES=gubernator-1
+      - GUBER_ETCD_ADVERTISE_ADDRESS=gubernator-3:81
       #- GUBER_DATA_CENTER=us-west-2
     ports:
       - "9281:81"
@@ -66,12 +87,14 @@ services:
       - GUBER_GRPC_ADDRESS=0.0.0.0:81
       # The address HTTP requests will listen on
       - GUBER_HTTP_ADDRESS=0.0.0.0:80
+      # Choose the etcd peer discovery type
+      - GUBER_PEER_DISCOVERY_TYPE=etcd
+      # A comma separated list of etcd nodes
+      - GUBER_ETCD_ENDPOINTS=etcd:2379
+      # The key prefix used in the etcd store
+      - GUBER_ETCD_KEY_PREFIX=/gubernator-docker
       # The address that is advertised to other peers
       - GUBER_ADVERTISE_ADDRESS=gubernator-4:81
-      # Max size of the cache; The cache size will never grow beyond this size.
-      - GUBER_CACHE_SIZE=50000
-      # A Comma separated list of known gubernator nodes
-      - GUBER_MEMBERLIST_KNOWN_NODES=gubernator-1
       #- GUBER_DATA_CENTER=us-west-2
     ports:
       - "9381:81"

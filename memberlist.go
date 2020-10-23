@@ -75,9 +75,21 @@ func NewMemberListPool(conf MemberListPoolConfig) (*MemberListPool, error) {
 		return nil, errors.Wrap(err, "MemberListAddress=`%s` is invalid;")
 	}
 
+	// Member list requires the address to be an ip address
+	if ip := net.ParseIP(host); ip == nil {
+		addrs, err := net.LookupHost(host)
+		if err != nil {
+			return nil, errors.Wrapf(err, "while preforming host lookup for '%s'", host)
+		}
+		if len(addrs) == 0 {
+			return nil, errors.Wrapf(err, "net.LookupHost() returned no addresses for '%s'", host)
+		}
+		host = addrs[0]
+	}
+
 	_, advPort, err := splitAddress(conf.AdvertiseAddress)
 	if err != nil {
-		return nil, errors.Wrap(err, "MemberListAddress=`%s` is invalid;")
+		return nil, errors.Wrap(err, "AdvertiseAddress=`%s` is invalid;")
 	}
 
 	// Configure member list event handler

@@ -17,6 +17,8 @@ limitations under the License.
 package gubernator
 
 import (
+	"crypto/md5"
+	"fmt"
 	"sort"
 	"strconv"
 
@@ -31,7 +33,7 @@ type HashFunc64 func(data []byte) uint64
 var DefaultHash64 HashFunc64 = fnv1.HashBytes64
 
 // Implements PeerPicker
-type ReplicatedConsistantHash struct {
+type ReplicatedConsistentHash struct {
 	hashFunc HashFunc64
 	peerKeys []peerInfo
 	peers    map[string]*PeerClient
@@ -43,8 +45,8 @@ type peerInfo struct {
 	peer *PeerClient
 }
 
-func NewReplicatedConsistantHash(fn HashFunc64, replicas int) *ReplicatedConsistantHash {
-	ch := &ReplicatedConsistantHash{
+func NewReplicatedConsistentHash(fn HashFunc64, replicas int) *ReplicatedConsistentHash {
+	ch := &ReplicatedConsistentHash{
 		hashFunc: fn,
 		peers:    make(map[string]*PeerClient),
 		replicas: replicas,
@@ -56,15 +58,15 @@ func NewReplicatedConsistantHash(fn HashFunc64, replicas int) *ReplicatedConsist
 	return ch
 }
 
-func (ch *ReplicatedConsistantHash) New() PeerPicker {
-	return &ReplicatedConsistantHash{
+func (ch *ReplicatedConsistentHash) New() PeerPicker {
+	return &ReplicatedConsistentHash{
 		hashFunc: ch.hashFunc,
 		peers:    make(map[string]*PeerClient),
 		replicas: ch.replicas,
 	}
 }
 
-func (ch *ReplicatedConsistantHash) Peers() []*PeerClient {
+func (ch *ReplicatedConsistentHash) Peers() []*PeerClient {
 	var results []*PeerClient
 	for _, v := range ch.peers {
 		results = append(results, v)
@@ -73,11 +75,12 @@ func (ch *ReplicatedConsistantHash) Peers() []*PeerClient {
 }
 
 // Adds a peer to the hash
-func (ch *ReplicatedConsistantHash) Add(peer *PeerClient) {
+func (ch *ReplicatedConsistentHash) Add(peer *PeerClient) {
 	ch.peers[peer.info.GRPCAddress] = peer
 
+	key := fmt.Sprintf("%x", md5.Sum([]byte(peer.info.GRPCAddress)))
 	for i := 0; i < ch.replicas; i++ {
-		hash := ch.hashFunc(strToBytesUnsafe(strconv.Itoa(i) + peer.info.GRPCAddress))
+		hash := ch.hashFunc(strToBytesUnsafe(strconv.Itoa(i) + key))
 		ch.peerKeys = append(ch.peerKeys, peerInfo{
 			hash: hash,
 			peer: peer,
@@ -88,17 +91,17 @@ func (ch *ReplicatedConsistantHash) Add(peer *PeerClient) {
 }
 
 // Returns number of peers in the picker
-func (ch *ReplicatedConsistantHash) Size() int {
+func (ch *ReplicatedConsistentHash) Size() int {
 	return len(ch.peers)
 }
 
 // Returns the peer by hostname
-func (ch *ReplicatedConsistantHash) GetByPeerInfo(peer PeerInfo) *PeerClient {
+func (ch *ReplicatedConsistentHash) GetByPeerInfo(peer PeerInfo) *PeerClient {
 	return ch.peers[peer.GRPCAddress]
 }
 
 // Given a key, return the peer that key is assigned too
-func (ch *ReplicatedConsistantHash) Get(key string) (*PeerClient, error) {
+func (ch *ReplicatedConsistentHash) Get(key string) (*PeerClient, error) {
 	if ch.Size() == 0 {
 		return nil, errors.New("unable to pick a peer; pool is empty")
 	}

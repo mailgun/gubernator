@@ -86,6 +86,24 @@ type BehaviorConfig struct {
 	MultiRegionBatchLimit int
 }
 
+type PeerInfo struct {
+	// (Optional) The name of the data center this peer is in. Leave blank if not using multi data center support.
+	DataCenter string
+	// (Optional) The http address:port of the peer
+	HTTPAddress string
+	// (Required) The grpc address:port of the peer
+	GRPCAddress string
+	// (Optional) Is true if PeerInfo is for this instance of gubernator
+	IsOwner bool
+}
+
+// Returns the hash key used to identify this peer in the Picker.
+func (p PeerInfo) HashKey() string {
+	return p.GRPCAddress
+}
+
+type UpdateFunc func([]PeerInfo)
+
 func (c *Config) SetDefaults() error {
 	setter.SetDefault(&c.Behaviors.BatchTimeout, time.Millisecond*500)
 	setter.SetDefault(&c.Behaviors.BatchLimit, maxBatchSize)
@@ -99,7 +117,7 @@ func (c *Config) SetDefaults() error {
 	setter.SetDefault(&c.Behaviors.MultiRegionBatchLimit, maxBatchSize)
 	setter.SetDefault(&c.Behaviors.MultiRegionSyncWait, time.Second)
 
-	setter.SetDefault(&c.LocalPicker, NewConsistantHash(nil))
+	setter.SetDefault(&c.LocalPicker, NewReplicatedConsistentHash(nil, DefaultReplicas))
 	setter.SetDefault(&c.RegionPicker, NewRegionPicker(nil))
 	setter.SetDefault(&c.Cache, NewLRUCache(0))
 

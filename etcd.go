@@ -322,7 +322,11 @@ func (e *EtcdPool) callOnUpdate() {
 	var peers []PeerInfo
 
 	for k := range e.peers {
-		peers = append(peers, PeerInfo{Address: k})
+		if k == e.conf.AdvertiseAddress {
+			peers = append(peers, PeerInfo{Address: k, IsOwner: true})
+		} else {
+			peers = append(peers, PeerInfo{Address: k})
+		}
 	}
 
 	e.conf.OnUpdate(peers)

@@ -178,8 +178,9 @@ func (s *Daemon) Start(ctx context.Context) error {
 	case "member-list":
 		s.conf.MemberListPoolConf.OnUpdate = s.V1Server.SetPeers
 		s.conf.MemberListPoolConf.Logger = s.log
+
 		// Register peer on member list
-		s.pool, err = NewMemberListPool(s.conf.MemberListPoolConf)
+		s.pool, err = NewMemberListPool(ctx, s.conf.MemberListPoolConf)
 		if err != nil {
 			return errors.Wrap(err, "while creating member list pool")
 		}

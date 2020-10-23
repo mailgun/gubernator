@@ -19,7 +19,9 @@ package gubernator
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/gob"
+	"encoding/json"
 	"io"
 	"net"
 	"runtime"
@@ -27,9 +29,9 @@ import (
 	"time"
 
 	ml "github.com/hashicorp/memberlist"
+	"github.com/mailgun/holster/v3/retry"
 	"github.com/mailgun/holster/v3/setter"
 	"github.com/pkg/errors"
-	"github.com/prometheus/common/log"
 	"github.com/sirupsen/logrus"
 )
 
@@ -63,7 +65,7 @@ type MemberListPoolConfig struct {
 	DataCenter string
 }
 
-func NewMemberListPool(conf MemberListPoolConfig) (*MemberListPool, error) {
+func NewMemberListPool(ctx context.Context, conf MemberListPoolConfig) (*MemberListPool, error) {
 	setter.SetDefault(conf.Logger, logrus.WithField("category", "gubernator"))
 	m := &MemberListPool{
 		log:  conf.Logger,
@@ -123,15 +125,15 @@ func NewMemberListPool(conf MemberListPoolConfig) (*MemberListPool, error) {
 	}
 
 	// Join member list pool
-	err = m.joinPool(conf.KnownNodes, metadata)
+	err = m.joinPool(ctx, conf.KnownNodes, metadata)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "while attempting to join the member-list pool")
 	}
 
 	return m, nil
 }
 
-func (m *MemberListPool) joinPool(knownNodes []string, metadata memberListMetadata) error {
+func (m *MemberListPool) joinPool(ctx context.Context, knownNodes []string, metadata memberListMetadata) error {
 	// Get local node and set metadata
 	node := m.memberList.LocalNode()
 	serializedMetadata, err := serializeMemberListMetadata(metadata)
@@ -140,10 +142,16 @@ func (m *MemberListPool) joinPool(knownNodes []string, metadata memberListMetada
 	}
 	node.Meta = serializedMetadata
 
-	// Join member list
-	_, err = m.memberList.Join(knownNodes)
+	err = retry.Until(ctx, retry.Interval(time.Millisecond*300), func(ctx context.Context, i int) error {
+		// Join member list
+		_, err = m.memberList.Join(knownNodes)
+		if err != nil {
+			return errors.Wrap(err, "while joining member-list")
+		}
+		return nil
+	})
 	if err != nil {
-		return errors.Wrap(err, "while joining member-list")
+		return errors.Wrap(err, "timed out attempting to join member list")
 	}
 
 	// Add the local node to the event handler's peer list
@@ -180,7 +188,7 @@ func (e *memberListEventHandler) addPeer(node *ml.Node) {
 	// Deserialize metadata
 	metadata, err := deserializeMemberListMetadata(node.Meta)
 	if err != nil {
-		e.log.Warn(errors.Wrap(err, "while adding to peers"))
+		e.log.WithError(err).Warnf("while adding to peers")
 	} else {
 		// Handle deprecated GubernatorPort
 		if metadata.AdvertiseAddress == "" {
@@ -199,7 +207,7 @@ func (e *memberListEventHandler) NotifyJoin(node *ml.Node) {
 	if err != nil {
 		// This is called during memberlist initialization due to the fact that the local node
 		// has no metadata yet
-		log.Warn(errors.Wrap(err, "while joining memberlist"))
+		e.log.WithError(err).Warn("while deserialize member-list metadata")
 	} else {
 		// Handle deprecated GubernatorPort
 		if metadata.AdvertiseAddress == "" {
@@ -225,7 +233,7 @@ func (e *memberListEventHandler) NotifyUpdate(node *ml.Node) {
 	// Deserialize metadata
 	metadata, err := deserializeMemberListMetadata(node.Meta)
 	if err != nil {
-		log.Warn(errors.Wrap(err, "while updating memberlist"))
+		e.log.WithError(err).Warn("while updating member-list")
 	} else {
 		// Construct Gubernator address and create PeerInfo
 		gubernatorAddress := makeAddress(ip, metadata.GubernatorPort)
@@ -261,32 +269,21 @@ type memberListMetadata struct {
 }
 
 func serializeMemberListMetadata(metadata memberListMetadata) ([]byte, error) {
-	buf := bytes.Buffer{}
-	encoder := gob.NewEncoder(&buf)
-
-	err := encoder.Encode(metadata)
+	b, err := json.Marshal(&metadata)
 	if err != nil {
-		log.Warn(errors.Wrap(err, "error encoding"))
-		return nil, err
+		return nil, errors.Wrap(err, "error marshalling metadata as JSON")
 	}
-
-	return buf.Bytes(), nil
+	return b, nil
 }
 
-func deserializeMemberListMetadata(metadataAsByteSlice []byte) (*memberListMetadata, error) {
-	metadata := memberListMetadata{}
-	buf := bytes.Buffer{}
-
-	buf.Write(metadataAsByteSlice)
-
-	decoder := gob.NewDecoder(&buf)
-
-	err := decoder.Decode(&metadata)
-	if err != nil {
-		log.Warn(errors.Wrap(err, "error decoding"))
-		return nil, err
+func deserializeMemberListMetadata(b []byte) (*memberListMetadata, error) {
+	var metadata memberListMetadata
+	if err := json.Unmarshal(b, &metadata); err != nil {
+		decoder := gob.NewDecoder(bytes.NewBuffer(b))
+		if err := decoder.Decode(&metadata); err != nil {
+			return nil, errors.Wrap(err, "error decoding metadata")
+		}
 	}
-
 	return &metadata, nil
 }
 

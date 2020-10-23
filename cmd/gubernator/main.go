@@ -59,11 +59,12 @@ func main() {
 	conf, err := confFromFile(configFile)
 	checkErr(err, "while getting config")
 
-	// Start the server
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	// Start the server
 	daemon, err := gubernator.SpawnDaemon(ctx, conf)
 	checkErr(err, "while spawning daemon")
-	cancel()
 
 	// Wait here for signals to clean up our mess
 	c := make(chan os.Signal, 1)

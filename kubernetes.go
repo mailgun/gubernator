@@ -17,12 +17,10 @@ limitations under the License.
 package gubernator
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 
 	"github.com/mailgun/holster/v3/setter"
-
 	"github.com/mailgun/holster/v3/syncutil"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -36,24 +34,21 @@ import (
 )
 
 type K8sPool struct {
-	client    *kubernetes.Clientset
-	peers     map[string]struct{}
-	cancelCtx context.CancelFunc
-	wg        syncutil.WaitGroup
-	ctx       context.Context
-	log       logrus.FieldLogger
-	conf      K8sPoolConfig
-	informer  cache.SharedIndexInformer
-	done      chan struct{}
+	informer cache.SharedIndexInformer
+	client   *kubernetes.Clientset
+	wg       syncutil.WaitGroup
+	log      logrus.FieldLogger
+	conf     K8sPoolConfig
+	done     chan struct{}
 }
 
 type K8sPoolConfig struct {
+	Logger    logrus.FieldLogger
 	OnUpdate  UpdateFunc
 	Namespace string
 	Selector  string
 	PodIP     string
 	PodPort   string
-	Logger    logrus.FieldLogger
 }
 
 func NewK8sPool(conf K8sPoolConfig) (*K8sPool, error) {
@@ -68,9 +63,8 @@ func NewK8sPool(conf K8sPoolConfig) (*K8sPool, error) {
 	}
 
 	pool := &K8sPool{
-		log:    conf.Logger,
-		peers:  make(map[string]struct{}),
 		done:   make(chan struct{}),
+		log:    conf.Logger,
 		client: client,
 		conf:   conf,
 	}

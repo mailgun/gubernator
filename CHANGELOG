@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   similar. (gubernator-1, gubernator-2, etc...)
 * Now defaults to `replicated-hash` if `GUBER_PEER_PICKER` is unset
 * Added support for DataCenter fields when using etcd discovery
+* Now storing member-list metadata as JSON instead of glob
 
 ## [0.9.2] - 2020-10-23
 ### Change

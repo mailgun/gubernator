@@ -340,8 +340,11 @@ func (e *EtcdPool) Close() {
 func (e *EtcdPool) callOnUpdate() {
 	var peers []PeerInfo
 
-	for _, v := range e.peers {
-		peers = append(peers, v)
+	for _, p := range e.peers {
+		if p.GRPCAddress == e.conf.AdvertiseAddress {
+			p.IsOwner = true
+		}
+		peers = append(peers, p)
 	}
 
 	e.conf.OnUpdate(peers)

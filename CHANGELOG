@@ -6,12 +6,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.0-rc.1] - 2020-10-22
 ### Change
-* Fix inconsistent tests failing
-* Fix GRPC/HTTP Gateway
+* Added `GUBER_DATA_CENTER` as a config option
+* Use `GUBER_PEER_DISCOVERY_TYPE` to pick a peer discovery type, removed
+'Enable' options from k8s, etcd, and member-list.
+* Added `GUBER_ADVERTISE_ADDRESS` to specify which address is published for
+discovery
+* Gubernator now attempts to detect the proper `GUBER_ADVERTISE_ADDRESS` if
+not specified
+* Gubernator now binds to `localhost` by default instead of binding to
+`0.0.0.0:80` to avoid allowing
+  access to a test version of gubernator from the network.
+* Fix inconsistent tests failing #57
+* Fix GRPC/HTTP Gateway #50
 * Renamed functions to ensure clarity of version
 * Removed deprecated `EtcdAdvertiseAddress` config option
 * Refactored configuration options
-* 'member-list' metadata no longer assumes the member-list address is the same
+* `member-list` metadata no longer assumes the member-list address is the same
   as the gubernator advertise address.
 * Now MD5 sums the peer address key when using replicated hash. This ensures
   better key distribution when using domain names or ip address that are very

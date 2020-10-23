@@ -95,7 +95,7 @@ func NewMemberListPool(ctx context.Context, conf MemberListPoolConfig) (*MemberL
 	}
 
 	// Configure member list event handler
-	m.events = newMemberListEventHandler(m.log, conf.OnUpdate)
+	m.events = newMemberListEventHandler(m.log, conf)
 
 	// Configure member list
 	config := ml.DefaultWANConfig()
@@ -168,15 +168,15 @@ func (m *MemberListPool) Close() {
 }
 
 type memberListEventHandler struct {
-	peers    map[string]PeerInfo
-	log      logrus.FieldLogger
-	OnUpdate UpdateFunc
+	peers map[string]PeerInfo
+	log   logrus.FieldLogger
+	conf  MemberListPoolConfig
 }
 
-func newMemberListEventHandler(log logrus.FieldLogger, onUpdate UpdateFunc) *memberListEventHandler {
+func newMemberListEventHandler(log logrus.FieldLogger, conf MemberListPoolConfig) *memberListEventHandler {
 	handler := memberListEventHandler{
-		OnUpdate: onUpdate,
-		log:      log,
+		conf: conf,
+		log:  log,
 	}
 	handler.peers = make(map[string]PeerInfo)
 	return &handler
@@ -246,10 +246,12 @@ func (e *memberListEventHandler) callOnUpdate() {
 	var peers []PeerInfo
 
 	for _, p := range e.peers {
+		if p.GRPCAddress == e.conf.AdvertiseAddress {
+			p.IsOwner = true
+		}
 		peers = append(peers, p)
 	}
-
-	e.OnUpdate(peers)
+	e.conf.OnUpdate(peers)
 }
 
 func getIP(address string) string {

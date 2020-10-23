@@ -619,12 +619,7 @@ func TestLeakyBucketDivBug(t *testing.T) {
 func TestGRPCGateway(t *testing.T) {
 	resp, err := http.DefaultClient.Get("http://" + cluster.GetRandomPeer().HTTPAddress + "/v1/HealthCheck")
 	require.NoError(t, err)
-
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	// TODO: Test /cmd/gubernator
-	// TODO: Fix GRPC Gateway
-	// TODO: Update docker image
-	// TODO: Update docker-compose
 }
 
 // TODO: Add a test for sending no rate limits RateLimitReqList.RateLimits = nil

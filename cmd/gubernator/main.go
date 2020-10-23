@@ -62,7 +62,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	// Start the server
+	// Start the daemon
 	daemon, err := gubernator.SpawnDaemon(ctx, conf)
 	checkErr(err, "while spawning daemon")
 

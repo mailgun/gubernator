@@ -13,8 +13,8 @@ docker:
 	docker tag thrawn01/gubernator:$(VERSION) thrawn01/gubernator:latest
 
 release:
-	GOOS=darwin GOARCH=amd64 go build -ldflags $(LDFLAGS) -o gubernator.darwin ./cmd/gubernator/main.go ./cmd/gubernator/config.go
-	GOOS=linux GOARCH=amd64 go build -ldflags $(LDFLAGS) -o gubernator.linux ./cmd/gubernator/main.go ./cmd/gubernator/config.go
+	GOOS=darwin GOARCH=amd64 go build -ldflags $(LDFLAGS) -o gubernator.darwin ./cmd/gubernator/main.go
+	GOOS=linux GOARCH=amd64 go build -ldflags $(LDFLAGS) -o gubernator.linux ./cmd/gubernator/main.go
 
 proto:
 	scripts/proto.sh

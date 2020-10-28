@@ -14,204 +14,60 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package cluster
+package cluster_test
 
 import (
 	"testing"
 
 	"github.com/mailgun/gubernator"
+	"github.com/mailgun/gubernator/cluster"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func Test_instance_Peers(t *testing.T) {
-	tests := []struct {
-		name     string
-		instance *instance
-		peers    []gubernator.PeerInfo
-		want     []gubernator.PeerInfo
-	}{
-		{
-			name:     "Happy path",
-			instance: &instance{Address: "mailgun.com"},
-			peers:    []gubernator.PeerInfo{{Address: "mailgun.com"}},
-			want: []gubernator.PeerInfo{
-				{Address: "mailgun.com", IsOwner: true},
-			},
-		},
-		{
-			name:     "Get multy peers",
-			instance: &instance{Address: "mailgun.com"},
-			peers:    []gubernator.PeerInfo{{Address: "localhost:11111"}, {Address: "mailgun.com"}},
-			want: []gubernator.PeerInfo{
-				{Address: "localhost:11111"},
-				{Address: "mailgun.com", IsOwner: true},
-			},
-		},
-		{
-			name:     "No Peers",
-			instance: &instance{Address: "www.mailgun.com:11111"},
-			peers:    []gubernator.PeerInfo{},
-			want:     []gubernator.PeerInfo(nil),
-		},
-		{
-			name:     "Peers are nil",
-			instance: &instance{Address: "www.mailgun.com:11111"},
-			peers:    nil,
-			want:     []gubernator.PeerInfo(nil),
-		},
-		{
-			name:     "Owner does not exist",
-			instance: &instance{Address: "mailgun.com"},
-			peers:    []gubernator.PeerInfo{{Address: "localhost:11111"}},
-			want: []gubernator.PeerInfo{
-				{Address: "localhost:11111"},
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			peers = tt.peers
-
-			got := tt.instance.Peers()
-
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestGetPeer(t *testing.T) {
-	tests := []struct {
-		name  string
-		peers []gubernator.PeerInfo
-		oneOf map[string]bool
-	}{
-		{
-			name:  "Happy path",
-			peers: []gubernator.PeerInfo{{Address: "mailgun.com"}},
-		},
-		{
-			name:  "Get one peer from multiple peers",
-			peers: []gubernator.PeerInfo{{Address: "mailgun.com"}, {Address: "localhost"}, {Address: "test.com"}},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			peers = tt.peers
-			got := GetRandomPeer()
-
-			assert.Contains(t, peers, got)
-		})
-	}
-}
-
-func TestPeerAt(t *testing.T) {
-	peers = []gubernator.PeerInfo{{Address: "mailgun.com"}}
-
-	got := PeerAt(0)
-	want := gubernator.PeerInfo{Address: "mailgun.com"}
-
-	assert.Equal(t, want, got)
-}
-
-func TestInstanceAt(t *testing.T) {
-	tests := []struct {
-		name      string
-		instances []*instance
-		index     int
-		want      *instance
-	}{
-		{
-			name: "Get first instance",
-			instances: []*instance{
-				{Address: "test.com"},
-				{Address: "localhost"},
-			},
-			index: 0,
-			want:  &instance{Address: "test.com"},
-		},
-		{
-			name: "Get second instance",
-			instances: []*instance{
-				{Address: "mailgun.com"},
-				{Address: "google.com"},
-			},
-			index: 1,
-			want:  &instance{Address: "google.com"},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			instances = tt.instances
-
-			got := InstanceAt(tt.index)
-
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
 func TestStartMultipleInstances(t *testing.T) {
-	// to be tests independent we need to reset the global variables
-	instances = nil
-	peers = nil
+	err := cluster.Start(2)
+	require.NoError(t, err)
+	defer cluster.Stop()
 
-	err := Start(2)
-	assert.Nil(t, err)
-
-	assert.Equal(t, 2, len(instances))
-	assert.Equal(t, 2, len(peers))
+	assert.Equal(t, 2, len(cluster.GetPeers()))
+	assert.Equal(t, 2, len(cluster.GetDaemons()))
 }
 
-func TestStartZeroInstances(t *testing.T) {
-	// to be tests independent we need to reset the global variables
-	instances = nil
-	peers = nil
+func TestStartOneInstance(t *testing.T) {
+	err := cluster.Start(1)
+	require.NoError(t, err)
+	defer cluster.Stop()
 
-	err := Start(0)
-	assert.Nil(t, err)
-
-	assert.Equal(t, 0, len(instances))
-	assert.Equal(t, 0, len(peers))
+	assert.Equal(t, 1, len(cluster.GetPeers()))
+	assert.Equal(t, 1, len(cluster.GetDaemons()))
 }
 
-func TestStartMultipleInstancesWithAddresses(t *testing.T) {
-	// to be tests independent we need to reset the global variables
-	instances = nil
-	peers = nil
+func TestStartMultipleDaemons(t *testing.T) {
+	peers := []gubernator.PeerInfo{
+		{GRPCAddress: "localhost:1111", HTTPAddress: "localhost:1112"},
+		{GRPCAddress: "localhost:2222", HTTPAddress: "localhost:2221"}}
+	err := cluster.StartWith(peers)
+	require.NoError(t, err)
+	defer cluster.Stop()
 
-	addresses := []string{"localhost:11111", "localhost:22222"}
-	err := StartWith(addresses)
-	assert.Nil(t, err)
-
-	wantPeers := []gubernator.PeerInfo{{Address: "127.0.0.1:11111"}, {Address: "127.0.0.1:22222"}}
-	wantInstances := []*instance{
-		{Address: "127.0.0.1:11111"},
-		{Address: "127.0.0.1:22222"},
+	wantPeers := []gubernator.PeerInfo{
+		{GRPCAddress: "127.0.0.1:1111", HTTPAddress: "127.0.0.1:1112"},
+		{GRPCAddress: "127.0.0.1:2222", HTTPAddress: "127.0.0.1:2221"},
 	}
 
-	assert.Equal(t, wantPeers, peers)
-	assert.Equal(t, 2, len(instances))
-	assert.Equal(t, wantInstances[0].Address, instances[0].Address)
-	assert.Equal(t, wantInstances[1].Address, instances[1].Address)
+	daemons := cluster.GetDaemons()
+	assert.Equal(t, wantPeers, cluster.GetPeers())
+	assert.Equal(t, 2, len(daemons))
+	assert.Equal(t, "127.0.0.1:1111", daemons[0].GRPCListener.Addr().String())
+	assert.Equal(t, "127.0.0.1:2222", daemons[1].GRPCListener.Addr().String())
+	assert.Equal(t, "127.0.0.1:2222", cluster.DaemonAt(1).GRPCListener.Addr().String())
+	assert.Equal(t, "127.0.0.1:2222", cluster.PeerAt(1).GRPCAddress)
 }
 
-func TestStartWithAddressesFail(t *testing.T) {
-	// to be tests independent we need to reset the global variables
-	instances = nil
-	peers = nil
-
-	addresses := []string{"11111"}
-	err := StartWith(addresses)
+func TestStartWithInvalidPeer(t *testing.T) {
+	err := cluster.StartWith([]gubernator.PeerInfo{{GRPCAddress: "1111"}})
 	assert.NotNil(t, err)
-	assert.Nil(t, peers)
-	assert.Nil(t, instances)
-}
-
-func stringInSlice(a string, list []string) bool {
-	for _, b := range list {
-		if b == a {
-			return true
-		}
-	}
-	return false
+	assert.Nil(t, cluster.GetPeers())
+	assert.Nil(t, cluster.GetDaemons())
 }

@@ -17,10 +17,10 @@ limitations under the License.
 package gubernator
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 
+	"github.com/mailgun/holster/v3/setter"
 	"github.com/mailgun/holster/v3/syncutil"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -34,24 +34,21 @@ import (
 )
 
 type K8sPool struct {
-	client    *kubernetes.Clientset
-	peers     map[string]struct{}
-	cancelCtx context.CancelFunc
-	wg        syncutil.WaitGroup
-	ctx       context.Context
-	log       *logrus.Entry
-	conf      K8sPoolConfig
-	informer  cache.SharedIndexInformer
-	done      chan struct{}
+	informer cache.SharedIndexInformer
+	client   *kubernetes.Clientset
+	wg       syncutil.WaitGroup
+	log      logrus.FieldLogger
+	conf     K8sPoolConfig
+	done     chan struct{}
 }
 
 type K8sPoolConfig struct {
+	Logger    logrus.FieldLogger
 	OnUpdate  UpdateFunc
 	Namespace string
 	Selector  string
 	PodIP     string
 	PodPort   string
-	Enabled   bool
 }
 
 func NewK8sPool(conf K8sPoolConfig) (*K8sPool, error) {
@@ -66,12 +63,12 @@ func NewK8sPool(conf K8sPoolConfig) (*K8sPool, error) {
 	}
 
 	pool := &K8sPool{
-		log:    logrus.WithField("category", "kubernetes-pool"),
-		peers:  make(map[string]struct{}),
 		done:   make(chan struct{}),
+		log:    conf.Logger,
 		client: client,
 		conf:   conf,
 	}
+	setter.SetDefault(&pool.log, logrus.WithField("category", "gubernator"))
 
 	return pool, pool.start()
 }
@@ -97,26 +94,26 @@ func (e *K8sPool) start() error {
 	e.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			key, err := cache.MetaNamespaceKeyFunc(obj)
-			logrus.Debugf("Queue (Add) '%s' - %s", key, err)
+			e.log.Debugf("Queue (Add) '%s' - %s", key, err)
 			if err != nil {
-				logrus.Errorf("while calling MetaNamespaceKeyFunc(): %s", err)
+				e.log.Errorf("while calling MetaNamespaceKeyFunc(): %s", err)
 				return
 			}
 		},
 		UpdateFunc: func(obj, new interface{}) {
 			key, err := cache.MetaNamespaceKeyFunc(obj)
-			logrus.Debugf("Queue (Update) '%s' - %s", key, err)
+			e.log.Debugf("Queue (Update) '%s' - %s", key, err)
 			if err != nil {
-				logrus.Errorf("while calling MetaNamespaceKeyFunc(): %s", err)
+				e.log.Errorf("while calling MetaNamespaceKeyFunc(): %s", err)
 				return
 			}
 			e.updatePeers()
 		},
 		DeleteFunc: func(obj interface{}) {
 			key, err := cache.MetaNamespaceKeyFunc(obj)
-			logrus.Debugf("Queue (Delete) '%s' - %s", key, err)
+			e.log.Debugf("Queue (Delete) '%s' - %s", key, err)
 			if err != nil {
-				logrus.Errorf("while calling MetaNamespaceKeyFunc(): %s", err)
+				e.log.Errorf("while calling MetaNamespaceKeyFunc(): %s", err)
 				return
 			}
 			e.updatePeers()
@@ -134,23 +131,26 @@ func (e *K8sPool) start() error {
 }
 
 func (e *K8sPool) updatePeers() {
-	logrus.Debug("Fetching peer list from endpoints API")
+	e.log.Debug("Fetching peer list from endpoints API")
 	var peers []PeerInfo
 	for _, obj := range e.informer.GetStore().List() {
 		endpoint, ok := obj.(*api_v1.Endpoints)
 		if !ok {
-			logrus.Errorf("expected type v1.Endpoints got '%s' instead", reflect.TypeOf(obj).String())
+			e.log.Errorf("expected type v1.Endpoints got '%s' instead", reflect.TypeOf(obj).String())
 		}
 
 		for _, s := range endpoint.Subsets {
 			for _, addr := range s.Addresses {
-				peer := PeerInfo{Address: fmt.Sprintf("%s:%s", addr.IP, e.conf.PodPort)}
+				// TODO(thrawn01): Might consider using the `namespace` as the `DataCenter`. We should
+				//  do what ever k8s convention is for identifying a k8s cluster within a federated multi-data
+				//  center setup.
+				peer := PeerInfo{GRPCAddress: fmt.Sprintf("%s:%s", addr.IP, e.conf.PodPort)}
 
 				if addr.IP == e.conf.PodIP {
 					peer.IsOwner = true
 				}
 				peers = append(peers, peer)
-				logrus.Debugf("Peer: %+v\n", peer)
+				e.log.Debugf("Peer: %+v\n", peer)
 			}
 		}
 	}

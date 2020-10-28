@@ -17,7 +17,7 @@ limitations under the License.
 package gubernator
 
 import (
-	"time"
+	"github.com/mailgun/holster/v3/clock"
 )
 
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket
@@ -88,7 +88,7 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 		if t.Duration != r.Duration {
 			expire := t.CreatedAt + r.Duration
 			if HasBehavior(r.Behavior, Behavior_DURATION_IS_GREGORIAN) {
-				expire, err = GregorianExpiration(time.Now(), r.Duration)
+				expire, err = GregorianExpiration(clock.Now(), r.Duration)
 				if err != nil {
 					return nil, err
 				}
@@ -138,7 +138,7 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 	now := MillisecondNow()
 	expire := now + r.Duration
 	if HasBehavior(r.Behavior, Behavior_DURATION_IS_GREGORIAN) {
-		expire, err = GregorianExpiration(time.Now(), r.Duration)
+		expire, err = GregorianExpiration(clock.Now(), r.Duration)
 		if err != nil {
 			return nil, err
 		}
@@ -214,11 +214,11 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 		duration := r.Duration
 		rate := float64(duration) / float64(r.Limit)
 		if HasBehavior(r.Behavior, Behavior_DURATION_IS_GREGORIAN) {
-			d, err := GregorianDuration(time.Now(), r.Duration)
+			d, err := GregorianDuration(clock.Now(), r.Duration)
 			if err != nil {
 				return nil, err
 			}
-			n := time.Now()
+			n := clock.Now()
 			expire, err := GregorianExpiration(n, r.Duration)
 			if err != nil {
 				return nil, err
@@ -291,7 +291,7 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 
 	duration := r.Duration
 	if HasBehavior(r.Behavior, Behavior_DURATION_IS_GREGORIAN) {
-		n := time.Now()
+		n := clock.Now()
 		expire, err := GregorianExpiration(n, r.Duration)
 		if err != nil {
 			return nil, err

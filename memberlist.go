@@ -1,95 +1,157 @@
+/*
+Copyright 2018-2020 Mailgun Technologies Inc
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package gubernator
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"encoding/gob"
-	"fmt"
+	"encoding/json"
 	"io"
-	l "log"
+	"net"
+	"runtime"
 	"strconv"
-	"strings"
-	"time"
 
 	ml "github.com/hashicorp/memberlist"
+	"github.com/mailgun/holster/v3/clock"
+	"github.com/mailgun/holster/v3/retry"
+	"github.com/mailgun/holster/v3/setter"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
-type MemberlistPool struct {
-	memberlist *ml.Memberlist
-	conf       MemberlistPoolConfig
-	events     *memberlistEventHandler
+type MemberListPool struct {
+	log        logrus.FieldLogger
+	memberList *ml.Memberlist
+	conf       MemberListPoolConfig
+	events     *memberListEventHandler
 }
 
-type MemberlistPoolConfig struct {
+type MemberListPoolConfig struct {
+	// (Required) This is the address:port the member list protocol listen for other members on
+	MemberListAddress string
+
+	// (Required) This is the address:port the member list will advertise to other members it finds
 	AdvertiseAddress string
-	AdvertisePort    int
-	NodeName         string
-	KnownNodes       []string
-	LoggerOutput     io.Writer
-	Logger           *l.Logger
-	DataCenter       string
-	GubernatorPort   int
-	OnUpdate         UpdateFunc
-	Enabled          bool
+
+	// (Required) A list of nodes this member list instance can contact to find other members.
+	KnownNodes []string
+
+	// (Required) A callback function which is called when the member list changes
+	OnUpdate UpdateFunc
+
+	// (Optional) The name of the node this member list identifies itself as.
+	NodeName string
+
+	// (Optional) An interface through which logging will occur (Usually *logrus.Entry)
+	Logger logrus.FieldLogger
+
+	// (Optional) The datacenter this instance belongs too
+	DataCenter string
 }
 
-func NewMemberlistPool(conf MemberlistPoolConfig) (*MemberlistPool, error) {
-	memberlistPool := &MemberlistPool{conf: conf}
+func NewMemberListPool(ctx context.Context, conf MemberListPoolConfig) (*MemberListPool, error) {
+	setter.SetDefault(conf.Logger, logrus.WithField("category", "gubernator"))
+	m := &MemberListPool{
+		log:  conf.Logger,
+		conf: conf,
+	}
 
-	// Configure memberlist event handler
-	memberlistPool.events = newMemberListEventHandler(conf.OnUpdate)
+	host, port, err := splitAddress(conf.MemberListAddress)
+	if err != nil {
+		return nil, errors.Wrap(err, "MemberListAddress=`%s` is invalid;")
+	}
 
-	// Configure memberlist
+	// Member list requires the address to be an ip address
+	if ip := net.ParseIP(host); ip == nil {
+		addrs, err := net.LookupHost(host)
+		if err != nil {
+			return nil, errors.Wrapf(err, "while preforming host lookup for '%s'", host)
+		}
+		if len(addrs) == 0 {
+			return nil, errors.Wrapf(err, "net.LookupHost() returned no addresses for '%s'", host)
+		}
+		host = addrs[0]
+	}
+
+	_, advPort, err := splitAddress(conf.AdvertiseAddress)
+	if err != nil {
+		return nil, errors.Wrap(err, "AdvertiseAddress=`%s` is invalid;")
+	}
+
+	// Configure member list event handler
+	m.events = newMemberListEventHandler(m.log, conf)
+
+	// Configure member list
 	config := ml.DefaultWANConfig()
-	config.Events = memberlistPool.events
-	config.AdvertiseAddr = conf.AdvertiseAddress
-	config.AdvertisePort = conf.AdvertisePort
+	config.Events = m.events
+	config.AdvertiseAddr = host
+	config.AdvertisePort = port
 
 	if conf.NodeName != "" {
 		config.Name = conf.NodeName
 	}
 
-	if conf.LoggerOutput != nil {
-		config.LogOutput = conf.LoggerOutput
-	}
+	config.LogOutput = newLogWriter(m.log)
 
-	if conf.Logger != nil {
-		config.Logger = conf.Logger
-	}
-
-	// Create and set memberlist
-	memberlist, err := ml.Create(config)
+	// Create and set member list
+	memberList, err := ml.Create(config)
 	if err != nil {
 		return nil, err
 	}
-	memberlistPool.memberlist = memberlist
+	m.memberList = memberList
 
 	// Prep metadata
-	gob.Register(memberlistMetadata{})
-	metadata := memberlistMetadata{DataCenter: conf.DataCenter, GubernatorPort: conf.GubernatorPort}
-
-	// Join memberlist pool
-	err = memberlistPool.joinPool(conf.KnownNodes, metadata)
-	if err != nil {
-		return nil, err
+	gob.Register(memberListMetadata{})
+	metadata := memberListMetadata{
+		DataCenter:       conf.DataCenter,
+		AdvertiseAddress: conf.AdvertiseAddress,
+		GubernatorPort:   advPort,
 	}
 
-	return memberlistPool, nil
+	// Join member list pool
+	err = m.joinPool(ctx, conf.KnownNodes, metadata)
+	if err != nil {
+		return nil, errors.Wrap(err, "while attempting to join the member-list pool")
+	}
+
+	return m, nil
 }
 
-func (m *MemberlistPool) joinPool(knownNodes []string, metadata memberlistMetadata) error {
+func (m *MemberListPool) joinPool(ctx context.Context, knownNodes []string, metadata memberListMetadata) error {
 	// Get local node and set metadata
-	node := m.memberlist.LocalNode()
-	serializedMetadata, err := serializeMemberlistMetadata(metadata)
+	node := m.memberList.LocalNode()
+	serializedMetadata, err := serializeMemberListMetadata(metadata)
 	if err != nil {
 		return err
 	}
 	node.Meta = serializedMetadata
 
-	// Join memberlist
-	_, err = m.memberlist.Join(knownNodes)
+	err = retry.Until(ctx, retry.Interval(clock.Millisecond*300), func(ctx context.Context, i int) error {
+		// Join member list
+		_, err = m.memberList.Join(knownNodes)
+		if err != nil {
+			return errors.Wrap(err, "while joining member-list")
+		}
+		return nil
+	})
 	if err != nil {
-		return errors.Wrap(err, "while joining memberlist")
+		return errors.Wrap(err, "timed out attempting to join member list")
 	}
 
 	// Add the local node to the event handler's peer list
@@ -98,57 +160,65 @@ func (m *MemberlistPool) joinPool(knownNodes []string, metadata memberlistMetada
 	return nil
 }
 
-func (m *MemberlistPool) Close() {
-	err := m.memberlist.Leave(time.Second)
+func (m *MemberListPool) Close() {
+	err := m.memberList.Leave(clock.Second)
 	if err != nil {
-		log.Warn(errors.Wrap(err, "while leaving memberlist"))
+		m.log.Warn(errors.Wrap(err, "while leaving member-list"))
 	}
 }
 
-type memberlistEventHandler struct {
-	peers    map[string]PeerInfo
-	OnUpdate UpdateFunc
+type memberListEventHandler struct {
+	peers map[string]PeerInfo
+	log   logrus.FieldLogger
+	conf  MemberListPoolConfig
 }
 
-func newMemberListEventHandler(onUpdate UpdateFunc) *memberlistEventHandler {
-	eventhandler := memberlistEventHandler{OnUpdate: onUpdate}
-	eventhandler.peers = make(map[string]PeerInfo)
-	return &eventhandler
+func newMemberListEventHandler(log logrus.FieldLogger, conf MemberListPoolConfig) *memberListEventHandler {
+	handler := memberListEventHandler{
+		conf: conf,
+		log:  log,
+	}
+	handler.peers = make(map[string]PeerInfo)
+	return &handler
 }
 
-func (e *memberlistEventHandler) addPeer(node *ml.Node) {
+func (e *memberListEventHandler) addPeer(node *ml.Node) {
 	ip := getIP(node.Address())
 
 	// Deserialize metadata
-	metadata, err := deserializeMemberlistMetadata(node.Meta)
+	metadata, err := deserializeMemberListMetadata(node.Meta)
 	if err != nil {
-		log.Warn(errors.Wrap(err, "while adding to peers"))
+		e.log.WithError(err).Warnf("while adding to peers")
 	} else {
-		// Construct Gubernator address and create PeerInfo
-		gubernatorAddress := makeAddress(ip, metadata.GubernatorPort)
-		e.peers[ip] = PeerInfo{Address: gubernatorAddress, DataCenter: metadata.DataCenter}
+		// Handle deprecated GubernatorPort
+		if metadata.AdvertiseAddress == "" {
+			metadata.AdvertiseAddress = makeAddress(ip, metadata.GubernatorPort)
+		}
+		e.peers[ip] = PeerInfo{GRPCAddress: metadata.AdvertiseAddress, DataCenter: metadata.DataCenter}
 		e.callOnUpdate()
 	}
 }
 
-func (e *memberlistEventHandler) NotifyJoin(node *ml.Node) {
+func (e *memberListEventHandler) NotifyJoin(node *ml.Node) {
 	ip := getIP(node.Address())
 
 	// Deserialize metadata
-	metadata, err := deserializeMemberlistMetadata(node.Meta)
+	metadata, err := deserializeMemberListMetadata(node.Meta)
 	if err != nil {
 		// This is called during memberlist initialization due to the fact that the local node
 		// has no metadata yet
-		log.Warn(errors.Wrap(err, "while joining memberlist"))
+		e.log.WithError(err).Warn("while deserialize member-list metadata")
 	} else {
-		// Construct Gubernator address and create PeerInfo
-		gubernatorAddress := makeAddress(ip, metadata.GubernatorPort)
-		e.peers[ip] = PeerInfo{Address: gubernatorAddress, DataCenter: metadata.DataCenter}
+		// Handle deprecated GubernatorPort
+		if metadata.AdvertiseAddress == "" {
+			metadata.AdvertiseAddress = makeAddress(ip, metadata.GubernatorPort)
+		}
+		e.peers[ip] = PeerInfo{GRPCAddress: metadata.AdvertiseAddress, DataCenter: metadata.DataCenter}
 		e.callOnUpdate()
 	}
 }
 
-func (e *memberlistEventHandler) NotifyLeave(node *ml.Node) {
+func (e *memberListEventHandler) NotifyLeave(node *ml.Node) {
 	ip := getIP(node.Address())
 
 	// Remove PeerInfo
@@ -157,70 +227,97 @@ func (e *memberlistEventHandler) NotifyLeave(node *ml.Node) {
 	e.callOnUpdate()
 }
 
-func (e *memberlistEventHandler) NotifyUpdate(node *ml.Node) {
+func (e *memberListEventHandler) NotifyUpdate(node *ml.Node) {
 	ip := getIP(node.Address())
 
 	// Deserialize metadata
-	metadata, err := deserializeMemberlistMetadata(node.Meta)
+	metadata, err := deserializeMemberListMetadata(node.Meta)
 	if err != nil {
-		log.Warn(errors.Wrap(err, "while updating memberlist"))
+		e.log.WithError(err).Warn("while updating member-list")
 	} else {
 		// Construct Gubernator address and create PeerInfo
 		gubernatorAddress := makeAddress(ip, metadata.GubernatorPort)
-		e.peers[ip] = PeerInfo{Address: gubernatorAddress, DataCenter: metadata.DataCenter}
+		e.peers[ip] = PeerInfo{GRPCAddress: gubernatorAddress, DataCenter: metadata.DataCenter}
 		e.callOnUpdate()
 	}
 }
 
-func (e *memberlistEventHandler) callOnUpdate() {
-	var peers = []PeerInfo{}
+func (e *memberListEventHandler) callOnUpdate() {
+	var peers []PeerInfo
 
 	for _, p := range e.peers {
+		if p.GRPCAddress == e.conf.AdvertiseAddress {
+			p.IsOwner = true
+		}
 		peers = append(peers, p)
 	}
-
-	e.OnUpdate(peers)
+	e.conf.OnUpdate(peers)
 }
 
 func getIP(address string) string {
-	return strings.Split(address, ":")[0]
+	addr, _, _ := net.SplitHostPort(address)
+	return addr
 }
 
 func makeAddress(ip string, port int) string {
-	return fmt.Sprintf("%s:%s", ip, strconv.Itoa(port))
+	return net.JoinHostPort(ip, strconv.Itoa(port))
 }
 
-type memberlistMetadata struct {
-	DataCenter     string
+type memberListMetadata struct {
+	DataCenter       string
+	AdvertiseAddress string
+	// Deprecated
 	GubernatorPort int
 }
 
-func serializeMemberlistMetadata(metadata memberlistMetadata) ([]byte, error) {
-	buf := bytes.Buffer{}
-	encoder := gob.NewEncoder(&buf)
-
-	err := encoder.Encode(metadata)
+func serializeMemberListMetadata(metadata memberListMetadata) ([]byte, error) {
+	b, err := json.Marshal(&metadata)
 	if err != nil {
-		log.Warn(errors.Wrap(err, "error encoding"))
-		return nil, err
+		return nil, errors.Wrap(err, "error marshalling metadata as JSON")
 	}
-
-	return buf.Bytes(), nil
+	return b, nil
 }
 
-func deserializeMemberlistMetadata(metadataAsByteSlice []byte) (*memberlistMetadata, error) {
-	metadata := memberlistMetadata{}
-	buf := bytes.Buffer{}
+func deserializeMemberListMetadata(b []byte) (*memberListMetadata, error) {
+	var metadata memberListMetadata
+	if err := json.Unmarshal(b, &metadata); err != nil {
+		decoder := gob.NewDecoder(bytes.NewBuffer(b))
+		if err := decoder.Decode(&metadata); err != nil {
+			return nil, errors.Wrap(err, "error decoding metadata")
+		}
+	}
+	return &metadata, nil
+}
 
-	buf.Write(metadataAsByteSlice)
+func newLogWriter(log logrus.FieldLogger) *io.PipeWriter {
+	reader, writer := io.Pipe()
 
-	decoder := gob.NewDecoder(&buf)
+	go func() {
+		scanner := bufio.NewScanner(reader)
+		for scanner.Scan() {
+			log.Info(scanner.Text())
+		}
+		if err := scanner.Err(); err != nil {
+			log.Errorf("Error while reading from Writer: %s", err)
+		}
+		reader.Close()
+	}()
+	runtime.SetFinalizer(writer, func(w *io.PipeWriter) {
+		writer.Close()
+	})
 
-	err := decoder.Decode(&metadata)
+	return writer
+}
+
+func splitAddress(addr string) (string, int, error) {
+	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		log.Warn(errors.Wrap(err, "error decoding"))
-		return nil, err
+		return host, 0, errors.New(" expected format is `address:port`")
 	}
 
-	return &metadata, nil
+	intPort, err := strconv.Atoi(port)
+	if err != nil {
+		return host, intPort, errors.Wrap(err, "port must be a number")
+	}
+	return host, intPort, nil
 }

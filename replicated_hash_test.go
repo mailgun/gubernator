@@ -4,8 +4,8 @@ import (
 	"math/rand"
 	"net"
 	"testing"
-	"time"
 
+	"github.com/mailgun/holster/v3/clock"
 	"github.com/segmentio/fasthash/fnv1"
 	"github.com/segmentio/fasthash/fnv1a"
 	"github.com/stretchr/testify/assert"
@@ -15,33 +15,33 @@ func TestReplicatedConsistantHash(t *testing.T) {
 	hosts := []string{"a.svc.local", "b.svc.local", "c.svc.local"}
 
 	t.Run("Size", func(t *testing.T) {
-		hash := NewReplicatedConsistantHash(nil, DefaultReplicas)
+		hash := NewReplicatedConsistentHash(nil, DefaultReplicas)
 
 		for _, h := range hosts {
-			hash.Add(&PeerClient{info: PeerInfo{Address: h}})
+			hash.Add(&PeerClient{info: PeerInfo{GRPCAddress: h}})
 		}
 
 		assert.Equal(t, len(hosts), hash.Size())
 	})
 
 	t.Run("Host", func(t *testing.T) {
-		hash := NewReplicatedConsistantHash(nil, DefaultReplicas)
+		hash := NewReplicatedConsistentHash(nil, DefaultReplicas)
 		hostMap := map[string]*PeerClient{}
 
 		for _, h := range hosts {
-			peer := &PeerClient{info: PeerInfo{Address: h}}
+			peer := &PeerClient{info: PeerInfo{GRPCAddress: h}}
 			hash.Add(peer)
 			hostMap[h] = peer
 		}
 
 		for host, peer := range hostMap {
-			assert.Equal(t, peer, hash.GetByPeerInfo(PeerInfo{Address: host}))
+			assert.Equal(t, peer, hash.GetByPeerInfo(PeerInfo{GRPCAddress: host}))
 		}
 	})
 
 	t.Run("distribution", func(t *testing.T) {
 		const cases = 10000
-		rand.Seed(time.Now().Unix())
+		rand.Seed(clock.Now().Unix())
 
 		strings := make([]string, cases)
 
@@ -58,17 +58,17 @@ func TestReplicatedConsistantHash(t *testing.T) {
 
 		for name, hashFunc := range hashFuncs {
 			t.Run(name, func(t *testing.T) {
-				hash := NewReplicatedConsistantHash(hashFunc, DefaultReplicas)
+				hash := NewReplicatedConsistentHash(hashFunc, DefaultReplicas)
 				hostMap := map[string]int{}
 
 				for _, h := range hosts {
-					hash.Add(&PeerClient{info: PeerInfo{Address: h}})
+					hash.Add(&PeerClient{info: PeerInfo{GRPCAddress: h}})
 					hostMap[h] = 0
 				}
 
 				for i := range strings {
 					peer, _ := hash.Get(strings[i])
-					hostMap[peer.info.Address]++
+					hostMap[peer.info.GRPCAddress]++
 				}
 
 				for host, a := range hostMap {
@@ -93,10 +93,10 @@ func BenchmarkReplicatedConsistantHash(b *testing.B) {
 				ips[i] = net.IPv4(byte(i>>24), byte(i>>16), byte(i>>8), byte(i)).String()
 			}
 
-			hash := NewReplicatedConsistantHash(hashFunc, DefaultReplicas)
+			hash := NewReplicatedConsistentHash(hashFunc, DefaultReplicas)
 			hosts := []string{"a.svc.local", "b.svc.local", "c.svc.local"}
 			for _, h := range hosts {
-				hash.Add(&PeerClient{info: PeerInfo{Address: h}})
+				hash.Add(&PeerClient{info: PeerInfo{GRPCAddress: h}})
 			}
 
 			b.ResetTimer()

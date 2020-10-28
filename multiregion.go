@@ -9,14 +9,15 @@ type mutliRegionManager struct {
 	reqQueue chan *RateLimitReq
 	wg       syncutil.WaitGroup
 	conf     BehaviorConfig
-	log      *logrus.Entry
-	instance *Instance
+	log      logrus.FieldLogger
+	instance *V1Instance
 }
 
-func newMultiRegionManager(conf BehaviorConfig, instance *Instance) *mutliRegionManager {
+func newMultiRegionManager(conf BehaviorConfig, instance *V1Instance) *mutliRegionManager {
 	mm := mutliRegionManager{
 		conf:     conf,
 		instance: instance,
+		log:      instance.log,
 		reqQueue: make(chan *RateLimitReq, 0),
 	}
 	mm.runAsyncReqs()
@@ -48,7 +49,7 @@ func (mm *mutliRegionManager) runAsyncReqs() {
 			// Send the hits if we reached our batch limit
 			if len(hits) == mm.conf.MultiRegionBatchLimit {
 				for dc, picker := range mm.instance.GetRegionPickers() {
-					log.Infof("Sending %v hit(s) to %s picker", len(hits), dc)
+					mm.log.Debugf("Sending %v hit(s) to %s picker", len(hits), dc)
 					mm.sendHits(hits, picker)
 				}
 				hits = make(map[string]*RateLimitReq)
@@ -62,7 +63,7 @@ func (mm *mutliRegionManager) runAsyncReqs() {
 		case <-interval.C:
 			if len(hits) > 0 {
 				for dc, picker := range mm.instance.GetRegionPickers() {
-					log.Infof("Sending %v hit(s) to %s picker", len(hits), dc)
+					mm.log.Debugf("Sending %v hit(s) to %s picker", len(hits), dc)
 					mm.sendHits(hits, picker)
 				}
 				hits = make(map[string]*RateLimitReq)

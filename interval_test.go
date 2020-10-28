@@ -17,22 +17,23 @@ limitations under the License.
 package gubernator_test
 
 import (
-	"github.com/mailgun/gubernator"
-	"github.com/stretchr/testify/assert"
 	"testing"
-	"time"
+
+	"github.com/mailgun/gubernator"
+	"github.com/mailgun/holster/v3/clock"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGregorianExpirationMinute(t *testing.T) {
 	// Validate calculation assumption
-	now := time.Date(2019, time.November, 11, 00, 00, 00, 00, time.UTC)
+	now := clock.Date(2019, clock.November, 11, 00, 00, 00, 00, clock.UTC)
 	expire, err := gubernator.GregorianExpiration(now, gubernator.GregorianMinutes)
 	assert.Nil(t, err)
-	assert.Equal(t, time.Date(2019, time.November, 11, 00, 00, 59, 999000000, time.UTC),
-		time.Unix(0, expire*1000000).UTC())
+	assert.Equal(t, clock.Date(2019, clock.November, 11, 00, 00, 59, 999000000, clock.UTC),
+		clock.Unix(0, expire*1000000).UTC())
 
 	// Expect the same expire time regardless of the current second or nsec
-	now = time.Date(2019, time.November, 11, 00, 00, 30, 100, time.UTC)
+	now = clock.Date(2019, clock.November, 11, 00, 00, 30, 100, clock.UTC)
 	expire, err = gubernator.GregorianExpiration(now, gubernator.GregorianMinutes)
 	assert.Nil(t, err)
 	assert.Equal(t, int64(1573430459999), expire)
@@ -40,14 +41,14 @@ func TestGregorianExpirationMinute(t *testing.T) {
 
 func TestGregorianExpirationHour(t *testing.T) {
 	// Validate calculation assumption
-	now := time.Date(2019, time.November, 11, 00, 00, 00, 00, time.UTC)
+	now := clock.Date(2019, clock.November, 11, 00, 00, 00, 00, clock.UTC)
 	expire, err := gubernator.GregorianExpiration(now, gubernator.GregorianHours)
 	assert.Nil(t, err)
-	assert.Equal(t, time.Date(2019, time.November, 11, 00, 59, 59, 999000000, time.UTC),
-		time.Unix(0, expire*1000000).UTC())
+	assert.Equal(t, clock.Date(2019, clock.November, 11, 00, 59, 59, 999000000, clock.UTC),
+		clock.Unix(0, expire*1000000).UTC())
 
 	// Expect the same expire time regardless of the current minute, second or nsec
-	now = time.Date(2019, time.November, 11, 00, 20, 1, 2134, time.UTC)
+	now = clock.Date(2019, clock.November, 11, 00, 20, 1, 2134, clock.UTC)
 	expire, err = gubernator.GregorianExpiration(now, gubernator.GregorianHours)
 	assert.Nil(t, err)
 	assert.Equal(t, int64(1573433999999), expire)
@@ -55,14 +56,14 @@ func TestGregorianExpirationHour(t *testing.T) {
 
 func TestGregorianExpirationDay(t *testing.T) {
 	// Validate calculation assumption
-	now := time.Date(2019, time.November, 11, 00, 00, 00, 00, time.UTC)
+	now := clock.Date(2019, clock.November, 11, 00, 00, 00, 00, clock.UTC)
 	expire, err := gubernator.GregorianExpiration(now, gubernator.GregorianDays)
 	assert.Nil(t, err)
-	assert.Equal(t, time.Date(2019, time.November, 11, 23, 59, 59, 999000000, time.UTC),
-		time.Unix(0, expire*1000000).UTC())
+	assert.Equal(t, clock.Date(2019, clock.November, 11, 23, 59, 59, 999000000, clock.UTC),
+		clock.Unix(0, expire*1000000).UTC())
 
 	// Expect the same expire time regardless of the current hour, minute, second or nsec
-	now = time.Date(2019, time.November, 11, 12, 10, 9, 2345, time.UTC)
+	now = clock.Date(2019, clock.November, 11, 12, 10, 9, 2345, clock.UTC)
 	expire, err = gubernator.GregorianExpiration(now, gubernator.GregorianDays)
 	assert.Nil(t, err)
 	assert.Equal(t, int64(1573516799999), expire)
@@ -70,44 +71,44 @@ func TestGregorianExpirationDay(t *testing.T) {
 
 func TestGregorianExpirationMonth(t *testing.T) {
 	// Validate calculation assumption
-	now := time.Date(2019, time.November, 1, 00, 00, 00, 00, time.UTC)
+	now := clock.Date(2019, clock.November, 1, 00, 00, 00, 00, clock.UTC)
 	expire, err := gubernator.GregorianExpiration(now, gubernator.GregorianMonths)
 	assert.Nil(t, err)
-	assert.Equal(t, time.Date(2019, time.November, 30, 23, 59, 59, 999000000, time.UTC),
-		time.Unix(0, expire*1000000).UTC())
+	assert.Equal(t, clock.Date(2019, clock.November, 30, 23, 59, 59, 999000000, clock.UTC),
+		clock.Unix(0, expire*1000000).UTC())
 
 	// Expect the same expire time regardless of the current day, minute, second or nsec
-	now = time.Date(2019, time.November, 11, 22, 2, 23, 0, time.UTC)
+	now = clock.Date(2019, clock.November, 11, 22, 2, 23, 0, clock.UTC)
 	expire, err = gubernator.GregorianExpiration(now, gubernator.GregorianMonths)
 	assert.Nil(t, err)
 	assert.Equal(t, int64(1575158399999), expire)
 
 	// January has 31 days
-	now = time.Date(2019, time.January, 1, 00, 00, 00, 00, time.UTC)
+	now = clock.Date(2019, clock.January, 1, 00, 00, 00, 00, clock.UTC)
 	expire, err = gubernator.GregorianExpiration(now, gubernator.GregorianMonths)
 	assert.Nil(t, err)
 
-	eom := time.Date(2019, time.January, 31, 23, 59, 59, 999999999, time.UTC)
+	eom := clock.Date(2019, clock.January, 31, 23, 59, 59, 999999999, clock.UTC)
 	assert.Equal(t, eom.UnixNano()/1000000, expire)
 }
 
 func TestGregorianExpirationYear(t *testing.T) {
 	// Validate calculation assumption
-	now := time.Date(2019, time.January, 1, 00, 00, 00, 00, time.UTC)
+	now := clock.Date(2019, clock.January, 1, 00, 00, 00, 00, clock.UTC)
 	expire, err := gubernator.GregorianExpiration(now, gubernator.GregorianYears)
 	assert.Nil(t, err)
-	assert.Equal(t, time.Date(2019, time.December, 31, 23, 59, 59, 999000000, time.UTC),
-		time.Unix(0, expire*1000000).UTC())
+	assert.Equal(t, clock.Date(2019, clock.December, 31, 23, 59, 59, 999000000, clock.UTC),
+		clock.Unix(0, expire*1000000).UTC())
 
 	// Expect the same expire time regardless of the current month, day, minute, second or nsec
-	now = time.Date(2019, time.March, 1, 20, 30, 1231, 0, time.UTC)
+	now = clock.Date(2019, clock.March, 1, 20, 30, 1231, 0, clock.UTC)
 	expire, err = gubernator.GregorianExpiration(now, gubernator.GregorianYears)
 	assert.Nil(t, err)
 	assert.Equal(t, int64(1577836799999), expire)
 }
 
 func TestGregorianExpirationInvalid(t *testing.T) {
-	now := time.Date(2019, time.January, 1, 00, 00, 00, 00, time.UTC)
+	now := clock.Date(2019, clock.January, 1, 00, 00, 00, 00, clock.UTC)
 	expire, err := gubernator.GregorianExpiration(now, 99)
 	assert.NotNil(t, err)
 	assert.Equal(t, int64(0), expire)

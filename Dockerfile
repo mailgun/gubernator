@@ -10,11 +10,12 @@ RUN go mod download
 
 # Copy the local package files to the container
 ADD . /go/src
-ENV VERSION=dev-build
 
-# Build the bot inside the container
+ARG VERSION
+
+# Build the server inside the container
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo \
-    -ldflags "-w -s -X main.Version=${VERSION}" -o /gubernator /go/src/cmd/gubernator/main.go /go/src/cmd/gubernator/config.go
+    -ldflags "-w -s -X main.Version=$VERSION" -o /gubernator /go/src/cmd/gubernator/main.go
 
 # Create our deploy image
 FROM scratch

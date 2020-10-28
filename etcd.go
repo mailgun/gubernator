@@ -18,37 +18,19 @@ package gubernator
 
 import (
 	"context"
-	"time"
+	"encoding/json"
 
 	etcd "github.com/coreos/etcd/clientv3"
+	"github.com/mailgun/holster/v3/clock"
 	"github.com/mailgun/holster/v3/setter"
 	"github.com/mailgun/holster/v3/syncutil"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
-type PeerInfo struct {
-
-	// (Optional) The name of the data center this peer is in. Leave blank if not using multi data center support.
-	DataCenter string
-
-	// (Required) The IP address of the peer which will field peer requests
-	Address string
-
-	// (Optional) Is true if PeerInfo is for this instance of gubernator
-	IsOwner bool
-}
-
-// Returns the hash key used to identify this peer in the Picker.
-func (p PeerInfo) HashKey() string {
-	return p.Address
-}
-
-type UpdateFunc func([]PeerInfo)
-
 const (
-	etcdTimeout    = time.Second * 10
-	backOffTimeout = time.Second * 5
+	etcdTimeout    = clock.Second * 10
+	backOffTimeout = clock.Second * 5
 	leaseTTL       = 30
 	defaultBaseKey = "/gubernator/peers/"
 )
@@ -58,28 +40,45 @@ type PoolInterface interface {
 }
 
 type EtcdPool struct {
-	peers     map[string]struct{}
+	peers     map[string]PeerInfo
 	wg        syncutil.WaitGroup
 	ctx       context.Context
 	cancelCtx context.CancelFunc
 	watchChan etcd.WatchChan
-	log       *logrus.Entry
+	log       logrus.FieldLogger
 	watcher   etcd.Watcher
 	conf      EtcdPoolConfig
 }
 
 type EtcdPoolConfig struct {
+	// (Required) The address etcd will advertise to other gubernator instances
 	AdvertiseAddress string
-	BaseKey          string
-	Client           *etcd.Client
-	OnUpdate         UpdateFunc
+
+	// (Required) An etcd client currently connected to an etcd cluster
+	Client *etcd.Client
+
+	// (Required) Called when the list of gubernators in the pool updates
+	OnUpdate UpdateFunc
+
+	// (Optional) The etcd key prefix used when discovering other peers. Defaults to `/gubernator/peers/`
+	KeyPrefix string
+
+	// (Optional) The etcd config used to connect to the etcd cluster
+	EtcdConfig *etcd.Config
+
+	// (Optional) An interface through which logging will occur (Usually *logrus.Entry)
+	Logger logrus.FieldLogger
+
+	// (Optional) The datacenter this instance belongs too
+	DataCenter string
 }
 
 func NewEtcdPool(conf EtcdPoolConfig) (*EtcdPool, error) {
-	setter.SetDefault(&conf.BaseKey, defaultBaseKey)
+	setter.SetDefault(&conf.KeyPrefix, defaultBaseKey)
+	setter.SetDefault(&conf.Logger, logrus.WithField("category", "gubernator"))
 
 	if conf.AdvertiseAddress == "" {
-		return nil, errors.New("GUBER_ETCD_ADVERTISE_ADDRESS is required")
+		return nil, errors.New("AdvertiseAddress is required")
 	}
 
 	if conf.Client == nil {
@@ -88,8 +87,8 @@ func NewEtcdPool(conf EtcdPoolConfig) (*EtcdPool, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	pool := &EtcdPool{
-		log:       logrus.WithField("category", "gubernator-pool"),
-		peers:     make(map[string]struct{}),
+		log:       conf.Logger,
+		peers:     make(map[string]PeerInfo),
 		cancelCtx: cancel,
 		conf:      conf,
 		ctx:       ctx,
@@ -128,15 +127,15 @@ func (e *EtcdPool) watchPeers() error {
 
 	ready := make(chan struct{})
 	go func() {
-		e.watchChan = e.watcher.Watch(etcd.WithRequireLeader(e.ctx), e.conf.BaseKey,
+		e.watchChan = e.watcher.Watch(etcd.WithRequireLeader(e.ctx), e.conf.KeyPrefix,
 			etcd.WithRev(revision), etcd.WithPrefix(), etcd.WithPrevKV())
 		close(ready)
 	}()
 
 	select {
 	case <-ready:
-		e.log.Infof("watching for peer changes '%s' at revision %d", e.conf.BaseKey, revision)
-	case <-time.After(etcdTimeout):
+		e.log.Infof("watching for peer changes '%s' at revision %d", e.conf.KeyPrefix, revision)
+	case <-clock.After(etcdTimeout):
 		return errors.New("timed out while waiting for watcher.Watch() to start")
 	}
 	return nil
@@ -146,18 +145,30 @@ func (e *EtcdPool) collectPeers(revision *int64) error {
 	ctx, cancel := context.WithTimeout(e.ctx, etcdTimeout)
 	defer cancel()
 
-	resp, err := e.conf.Client.Get(ctx, e.conf.BaseKey, etcd.WithPrefix())
+	resp, err := e.conf.Client.Get(ctx, e.conf.KeyPrefix, etcd.WithPrefix())
 	if err != nil {
-		return errors.Wrapf(err, "while fetching peer listing from '%s'", e.conf.BaseKey)
+		return errors.Wrapf(err, "while fetching peer listing from '%s'", e.conf.KeyPrefix)
 	}
 
 	// Collect all the peers
 	for _, v := range resp.Kvs {
-		e.peers[string(v.Value)] = struct{}{}
+		p := e.unMarshallValue(v.Value)
+		e.peers[p.GRPCAddress] = p
 	}
 
 	e.callOnUpdate()
 	return nil
+}
+
+func (e *EtcdPool) unMarshallValue(v []byte) PeerInfo {
+	var p PeerInfo
+
+	// for backward compatible with older gubernator versions
+	if err := json.Unmarshal(v, &p); err != nil {
+		e.log.WithError(err).Errorf("while unmarshalling peer info from key value")
+		return PeerInfo{GRPCAddress: string(v)}
+	}
+	return p
 }
 
 func (e *EtcdPool) watch() error {
@@ -183,7 +194,8 @@ func (e *EtcdPool) watch() error {
 				case etcd.EventTypePut:
 					if event.Kv != nil {
 						e.log.Debugf("new peer [%s]", string(event.Kv.Value))
-						e.peers[string(event.Kv.Value)] = struct{}{}
+						p := e.unMarshallValue(event.Kv.Value)
+						e.peers[p.GRPCAddress] = p
 					}
 				case etcd.EventTypeDelete:
 					if event.PrevKv != nil {
@@ -209,7 +221,7 @@ func (e *EtcdPool) watch() error {
 			e.log.WithError(err).
 				Error("while attempting to restart watch")
 			select {
-			case <-time.After(backOffTimeout):
+			case <-clock.After(backOffTimeout):
 				return true
 			case <-done:
 				return false
@@ -222,8 +234,16 @@ func (e *EtcdPool) watch() error {
 }
 
 func (e *EtcdPool) register(name string) error {
-	instanceKey := e.conf.BaseKey + name
+	instanceKey := e.conf.KeyPrefix + name
 	e.log.Infof("Registering peer '%s' with etcd", name)
+
+	b, err := json.Marshal(PeerInfo{
+		GRPCAddress: e.conf.AdvertiseAddress,
+		DataCenter:  e.conf.DataCenter,
+	})
+	if err != nil {
+		return errors.Wrap(err, "while marshalling PeerInfo")
+	}
 
 	var keepAlive <-chan *etcd.LeaseKeepAliveResponse
 	var lease *etcd.LeaseGrantResponse
@@ -238,7 +258,7 @@ func (e *EtcdPool) register(name string) error {
 			return errors.Wrapf(err, "during grant lease")
 		}
 
-		_, err = e.conf.Client.Put(ctx, instanceKey, name, etcd.WithLease(lease.ID))
+		_, err = e.conf.Client.Put(ctx, instanceKey, string(b), etcd.WithLease(lease.ID))
 		if err != nil {
 			return errors.Wrap(err, "during put")
 		}
@@ -249,8 +269,7 @@ func (e *EtcdPool) register(name string) error {
 		return nil
 	}
 
-	var err error
-	var lastKeepAlive time.Time
+	var lastKeepAlive clock.Time
 
 	// Attempt to register our instance with etcd
 	if err = register(); err != nil {
@@ -264,7 +283,7 @@ func (e *EtcdPool) register(name string) error {
 				e.log.WithError(err).
 					Error("while attempting to re-register peer")
 				select {
-				case <-time.After(backOffTimeout):
+				case <-clock.After(backOffTimeout):
 					return true
 				case <-done:
 					return false
@@ -287,12 +306,12 @@ func (e *EtcdPool) register(name string) error {
 			}
 
 			// Ensure we are getting keep alive's regularly
-			if lastKeepAlive.Sub(time.Now()) > time.Second*leaseTTL {
+			if lastKeepAlive.Sub(clock.Now()) > clock.Second*leaseTTL {
 				e.log.Warn("to long between keep alive heartbeats, re-registering peer")
 				keepAlive = nil
 				return true
 			}
-			lastKeepAlive = time.Now()
+			lastKeepAlive = clock.Now()
 		case <-done:
 			ctx, cancel := context.WithTimeout(context.Background(), etcdTimeout)
 			if _, err := e.conf.Client.Delete(ctx, instanceKey); err != nil {
@@ -321,12 +340,11 @@ func (e *EtcdPool) Close() {
 func (e *EtcdPool) callOnUpdate() {
 	var peers []PeerInfo
 
-	for k := range e.peers {
-		if k == e.conf.AdvertiseAddress {
-			peers = append(peers, PeerInfo{Address: k, IsOwner: true})
-		} else {
-			peers = append(peers, PeerInfo{Address: k})
+	for _, p := range e.peers {
+		if p.GRPCAddress == e.conf.AdvertiseAddress {
+			p.IsOwner = true
 		}
+		peers = append(peers, p)
 	}
 
 	e.conf.OnUpdate(peers)

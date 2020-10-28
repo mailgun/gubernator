@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/mailgun/gubernator"
 	"github.com/mailgun/gubernator/cluster"
 	"github.com/sirupsen/logrus"
 )
@@ -29,19 +30,19 @@ import (
 func main() {
 	logrus.SetLevel(logrus.InfoLevel)
 	// Start a local cluster
-	err := cluster.StartWith([]string{
-		"127.0.0.1:9090",
-		"127.0.0.1:9091",
-		"127.0.0.1:9092",
-		"127.0.0.1:9093",
-		"127.0.0.1:9094",
-		"127.0.0.1:9095",
+	err := cluster.StartWith([]gubernator.PeerInfo{
+		{GRPCAddress: "127.0.0.1:9990", HTTPAddress: "127.0.0.1:9980"},
+		{GRPCAddress: "127.0.0.1:9991", HTTPAddress: "127.0.0.1:9981"},
+		{GRPCAddress: "127.0.0.1:9992", HTTPAddress: "127.0.0.1:9982"},
+		{GRPCAddress: "127.0.0.1:9993", HTTPAddress: "127.0.0.1:9983"},
+		{GRPCAddress: "127.0.0.1:9994", HTTPAddress: "127.0.0.1:9984"},
+		{GRPCAddress: "127.0.0.1:9995", HTTPAddress: "127.0.0.1:9985"},
 	})
 	if err != nil {
-		fmt.Println(err)
+		panic(err)
 	}
 
-	fmt.Println("Ready")
+	fmt.Println("Running.....")
 
 	// Wait until we get a INT signal then shutdown the cluster
 	c := make(chan os.Signal, 1)

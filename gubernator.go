@@ -167,7 +167,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 				}
 
 				// If our server instance is the owner of this rate limit
-				if peer.info.IsOwner {
+				if peer.Info().IsOwner {
 					// Apply our rate limit algorithm to the request
 					inOut.Out, err = s.getRateLimit(inOut.In)
 					if err != nil {
@@ -183,7 +183,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 						}
 
 						// Inform the client of the owner key of the key
-						inOut.Out.Metadata = map[string]string{"owner": peer.info.GRPCAddress}
+						inOut.Out.Metadata = map[string]string{"owner": peer.Info().GRPCAddress}
 
 						out <- inOut
 						return nil
@@ -202,7 +202,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 					}
 
 					// Inform the client of the owner key of the key
-					inOut.Out.Metadata = map[string]string{"owner": peer.info.GRPCAddress}
+					inOut.Out.Metadata = map[string]string{"owner": peer.Info().GRPCAddress}
 				}
 
 				out <- inOut
@@ -357,7 +357,11 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 			peer := s.conf.RegionPicker.GetByPeerInfo(info)
 			// If we don't have an existing PeerClient create a new one
 			if peer == nil {
-				peer = NewPeerClient(s.conf.Behaviors, info)
+				peer = NewPeerClient(PeerConfig{
+					TLS:      s.conf.PeerTLS,
+					Behavior: s.conf.Behaviors,
+					Info:     info,
+				})
 			}
 			regionPicker.Add(peer)
 			continue
@@ -365,7 +369,11 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 		// If we don't have an existing PeerClient create a new one
 		peer := s.conf.LocalPicker.GetByPeerInfo(info)
 		if peer == nil {
-			peer = NewPeerClient(s.conf.Behaviors, info)
+			peer = NewPeerClient(PeerConfig{
+				TLS:      s.conf.PeerTLS,
+				Behavior: s.conf.Behaviors,
+				Info:     info,
+			})
 		}
 		localPicker.Add(peer)
 	}
@@ -386,14 +394,14 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 
 	var shutdownPeers []*PeerClient
 	for _, peer := range oldLocalPicker.Peers() {
-		if peerInfo := s.conf.LocalPicker.GetByPeerInfo(peer.info); peerInfo == nil {
+		if peerInfo := s.conf.LocalPicker.GetByPeerInfo(peer.Info()); peerInfo == nil {
 			shutdownPeers = append(shutdownPeers, peer)
 		}
 	}
 
 	for _, regionPicker := range oldRegionPicker.Pickers() {
 		for _, peer := range regionPicker.Peers() {
-			if peerInfo := s.conf.RegionPicker.GetByPeerInfo(peer.info); peerInfo == nil {
+			if peerInfo := s.conf.RegionPicker.GetByPeerInfo(peer.Info()); peerInfo == nil {
 				shutdownPeers = append(shutdownPeers, peer)
 			}
 		}
@@ -415,7 +423,7 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 	if len(shutdownPeers) > 0 {
 		var peers []string
 		for _, p := range shutdownPeers {
-			peers = append(peers, p.info.GRPCAddress)
+			peers = append(peers, p.Info().GRPCAddress)
 		}
 		s.log.WithField("peers", peers).Debug("Peers shutdown")
 	}

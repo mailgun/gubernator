@@ -28,8 +28,8 @@ import (
 type GRPCStats struct {
 	Duration clock.Duration
 	Method   string
-	Failed   int64
-	Success  int64
+	Failed   float64
+	Success  float64
 }
 
 type contextKey struct{}
@@ -43,18 +43,19 @@ type GRPCStatsHandler struct {
 	wg    syncutil.WaitGroup
 
 	grpcRequestCount    *prometheus.CounterVec
-	grpcRequestDuration *prometheus.HistogramVec
+	grpcRequestDuration *prometheus.SummaryVec
 }
 
 func NewGRPCStatsHandler() *GRPCStatsHandler {
 	c := &GRPCStatsHandler{
 		grpcRequestCount: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "grpc_request_counts",
-			Help: "GRPC requests by status."},
-			[]string{"status", "method"}),
-		grpcRequestDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name: "grpc_request_duration_milliseconds",
-			Help: "GRPC request durations in milliseconds.",
+			Name: "gubernator_grpc_request_counts",
+			Help: "GRPC requests by status.",
+		}, []string{"status", "method"}),
+		grpcRequestDuration: prometheus.NewSummaryVec(prometheus.SummaryOpts{
+			Name:       "gubernator_grpc_request_duration_milliseconds",
+			Help:       "GRPC request durations in milliseconds.",
+			Objectives: map[float64]float64{0.5: 0.05, 0.99: 0.001},
 		}, []string{"method"}),
 	}
 	c.run()
@@ -67,29 +68,10 @@ func (c *GRPCStatsHandler) run() {
 	c.wg.Until(func(done chan struct{}) bool {
 		select {
 		case stat := <-c.reqCh:
-			c.grpcRequestCount.With(prometheus.Labels{"status": "failed", "method": stat.Method}).Add(float64(stat.Failed))
-			c.grpcRequestCount.With(prometheus.Labels{"status": "success", "method": stat.Method}).Add(float64(stat.Success))
-			c.grpcRequestDuration.With(prometheus.Labels{"method": stat.Method}).Observe(stat.Duration.Seconds() * 1000)
-
-		/*case <-tick.C:
-		// Emit stats about our cache
-		if c.cacheStats != nil {
-			stats := c.cacheStats.Stats(true)
-			c.client.Gauge("cache.size", stats.Size)
-			c.client.Incr("cache.hit", stats.Hit)
-			c.client.Incr("cache.miss", stats.Miss)
-		}
-
-		// Emit stats about our global manager
-		if c.serverStats != nil {
-			stats := c.serverStats.Stats(true)
-			c.client.Gauge("global-manager.broadcast-duration", stats.BroadcastDuration)
-			c.client.Incr("global-manager.async-count", stats.AsyncGlobalsCount)
-		}
-		*/
+			c.grpcRequestCount.With(prometheus.Labels{"status": "failed", "method": stat.Method}).Add(stat.Failed)
+			c.grpcRequestCount.With(prometheus.Labels{"status": "success", "method": stat.Method}).Add(stat.Success)
+			c.grpcRequestDuration.With(prometheus.Labels{"method": stat.Method}).Observe(stat.Duration.Seconds())
 		case <-done:
-			//tick.Stop()
-			//c.client.Close()
 			return false
 		}
 		return true

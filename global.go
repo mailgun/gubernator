@@ -18,6 +18,7 @@ package gubernator
 
 import (
 	"context"
+	"time"
 
 	"github.com/mailgun/holster/v3/clock"
 	"github.com/mailgun/holster/v3/syncutil"
@@ -35,20 +36,22 @@ type globalManager struct {
 	log            logrus.FieldLogger
 	instance       *V1Instance
 
-	asyncMetrics     prometheus.Histogram
-	broadcastMetrics prometheus.Histogram
+	asyncMetrics     prometheus.Summary
+	broadcastMetrics prometheus.Summary
 }
 
 func newGlobalManager(conf BehaviorConfig, instance *V1Instance) *globalManager {
 	gm := globalManager{
 		log: instance.log,
-		asyncMetrics: prometheus.NewHistogram(prometheus.HistogramOpts{
-			Name: "async_durations",
-			Help: "The duration of GLOBAL async sends in seconds.",
+		asyncMetrics: prometheus.NewSummary(prometheus.SummaryOpts{
+			Help:       "The duration of GLOBAL async sends in seconds.",
+			Name:       "gubernator_async_durations",
+			Objectives: map[float64]float64{0.5: 0.05, 0.99: 0.001},
 		}),
-		broadcastMetrics: prometheus.NewHistogram(prometheus.HistogramOpts{
-			Name: "broadcast_durations",
-			Help: "The duration of GLOBAL broadcasts to peers in seconds.",
+		broadcastMetrics: prometheus.NewSummary(prometheus.SummaryOpts{
+			Help:       "The duration of GLOBAL broadcasts to peers in seconds.",
+			Name:       "gubernator_broadcast_durations",
+			Objectives: map[float64]float64{0.5: 0.05, 0.99: 0.001},
 		}),
 		asyncQueue:     make(chan *RateLimitReq, 0),
 		broadcastQueue: make(chan *RateLimitReq, 0),
@@ -129,11 +132,11 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 			continue
 		}
 
-		p, ok := peerRequests[peer.info.GRPCAddress]
+		p, ok := peerRequests[peer.Info().GRPCAddress]
 		if ok {
 			p.req.Requests = append(p.req.Requests, r)
 		} else {
-			peerRequests[peer.info.GRPCAddress] = &pair{
+			peerRequests[peer.Info().GRPCAddress] = &pair{
 				client: peer,
 				req:    GetPeerRateLimitsReq{Requests: []*RateLimitReq{r}},
 			}
@@ -148,11 +151,11 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 
 		if err != nil {
 			gm.log.WithError(err).
-				Errorf("error sending global hits to '%s'", p.client.info.GRPCAddress)
+				Errorf("error sending global hits to '%s'", p.client.Info().GRPCAddress)
 			continue
 		}
 	}
-	gm.asyncMetrics.Observe(clock.Since(start).Seconds())
+	gm.asyncMetrics.Observe(time.Since(start).Seconds())
 }
 
 // runBroadcasts collects status changes for global rate limits and broadcasts the changes to each peer in the cluster.
@@ -218,7 +221,7 @@ func (gm *globalManager) broadcastPeers(updates map[string]*RateLimitReq) {
 
 	for _, peer := range gm.instance.GetPeerList() {
 		// Exclude ourselves from the update
-		if peer.info.IsOwner {
+		if peer.Info().IsOwner {
 			continue
 		}
 
@@ -229,11 +232,11 @@ func (gm *globalManager) broadcastPeers(updates map[string]*RateLimitReq) {
 		if err != nil {
 			// Skip peers that are not in a ready state
 			if !IsNotReady(err) {
-				gm.log.WithError(err).Errorf("while broadcasting global updates to '%s'", peer.info.GRPCAddress)
+				gm.log.WithError(err).Errorf("while broadcasting global updates to '%s'", peer.Info().GRPCAddress)
 			}
 			continue
 		}
 	}
 
-	gm.broadcastMetrics.Observe(clock.Since(start).Seconds())
+	gm.broadcastMetrics.Observe(time.Since(start).Seconds())
 }

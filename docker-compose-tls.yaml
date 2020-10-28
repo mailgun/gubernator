@@ -1,0 +1,82 @@
+version: '3'
+services:
+  gubernator-1:
+    image: thrawn01/gubernator:latest
+    command: "/gubernator"
+    environment:
+      # Basic member-list config
+      - GUBER_GRPC_ADDRESS=0.0.0.0:81
+      - GUBER_HTTP_ADDRESS=0.0.0.0:80
+      - GUBER_ADVERTISE_ADDRESS=gubernator-1:81
+      - GUBER_MEMBERLIST_KNOWN_NODES=gubernator-1
+      # TLS config
+      - GUBER_TLS_CA_FILE=/etc/tls-certs/ca.pem
+      - GUBER_TLS_KEY_FILE=/etc/tls-certs/gubernator.key
+      - GUBER_TLS_CERT_FILE=/etc/tls-certs/gubernator.pem
+      - GUBER_TLS_CLIENT_AUTH=require-and-verify
+    ports:
+      - "9081:81"
+      - "9080:80"
+    volumes:
+      - ${PWD}/certs:/etc/tls-certs
+
+  gubernator-2:
+    image: thrawn01/gubernator:latest
+    command: "/gubernator"
+    environment:
+      # Basic member-list config
+      - GUBER_GRPC_ADDRESS=0.0.0.0:81
+      - GUBER_HTTP_ADDRESS=0.0.0.0:80
+      - GUBER_ADVERTISE_ADDRESS=gubernator-2:81
+      - GUBER_MEMBERLIST_KNOWN_NODES=gubernator-1
+      # TLS config
+      - GUBER_TLS_CA_FILE=/etc/tls-certs/ca.pem
+      - GUBER_TLS_KEY_FILE=/etc/tls-certs/gubernator.key
+      - GUBER_TLS_CERT_FILE=/etc/tls-certs/gubernator.pem
+      - GUBER_TLS_CLIENT_AUTH=require-and-verify
+    ports:
+      - "9181:81"
+      - "9180:80"
+    volumes:
+      - ${PWD}/certs:/etc/tls-certs
+
+  gubernator-3:
+    image: thrawn01/gubernator:latest
+    command: "/gubernator"
+    environment:
+      # Basic member-list config
+      - GUBER_GRPC_ADDRESS=0.0.0.0:81
+      - GUBER_HTTP_ADDRESS=0.0.0.0:80
+      - GUBER_ADVERTISE_ADDRESS=gubernator-3:81
+      - GUBER_MEMBERLIST_KNOWN_NODES=gubernator-1
+      # TLS config
+      - GUBER_TLS_CA_FILE=/etc/tls-certs/ca.pem
+      - GUBER_TLS_KEY_FILE=/etc/tls-certs/gubernator.key
+      - GUBER_TLS_CERT_FILE=/etc/tls-certs/gubernator.pem
+      - GUBER_TLS_CLIENT_AUTH=require-and-verify
+    ports:
+      - "9281:81"
+      - "9280:80"
+    volumes:
+      - ${PWD}/certs:/etc/tls-certs
+
+  gubernator-4:
+    image: thrawn01/gubernator:latest
+    command: "/gubernator"
+    environment:
+      # Basic member-list config
+      - GUBER_DEBUG=true
+      - GUBER_GRPC_ADDRESS=0.0.0.0:81
+      - GUBER_HTTP_ADDRESS=0.0.0.0:80
+      - GUBER_ADVERTISE_ADDRESS=gubernator-4:81
+      - GUBER_MEMBERLIST_KNOWN_NODES=gubernator-1
+      # TLS config
+      - GUBER_TLS_CA_FILE=/etc/tls-certs/ca.pem
+      - GUBER_TLS_KEY_FILE=/etc/tls-certs/gubernator.key
+      - GUBER_TLS_CERT_FILE=/etc/tls-certs/gubernator.pem
+      - GUBER_TLS_CLIENT_AUTH=require-and-verify
+    ports:
+      - "9381:81"
+      - "9380:80"
+    volumes:
+      - ${PWD}/certs:/etc/tls-certs

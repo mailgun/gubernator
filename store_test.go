@@ -87,7 +87,7 @@ func TestLoader(t *testing.T) {
 	assert.Equal(t, 1, loader.Called["Load()"])
 	assert.Equal(t, 0, loader.Called["Save()"])
 
-	client, err := gubernator.DialV1Server(srv.listener.Addr().String())
+	client, err := gubernator.DialV1Server(srv.listener.Addr().String(), nil)
 	assert.Nil(t, err)
 
 	resp, err := client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
@@ -219,7 +219,7 @@ func TestStore(t *testing.T) {
 			assert.Equal(t, 0, store.Called["OnChange()"])
 			assert.Equal(t, 0, store.Called["Get()"])
 
-			client, err := gubernator.DialV1Server(srv.listener.Addr().String())
+			client, err := gubernator.DialV1Server(srv.listener.Addr().String(), nil)
 			assert.Nil(t, err)
 
 			req := gubernator.RateLimitReq{

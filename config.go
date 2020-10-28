@@ -17,6 +17,7 @@ limitations under the License.
 package gubernator
 
 import (
+	"crypto/tls"
 	"fmt"
 	"time"
 
@@ -59,8 +60,11 @@ type Config struct {
 	// using multi data center support.
 	DataCenter string
 
-	// (Optional) Logger to be used when
+	// (Optional) A Logger which implements the declared logger interface (typically *logrus.Entry)
 	Logger logrus.FieldLogger
+
+	// (Optional) The TLS config used when connecting to gubernator peers
+	PeerTLS *tls.Config
 }
 
 type BehaviorConfig struct {
@@ -124,5 +128,11 @@ func (c *Config) SetDefaults() error {
 	if c.Behaviors.BatchLimit > maxBatchSize {
 		return fmt.Errorf("Behaviors.BatchLimit cannot exceed '%d'", maxBatchSize)
 	}
+
+	// Make a copy of the TLS config in case our caller decides to make changes
+	if c.PeerTLS != nil {
+		c.PeerTLS = c.PeerTLS.Clone()
+	}
+
 	return nil
 }

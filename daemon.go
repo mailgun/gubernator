@@ -18,6 +18,8 @@ package gubernator
 
 import (
 	"context"
+	"crypto/tls"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -31,6 +33,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 var DebugEnabled = false
@@ -74,6 +77,24 @@ type DaemonConfig struct {
 
 	// (Optional) A Logger which implements the declared logger interface (typically *logrus.Entry)
 	Logger logrus.FieldLogger
+
+	// (Optional) TLS Configuration; SpawnDaemon() will modify the passed TLS config in an
+	// attempt to build a complete TLS config if one is not provided.
+	TLS *TLSConfig
+}
+
+func (d *DaemonConfig) ClientTLS() *tls.Config {
+	if d.TLS != nil {
+		return d.TLS.ClientTLS
+	}
+	return nil
+}
+
+func (d *DaemonConfig) ServerTLS() *tls.Config {
+	if d.TLS != nil {
+		return d.TLS.ServerTLS
+	}
+	return nil
 }
 
 type Daemon struct {
@@ -122,13 +143,26 @@ func (s *Daemon) Start(ctx context.Context) error {
 	s.statsHandler = NewGRPCStatsHandler()
 	s.promRegister.Register(s.statsHandler)
 
-	// New GRPC server
-	s.grpcSrv = grpc.NewServer(
+	opts := []grpc.ServerOption{
 		grpc.StatsHandler(s.statsHandler),
-		grpc.MaxRecvMsgSize(1024*1024))
+		grpc.MaxRecvMsgSize(1024 * 1024),
+	}
+
+	if err := SetupTLS(s.conf.TLS); err != nil {
+		return err
+	}
+
+	if s.conf.ServerTLS() != nil {
+		creds := credentials.NewTLS(s.conf.ServerTLS())
+		opts = append(opts, grpc.Creds(creds))
+	}
+
+	// New GRPC server
+	s.grpcSrv = grpc.NewServer(opts...)
 
 	// Registers a new gubernator instance with the GRPC server
 	s.V1Server, err = NewV1Instance(Config{
+		PeerTLS:     s.conf.ClientTLS(),
 		DataCenter:  s.conf.DataCenter,
 		LocalPicker: s.conf.Picker,
 		GRPCServer:  s.grpcSrv,
@@ -203,21 +237,36 @@ func (s *Daemon) Start(ctx context.Context) error {
 		s.promRegister, promhttp.HandlerFor(s.promRegister, promhttp.HandlerOpts{}),
 	))
 	mux.Handle("/", gateway)
-	s.httpSrv = &http.Server{Addr: s.conf.HTTPListenAddress, Handler: mux}
+	log := log.New(newLogWriter(s.log), "", 0)
+	s.httpSrv = &http.Server{Addr: s.conf.HTTPListenAddress, Handler: mux, ErrorLog: log}
 
 	s.HTTPListener, err = net.Listen("tcp", s.conf.HTTPListenAddress)
 	if err != nil {
 		return errors.Wrap(err, "while starting HTTP listener")
 	}
 
-	s.wg.Go(func() {
-		s.log.Infof("HTTP Gateway Listening on %s ...", s.conf.HTTPListenAddress)
-		if err := s.httpSrv.Serve(s.HTTPListener); err != nil {
-			if err != http.ErrServerClosed {
-				s.log.WithError(err).Error("while starting HTTP server")
+	if s.conf.ServerTLS() != nil {
+		// This is to avoid any race conditions that might occur
+		// since the tls config is a shared pointer.
+		s.httpSrv.TLSConfig = s.conf.ServerTLS().Clone()
+		s.wg.Go(func() {
+			s.log.Infof("HTTPS Gateway Listening on %s ...", s.conf.HTTPListenAddress)
+			if err := s.httpSrv.ServeTLS(s.HTTPListener, "", ""); err != nil {
+				if err != http.ErrServerClosed {
+					s.log.WithError(err).Error("while starting TLS HTTP server")
+				}
 			}
-		}
-	})
+		})
+	} else {
+		s.wg.Go(func() {
+			s.log.Infof("HTTP Gateway Listening on %s ...", s.conf.HTTPListenAddress)
+			if err := s.httpSrv.Serve(s.HTTPListener); err != nil {
+				if err != http.ErrServerClosed {
+					s.log.WithError(err).Error("while starting HTTP server")
+				}
+			}
+		})
+	}
 
 	// Validate we can reach the GRPC and HTTP endpoints before returning
 	if err := WaitForConnect(ctx, []string{s.conf.HTTPListenAddress, s.conf.GRPCListenAddress}); err != nil {
@@ -270,12 +319,13 @@ func (s *Daemon) Config() DaemonConfig {
 func (s *Daemon) Peers() []PeerInfo {
 	var peers []PeerInfo
 	for _, client := range s.V1Server.GetPeerList() {
-		peers = append(peers, client.PeerInfo())
+		peers = append(peers, client.Info())
 	}
 	return peers
 }
 
-// WaitForConnect returns nil if the list of addresses is listening for connections; will block until context is cancelled.
+// WaitForConnect returns nil if the list of addresses is listening
+// for connections; will block until context is cancelled.
 func WaitForConnect(ctx context.Context, addresses []string) error {
 	var d net.Dialer
 	var errs []error
@@ -286,6 +336,9 @@ func WaitForConnect(ctx context.Context, addresses []string) error {
 				continue
 			}
 
+			// TODO: golang 15.3 introduces tls.DialContext(). When we are ready to drop
+			//  support for older versions we can detect tls and use the tls.DialContext to
+			//  avoid the `http: TLS handshake error` we get when using TLS.
 			conn, err := d.DialContext(ctx, "tcp", addr)
 			if err != nil {
 				errs = append(errs, err)

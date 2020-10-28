@@ -86,10 +86,10 @@ func (rp *RegionPicker) Peers() []*PeerClient {
 }
 
 func (rp *RegionPicker) Add(peer *PeerClient) {
-	picker, ok := rp.regions[peer.info.DataCenter]
+	picker, ok := rp.regions[peer.Info().DataCenter]
 	if !ok {
 		picker = rp.ReplicatedConsistentHash.New()
-		rp.regions[peer.info.DataCenter] = picker
+		rp.regions[peer.Info().DataCenter] = picker
 	}
 	picker.Add(peer)
 }

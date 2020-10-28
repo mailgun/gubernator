@@ -65,7 +65,7 @@ func (ch *ConsistentHash) Peers() []*PeerClient {
 
 // Adds a peer to the hash
 func (ch *ConsistentHash) Add(peer *PeerClient) {
-	hash := int(ch.hashFunc(strToBytesUnsafe(peer.info.HashKey())))
+	hash := int(ch.hashFunc(strToBytesUnsafe(peer.Info().HashKey())))
 	ch.peerKeys = append(ch.peerKeys, hash)
 	ch.peerMap[hash] = peer
 	sort.Ints(ch.peerKeys)

@@ -45,7 +45,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	client, err := guber.DialV1Server(os.Args[1])
+	client, err := guber.DialV1Server(os.Args[1], nil)
 	checkErr(err)
 
 	// Generate a selection of rate limits with random limits

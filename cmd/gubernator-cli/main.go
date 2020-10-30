@@ -18,6 +18,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"flag"
 	"fmt"
 	"math/rand"
 	"os"
@@ -25,12 +27,16 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	guber "github.com/mailgun/gubernator"
 	"github.com/mailgun/holster/v3/clock"
+	"github.com/mailgun/holster/v3/setter"
 	"github.com/mailgun/holster/v3/syncutil"
+	"github.com/sirupsen/logrus"
 )
+
+var log *logrus.Logger
 
 func checkErr(err error) {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %s\n", err)
+		log.Errorf(err.Error())
 		os.Exit(1)
 	}
 }
@@ -40,12 +46,29 @@ func randInt(min, max int) int64 {
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Printf("Please provide an gubernator GRPC endpoint address\n")
-		os.Exit(1)
+	var configFile, GRPCAddress string
+	var err error
+
+	log = logrus.StandardLogger()
+	flags := flag.NewFlagSet("gubernator", flag.ContinueOnError)
+	flags.StringVar(&configFile, "config", "", "environment config file")
+	flags.StringVar(&GRPCAddress, "e", "", "the gubernator GRPC endpoint address")
+	checkErr(flags.Parse(os.Args[1:]))
+
+	conf, err := guber.SetupDaemonConfig(log, configFile)
+	checkErr(err)
+	setter.SetOverride(&conf.GRPCListenAddress, GRPCAddress)
+
+	if configFile == "" && GRPCAddress == "" && os.Getenv("GUBER_GRPC_ADDRESS") == "" {
+		checkErr(errors.New("please provide a GRPC endpoint via -e or from a config " +
+			"file via -config or set the env GUBER_GRPC_ADDRESS"))
 	}
 
-	client, err := guber.DialV1Server(os.Args[1], nil)
+	err = guber.SetupTLS(conf.TLS)
+	checkErr(err)
+
+	log.Infof("Connecting to '%s'...\n", conf.GRPCListenAddress)
+	client, err := guber.DialV1Server(conf.GRPCListenAddress, conf.ClientTLS())
 	checkErr(err)
 
 	// Generate a selection of rate limits with random limits

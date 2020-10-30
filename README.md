@@ -252,15 +252,15 @@ don't have either, the docker-compose method is the simplest way to try gubernat
 
 ##### Docker with existing etcd cluster
 ```bash
-$ docker run -p 8081:81 -p 8080:80 -e GUBER_ETCD_ENDPOINTS=etcd1:2379,etcd2:2379 \
+$ docker run -p 8081:81 -p 9080:80 -e GUBER_ETCD_ENDPOINTS=etcd1:2379,etcd2:2379 \
    thrawn01/gubernator:latest 
    
-# Hit the API at localhost:8080 (GRPC is at 8081)
-$ curl http://localhost:8080/v1/HealthCheck
+# Hit the API at localhost:9080
+$ curl http://localhost:9080/v1/HealthCheck
 ```
 
 ##### Docker compose
-The docker compose file includes a local etcd server and 2 gubernator instances
+The docker compose file uses member-list for peer discovery
 ```bash
 # Download the docker-compose file
 $ curl -O https://raw.githubusercontent.com/mailgun/gubernator/master/docker-compose.yaml
@@ -271,8 +271,8 @@ $ vi docker-compose.yaml
 # Run the docker container
 $ docker-compose up -d
 
-# Hit the API at localhost:8080 (GRPC is at 8081)
-$ curl http://localhost:8080/v1/HealthCheck
+# Hit the API at localhost:9080 (GRPC is at 9081)
+$ curl http://localhost:9080/v1/HealthCheck
 ```
 
 ##### Kubernetes

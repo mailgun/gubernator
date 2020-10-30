@@ -118,7 +118,7 @@ func fromFile(name string) (*bytes.Buffer, error) {
 func SetupTLS(conf *TLSConfig) error {
 	var err error
 
-	if conf == nil || conf.ServerTLS != nil {
+	if conf == nil || conf.ServerTLS == nil {
 		return nil
 	}
 

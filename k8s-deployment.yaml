@@ -5,7 +5,7 @@ metadata:
   labels:
     app: gubernator
 spec:
-  replicas: 2
+  replicas: 4
   selector:
     matchLabels:
       app: gubernator
@@ -33,6 +33,9 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: status.podIP
+          # Use the k8s API for peer discovery
+          - name: GUBER_PEER_DISCOVERY_TYPE
+            value: "k8s"
           # This should match the port number GRPC is listening on
           # as defined by `containerPort`
           - name: GUBER_K8S_POD_PORT
@@ -42,8 +45,8 @@ spec:
           - name: GUBER_K8S_ENDPOINTS_SELECTOR
             value: "app=gubernator"
           # Enable debug for diagnosing issues
-          #- name: GUBER_DEBUG
-          #  value: "true"
+          - name: GUBER_DEBUG
+            value: "true"
       restartPolicy: Always
 ---
 apiVersion: v1

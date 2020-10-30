@@ -18,7 +18,6 @@ package gubernator
 
 import (
 	"context"
-	"crypto/tls"
 	"log"
 	"net"
 	"net/http"
@@ -35,67 +34,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
-
-var DebugEnabled = false
-
-type DaemonConfig struct {
-	// (Required) The `address:port` that will accept GRPC requests
-	GRPCListenAddress string
-
-	// (Required) The `address:port` that will accept HTTP requests
-	HTTPListenAddress string
-
-	// (Optional) The `address:port` that is advertised to other Gubernator peers.
-	// Defaults to `GRPCListenAddress`
-	AdvertiseAddress string
-
-	// (Optional) The number of items in the cache. Defaults to 50,000
-	CacheSize int
-
-	// (Optional) Configure how behaviours behave
-	Behaviors BehaviorConfig
-
-	// (Optional) Identifies the datacenter this instance is running in. For
-	// use with multi-region support
-	DataCenter string
-
-	// (Optional) Which pool to use when discovering other Gubernator peers
-	//  Valid options are [etcd, k8s, member-list] (Defaults to 'member-list')
-	PeerDiscoveryType string
-
-	// (Optional) Etcd configuration used for peer discovery
-	EtcdPoolConf EtcdPoolConfig
-
-	// (Optional) K8s configuration used for peer discovery
-	K8PoolConf K8sPoolConfig
-
-	// (Optional) Member list configuration used for peer discovery
-	MemberListPoolConf MemberListPoolConfig
-
-	// (Optional) The PeerPicker as selected by `GUBER_PEER_PICKER`
-	Picker PeerPicker
-
-	// (Optional) A Logger which implements the declared logger interface (typically *logrus.Entry)
-	Logger logrus.FieldLogger
-
-	// (Optional) TLS Configuration; SpawnDaemon() will modify the passed TLS config in an
-	// attempt to build a complete TLS config if one is not provided.
-	TLS *TLSConfig
-}
-
-func (d *DaemonConfig) ClientTLS() *tls.Config {
-	if d.TLS != nil {
-		return d.TLS.ClientTLS
-	}
-	return nil
-}
-
-func (d *DaemonConfig) ServerTLS() *tls.Config {
-	if d.TLS != nil {
-		return d.TLS.ServerTLS
-	}
-	return nil
-}
 
 type Daemon struct {
 	GRPCListener net.Listener

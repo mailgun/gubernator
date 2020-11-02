@@ -13,8 +13,8 @@ spec:
     metadata:
       labels:
         app: gubernator
-    serviceAccountName: gubernator
     spec:
+      serviceAccountName: gubernator
       containers:
         - image: thrawn01/gubernator:latest
           imagePullPolicy: IfNotPresent

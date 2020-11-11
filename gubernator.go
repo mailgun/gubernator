@@ -50,8 +50,8 @@ type V1Instance struct {
 // NewV1Instance instantiate a single instance of a gubernator peer and registers this
 // instance with the provided GRPCServer.
 func NewV1Instance(conf Config) (*V1Instance, error) {
-	if conf.GRPCServer == nil {
-		return nil, errors.New("GRPCServer instance is required")
+	if conf.GRPCServers == nil {
+		return nil, errors.New("At least one GRPCServer instance is required")
 	}
 
 	if err := conf.SetDefaults(); err != nil {
@@ -67,9 +67,11 @@ func NewV1Instance(conf Config) (*V1Instance, error) {
 	s.global = newGlobalManager(conf.Behaviors, &s)
 	s.mutliRegion = newMultiRegionManager(conf.Behaviors, &s)
 
-	// Register our server with GRPC
-	RegisterV1Server(conf.GRPCServer, &s)
-	RegisterPeersV1Server(conf.GRPCServer, &s)
+	// Register our instance with all GRPC servers
+	for _, srv := range conf.GRPCServers {
+		RegisterV1Server(srv, &s)
+		RegisterPeersV1Server(srv, &s)
+	}
 
 	if s.conf.Loader == nil {
 		return &s, nil

@@ -118,7 +118,12 @@ func fromFile(name string) (*bytes.Buffer, error) {
 func SetupTLS(conf *TLSConfig) error {
 	var err error
 
-	if conf == nil || conf.ServerTLS == nil {
+	if conf == nil {
+		return nil
+	}
+
+	// If both client and server tls configs provided, nothing to do!
+	if conf.ServerTLS != nil && conf.ClientTLS != nil {
 		return nil
 	}
 
@@ -126,7 +131,7 @@ func SetupTLS(conf *TLSConfig) error {
 	conf.Logger.Info("Detected TLS Configuration")
 
 	// Basic config with reasonably secure defaults
-	conf.ServerTLS = &tls.Config{
+	setter.SetDefault(&conf.ServerTLS, &tls.Config{
 		CipherSuites: []uint16{
 			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
 			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
@@ -151,8 +156,8 @@ func SetupTLS(conf *TLSConfig) error {
 		NextProtos: []string{
 			"h2", "http/1.1", // enable HTTP/2
 		},
-	}
-	conf.ClientTLS = &tls.Config{}
+	})
+	setter.SetDefault(&conf.ClientTLS, &tls.Config{})
 
 	// Attempt to load any files provided
 	conf.CaPEM, err = fromFile(conf.CaFile)

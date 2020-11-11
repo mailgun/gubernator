@@ -227,11 +227,11 @@ func TestTLSClusterWithClientAuthentication(t *testing.T) {
 
 	peers := []gubernator.PeerInfo{
 		{
-			GRPCAddress: d1.GRPCListener.Addr().String(),
+			GRPCAddress: d1.GRPCListeners[0].Addr().String(),
 			HTTPAddress: d1.HTTPListener.Addr().String(),
 		},
 		{
-			GRPCAddress: d2.GRPCListener.Addr().String(),
+			GRPCAddress: d2.GRPCListeners[0].Addr().String(),
 			HTTPAddress: d2.HTTPListener.Addr().String(),
 		},
 	}
@@ -257,4 +257,34 @@ func TestTLSClusterWithClientAuthentication(t *testing.T) {
 	require.NoError(t, err)
 	// Should have called GetPeerRateLimits on d2
 	assert.Contains(t, string(b), `{method="/pb.gubernator.PeersV1/GetPeerRateLimits"} 1`)
+}
+
+func TestHTTPSClientAuth(t *testing.T) {
+	conf := gubernator.DaemonConfig{
+		GRPCListenAddress: "127.0.0.1:9695",
+		HTTPListenAddress: "127.0.0.1:9685",
+		TLS: &gubernator.TLSConfig{
+			CaFile:     "certs/ca.pem",
+			CertFile:   "certs/gubernator.pem",
+			KeyFile:    "certs/gubernator.key",
+			ClientAuth: tls.RequireAndVerifyClientCert,
+		},
+	}
+
+	d := spawnDaemon(t, conf)
+	defer d.Close()
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: conf.TLS.ClientTLS,
+		},
+	}
+
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://%s/v1/HealthCheck", conf.HTTPListenAddress), nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	b, err := ioutil.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, `{"status":"healthy"}`, string(b))
 }

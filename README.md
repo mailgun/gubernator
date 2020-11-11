@@ -255,7 +255,7 @@ don't have either, the docker-compose method is the simplest way to try gubernat
 $ docker run -p 8081:81 -p 9080:80 -e GUBER_ETCD_ENDPOINTS=etcd1:2379,etcd2:2379 \
    thrawn01/gubernator:latest 
    
-# Hit the API at localhost:9080
+# Hit the HTTP API at localhost:9080
 $ curl http://localhost:9080/v1/HealthCheck
 ```
 
@@ -271,7 +271,7 @@ $ vi docker-compose.yaml
 # Run the docker container
 $ docker-compose up -d
 
-# Hit the API at localhost:9080 (GRPC is at 9081)
+# Hit the HTTP API at localhost:9080 (GRPC is at 9081)
 $ curl http://localhost:9080/v1/HealthCheck
 ```
 
@@ -287,16 +287,24 @@ $ vi k8s-deployment.yaml
 $ kubectl create -f k8s-deployment.yaml
 ```
 
+##### TLS
+Gubernator supports TLS for both HTTP and GRPC connections. You can see an example with
+self signed certs by running `docker-compose-tls.yaml`
+```bash
+# Run docker compose
+$ docker-compose -f docker-compose-tls.yaml up -d
+
+# Hit the HTTP API at localhost:9080 (GRPC is at 9081)
+$ curl --cacert certs/ca.pem --cert certs/gubernator.pem --key certs/gubernator.key  https://localhost:9080/v1/HealthCheck
+`
+
 ### Configuration
 Gubernator is configured via environment variables with an optional `--config` flag
 which takes a file of key/values and places them into the local environment before startup.
 
 See the `example.conf` for all available config options and their descriptions.
 
-
 ### Architecture
 See [architecture.md](/architecture.md) for a full description of the architecture and the inner 
 workings of gubernator.
-
-
 

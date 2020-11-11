@@ -36,15 +36,15 @@ import (
 )
 
 type Daemon struct {
-	GRPCListener net.Listener
-	HTTPListener net.Listener
-	V1Server     *V1Instance
+	GRPCListeners []net.Listener
+	HTTPListener  net.Listener
+	V1Server      *V1Instance
 
 	log          logrus.FieldLogger
 	pool         PoolInterface
 	conf         DaemonConfig
 	httpSrv      *http.Server
-	grpcSrv      *grpc.Server
+	grpcSrvs     []*grpc.Server
 	wg           syncutil.WaitGroup
 	statsHandler *GRPCStatsHandler
 	promRegister *prometheus.Registry
@@ -91,19 +91,17 @@ func (s *Daemon) Start(ctx context.Context) error {
 	}
 
 	if s.conf.ServerTLS() != nil {
-		creds := credentials.NewTLS(s.conf.ServerTLS())
-		opts = append(opts, grpc.Creds(creds))
+		// Create two GRPC server instances, one for TLS and the other for the API Gateway
+		s.grpcSrvs = append(s.grpcSrvs, grpc.NewServer(append(opts, grpc.Creds(credentials.NewTLS(s.conf.ServerTLS())))...))
 	}
-
-	// New GRPC server
-	s.grpcSrv = grpc.NewServer(opts...)
+	s.grpcSrvs = append(s.grpcSrvs, grpc.NewServer(opts...))
 
 	// Registers a new gubernator instance with the GRPC server
 	s.V1Server, err = NewV1Instance(Config{
 		PeerTLS:     s.conf.ClientTLS(),
 		DataCenter:  s.conf.DataCenter,
 		LocalPicker: s.conf.Picker,
-		GRPCServer:  s.grpcSrv,
+		GRPCServers: s.grpcSrvs,
 		Logger:      s.log,
 		Cache:       cache,
 	})
@@ -114,18 +112,44 @@ func (s *Daemon) Start(ctx context.Context) error {
 	// V1Server instance also implements prometheus.Collector interface
 	s.promRegister.Register(s.V1Server)
 
-	s.GRPCListener, err = net.Listen("tcp", s.conf.GRPCListenAddress)
+	l, err := net.Listen("tcp", s.conf.GRPCListenAddress)
 	if err != nil {
 		return errors.Wrap(err, "while starting GRPC listener")
 	}
+	s.GRPCListeners = append(s.GRPCListeners, l)
 
 	// Start serving GRPC Requests
 	s.wg.Go(func() {
 		s.log.Infof("GRPC Listening on %s ...", s.conf.GRPCListenAddress)
-		if err := s.grpcSrv.Serve(s.GRPCListener); err != nil {
+		if err := s.grpcSrvs[0].Serve(l); err != nil {
 			s.log.WithError(err).Error("while starting GRPC server")
 		}
 	})
+
+	var gatewayAddr string
+	if s.conf.ServerTLS() != nil {
+		// We start a new local GRPC instance because we can't guarantee the TLS cert provided by the
+		// user has localhost or the local interface included in the certs valid hostnames. If they are not
+		// included it means the local gateway connections will not be able to connect.
+		l, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			return errors.Wrap(err, "while starting GRPC Gateway listener")
+		}
+		s.GRPCListeners = append(s.GRPCListeners, l)
+
+		s.wg.Go(func() {
+			s.log.Infof("GRPC Gateway Listening on %s ...", l.Addr())
+			if err := s.grpcSrvs[1].Serve(l); err != nil {
+				s.log.WithError(err).Error("while starting GRPC Gateway server")
+			}
+		})
+		gatewayAddr = l.Addr().String()
+	} else {
+		gatewayAddr, err = ResolveHostIP(s.conf.GRPCListenAddress)
+		if err != nil {
+			return errors.Wrap(err, "while resolving GRPC gateway client address")
+		}
+	}
 
 	switch s.conf.PeerDiscoveryType {
 	case "k8s":
@@ -162,8 +186,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 	gateway := runtime.NewServeMux()
 	var gwCtx context.Context
 	gwCtx, s.gwCancel = context.WithCancel(context.Background())
-	err = RegisterV1HandlerFromEndpoint(gwCtx, gateway,
-		s.conf.GRPCListenAddress, []grpc.DialOption{grpc.WithInsecure()})
+	err = RegisterV1HandlerFromEndpoint(gwCtx, gateway, gatewayAddr, []grpc.DialOption{grpc.WithInsecure()})
 	if err != nil {
 		return errors.Wrap(err, "while registering GRPC gateway handler")
 	}
@@ -207,7 +230,11 @@ func (s *Daemon) Start(ctx context.Context) error {
 	}
 
 	// Validate we can reach the GRPC and HTTP endpoints before returning
-	if err := WaitForConnect(ctx, []string{s.conf.HTTPListenAddress, s.conf.GRPCListenAddress}); err != nil {
+	addrs := []string{s.conf.HTTPListenAddress}
+	for _, l := range s.GRPCListeners {
+		addrs = append(addrs, l.Addr().String())
+	}
+	if err := WaitForConnect(ctx, addrs); err != nil {
 		return err
 	}
 
@@ -226,13 +253,15 @@ func (s *Daemon) Close() {
 
 	s.log.Infof("HTTP Gateway close for %s ...", s.conf.HTTPListenAddress)
 	s.httpSrv.Shutdown(context.Background())
-	s.log.Infof("GRPC close for %s ...", s.conf.GRPCListenAddress)
-	s.grpcSrv.GracefulStop()
+	for i, srv := range s.grpcSrvs {
+		s.log.Infof("GRPC close for %s ...", s.GRPCListeners[i].Addr())
+		srv.GracefulStop()
+	}
 	s.wg.Stop()
 	s.statsHandler.Close()
 	s.gwCancel()
 	s.httpSrv = nil
-	s.grpcSrv = nil
+	s.grpcSrvs = nil
 }
 
 // SetPeers sets the peers for this daemon

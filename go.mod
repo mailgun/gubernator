@@ -11,7 +11,6 @@ require (
 	github.com/mailgun/holster/v3 v3.14.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.1.0
-	github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4
 	github.com/prometheus/common v0.6.0
 	github.com/segmentio/fasthash v1.0.2
 	github.com/sirupsen/logrus v1.4.2

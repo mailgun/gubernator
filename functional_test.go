@@ -518,7 +518,7 @@ func TestResetRemaining(t *testing.T) {
 }
 
 func TestHealthCheck(t *testing.T) {
-	client, err := guber.DialV1Server(cluster.DaemonAt(0).GRPCListener.Addr().String(), nil)
+	client, err := guber.DialV1Server(cluster.DaemonAt(0).GRPCListeners[0].Addr().String(), nil)
 	require.NoError(t, err)
 
 	// Check that the cluster is healthy to start with

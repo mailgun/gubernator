@@ -64,8 +64,8 @@ type BehaviorConfig struct {
 
 // config for a gubernator instance
 type Config struct {
-	// Required
-	GRPCServer *grpc.Server
+	// (Required) A list of GRPC servers to register our instance with
+	GRPCServers []*grpc.Server
 
 	// (Optional) Adjust how gubernator behaviors are configured
 	Behaviors BehaviorConfig
@@ -267,32 +267,34 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 	}
 
 	// TLS Config
-	setter.SetDefault(&conf.TLS, &TLSConfig{})
-	setter.SetDefault(&conf.TLS.CaFile, os.Getenv("GUBER_TLS_CA"))
-	setter.SetDefault(&conf.TLS.CaKeyFile, os.Getenv("GUBER_TLS_CA_KEY"))
-	setter.SetDefault(&conf.TLS.KeyFile, os.Getenv("GUBER_TLS_KEY"))
-	setter.SetDefault(&conf.TLS.CertFile, os.Getenv("GUBER_TLS_CERT"))
-	setter.SetDefault(&conf.TLS.AutoTLS, getEnvBool(log, "GUBER_TLS_AUTO"))
+	if anyHasPrefix("GUBER_TLS_", os.Environ()) {
+		conf.TLS = &TLSConfig{}
+		setter.SetDefault(&conf.TLS.CaFile, os.Getenv("GUBER_TLS_CA"))
+		setter.SetDefault(&conf.TLS.CaKeyFile, os.Getenv("GUBER_TLS_CA_KEY"))
+		setter.SetDefault(&conf.TLS.KeyFile, os.Getenv("GUBER_TLS_KEY"))
+		setter.SetDefault(&conf.TLS.CertFile, os.Getenv("GUBER_TLS_CERT"))
+		setter.SetDefault(&conf.TLS.AutoTLS, getEnvBool(log, "GUBER_TLS_AUTO"))
 
-	clientAuth := os.Getenv("GUBER_TLS_CLIENT_AUTH")
-	if clientAuth != "" {
-		clientAuthTypes := map[string]tls.ClientAuthType{
-			"request-cert":       tls.RequestClientCert,
-			"verify-cert":        tls.VerifyClientCertIfGiven,
-			"require-any-cert":   tls.RequireAnyClientCert,
-			"require-and-verify": tls.RequireAndVerifyClientCert,
+		clientAuth := os.Getenv("GUBER_TLS_CLIENT_AUTH")
+		if clientAuth != "" {
+			clientAuthTypes := map[string]tls.ClientAuthType{
+				"request-cert":       tls.RequestClientCert,
+				"verify-cert":        tls.VerifyClientCertIfGiven,
+				"require-any-cert":   tls.RequireAnyClientCert,
+				"require-and-verify": tls.RequireAndVerifyClientCert,
+			}
+			t, ok := clientAuthTypes[clientAuth]
+			if !ok {
+				return conf, errors.Errorf("'GUBER_TLS_CLIENT_AUTH=%s' is invalid; choices are [%s]",
+					clientAuth, validClientAuthTypes(clientAuthTypes))
+			}
+			conf.TLS.ClientAuth = t
 		}
-		t, ok := clientAuthTypes[clientAuth]
-		if !ok {
-			return conf, errors.Errorf("'GUBER_TLS_CLIENT_AUTH=%s' is invalid; choices are [%s]",
-				clientAuth, validClientAuthTypes(clientAuthTypes))
-		}
-		conf.TLS.ClientAuth = t
+		setter.SetDefault(&conf.TLS.ClientAuthKeyFile, os.Getenv("GUBER_TLS_CLIENT_AUTH_KEY"))
+		setter.SetDefault(&conf.TLS.ClientAuthCertFile, os.Getenv("GUBER_TLS_CLIENT_AUTH_CERT"))
+		setter.SetDefault(&conf.TLS.ClientAuthCaFile, os.Getenv("GUBER_TLS_CLIENT_AUTH_CA_CERT"))
+		setter.SetDefault(&conf.TLS.InsecureSkipVerify, getEnvBool(log, "GUBER_TLS_INSECURE_SKIP_VERIFY"))
 	}
-	setter.SetDefault(&conf.TLS.ClientAuthKeyFile, os.Getenv("GUBER_TLS_CLIENT_AUTH_KEY"))
-	setter.SetDefault(&conf.TLS.ClientAuthCertFile, os.Getenv("GUBER_TLS_CLIENT_AUTH_CERT"))
-	setter.SetDefault(&conf.TLS.ClientAuthCaFile, os.Getenv("GUBER_TLS_CLIENT_AUTH_CA_CERT"))
-	setter.SetDefault(&conf.TLS.InsecureSkipVerify, getEnvBool(log, "GUBER_TLS_INSECURE_SKIP_VERIFY"))
 
 	// ETCD Config
 	setter.SetDefault(&conf.EtcdPoolConf.KeyPrefix, os.Getenv("GUBER_ETCD_KEY_PREFIX"), "/gubernator-peers")

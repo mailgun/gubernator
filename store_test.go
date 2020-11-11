@@ -36,14 +36,14 @@ type v1Server struct {
 }
 
 func (s *v1Server) Close() {
-	s.conf.GRPCServer.GracefulStop()
+	s.conf.GRPCServers[0].GracefulStop()
 	s.srv.Close()
 }
 
 // Start a single instance of V1Server with the provided config and listening address.
 func newV1Server(t *testing.T, address string, conf gubernator.Config) *v1Server {
 	t.Helper()
-	conf.GRPCServer = grpc.NewServer()
+	conf.GRPCServers = append(conf.GRPCServers, grpc.NewServer())
 
 	srv, err := gubernator.NewV1Instance(conf)
 	require.NoError(t, err)
@@ -52,7 +52,7 @@ func newV1Server(t *testing.T, address string, conf gubernator.Config) *v1Server
 	require.NoError(t, err)
 
 	go func() {
-		if err := conf.GRPCServer.Serve(listener); err != nil {
+		if err := conf.GRPCServers[0].Serve(listener); err != nil {
 			fmt.Printf("while serving: %s\n", err)
 		}
 	}()

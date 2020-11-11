@@ -18,6 +18,7 @@ package gubernator
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"sync"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/mailgun/holster/v3/collections"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 type PeerPicker interface {
@@ -47,9 +49,8 @@ const (
 type PeerClient struct {
 	client   PeersV1Client
 	conn     *grpc.ClientConn
-	conf     BehaviorConfig
+	conf     PeerConfig
 	queue    chan *request
-	info     PeerInfo
 	lastErrs *collections.LRUCache
 
 	mutex  sync.RWMutex   // This mutex is for verifying the closing state of the client
@@ -67,12 +68,17 @@ type request struct {
 	resp    chan *response
 }
 
-func NewPeerClient(conf BehaviorConfig, info PeerInfo) *PeerClient {
+type PeerConfig struct {
+	TLS      *tls.Config
+	Behavior BehaviorConfig
+	Info     PeerInfo
+}
+
+func NewPeerClient(conf PeerConfig) *PeerClient {
 	return &PeerClient{
 		queue:    make(chan *request, 1000),
 		status:   peerNotConnected,
 		conf:     conf,
-		info:     info,
 		lastErrs: collections.NewLRUCache(100),
 	}
 }
@@ -83,8 +89,7 @@ func (c *PeerClient) connect() error {
 	// handle ErrClosing. Since this mutex MUST be here we take this opportunity to also see if we are connected.
 	// Doing this here encapsulates managing the connected state to the PeerClient struct. Previously a PeerClient
 	// was connected when `NewPeerClient()` was called however, when adding support for multi data centers having a
-	// PeerClient connected to every Peer in every data center continuously is not desirable, especially if nodes
-	// in each region are configured to all have sisters.
+	// PeerClient connected to every Peer in every data center continuously is not desirable.
 
 	c.mutex.RLock()
 	if c.status == peerClosing {
@@ -108,10 +113,14 @@ func (c *PeerClient) connect() error {
 		}
 
 		var err error
-		// c.conn, err = grpc.Dial(fmt.Sprintf("%s:%s", c.info.GRPCAddress, ""), grpc.WithInsecure())
-		c.conn, err = grpc.Dial(c.info.GRPCAddress, grpc.WithInsecure())
+		opts := []grpc.DialOption{grpc.WithInsecure()}
+		if c.conf.TLS != nil {
+			opts = []grpc.DialOption{grpc.WithTransportCredentials(credentials.NewTLS(c.conf.TLS))}
+		}
+
+		c.conn, err = grpc.Dial(c.conf.Info.GRPCAddress, opts...)
 		if err != nil {
-			return c.setLastErr(&PeerErr{err: errors.Wrapf(err, "failed to dial peer %s", c.info.GRPCAddress)})
+			return c.setLastErr(&PeerErr{err: errors.Wrapf(err, "failed to dial peer %s", c.conf.Info.GRPCAddress)})
 		}
 		c.client = NewPeersV1Client(c.conn)
 		c.status = peerConnected
@@ -122,9 +131,9 @@ func (c *PeerClient) connect() error {
 	return nil
 }
 
-// PeerInfo returns PeerInfo struct that describes this PeerClient
-func (c *PeerClient) PeerInfo() PeerInfo {
-	return c.info
+// Info returns PeerInfo struct that describes this PeerClient
+func (c *PeerClient) Info() PeerInfo {
+	return c.conf.Info
 }
 
 // GetPeerRateLimit forwards a rate limit request to a peer. If the rate limit has `behavior == BATCHING` configured
@@ -201,7 +210,7 @@ func (c *PeerClient) setLastErr(err error) error {
 	}
 
 	// Prepend client address to error
-	errWithHostname := errors.Wrap(err, fmt.Sprintf("from host %s", c.info.GRPCAddress))
+	errWithHostname := errors.Wrap(err, fmt.Sprintf("from host %s", c.conf.Info.GRPCAddress))
 	key := err.Error()
 
 	// Add error to the cache with a TTL of 5 minutes
@@ -258,7 +267,7 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 // run waits for requests to be queued, when either c.batchWait time
 // has elapsed or the queue reaches c.batchLimit. Send what is in the queue.
 func (c *PeerClient) run() {
-	var interval = NewInterval(c.conf.BatchWait)
+	var interval = NewInterval(c.conf.Behavior.BatchWait)
 	defer interval.Stop()
 
 	var queue []*request
@@ -277,7 +286,7 @@ func (c *PeerClient) run() {
 			queue = append(queue, r)
 
 			// Send the queue if we reached our batch limit
-			if len(queue) == c.conf.BatchLimit {
+			if len(queue) == c.conf.Behavior.BatchLimit {
 				c.sendQueue(queue)
 				queue = nil
 				continue
@@ -307,7 +316,7 @@ func (c *PeerClient) sendQueue(queue []*request) {
 		req.Requests = append(req.Requests, r.request)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), c.conf.BatchTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), c.conf.Behavior.BatchTimeout)
 	resp, err := c.client.GetPeerRateLimits(ctx, &req)
 	cancel()
 

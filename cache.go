@@ -85,9 +85,9 @@ func NewLRUCache(maxSize int) *LRUCache {
 		cache:     make(map[interface{}]*list.Element),
 		ll:        list.New(),
 		cacheSize: maxSize,
-		sizeMetric: prometheus.NewDesc("cache_size",
+		sizeMetric: prometheus.NewDesc("gubernator_cache_size",
 			"Size of the LRU Cache which holds the rate limits.", nil, nil),
-		accessMetric: prometheus.NewDesc("cache_access_count",
+		accessMetric: prometheus.NewDesc("gubernator_cache_access_count",
 			"Cache access counts.", []string{"type"}, nil),
 	}
 }

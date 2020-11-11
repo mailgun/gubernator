@@ -76,9 +76,9 @@ func (ch *ReplicatedConsistentHash) Peers() []*PeerClient {
 
 // Adds a peer to the hash
 func (ch *ReplicatedConsistentHash) Add(peer *PeerClient) {
-	ch.peers[peer.info.GRPCAddress] = peer
+	ch.peers[peer.Info().GRPCAddress] = peer
 
-	key := fmt.Sprintf("%x", md5.Sum([]byte(peer.info.GRPCAddress)))
+	key := fmt.Sprintf("%x", md5.Sum([]byte(peer.Info().GRPCAddress)))
 	for i := 0; i < ch.replicas; i++ {
 		hash := ch.hashFunc(strToBytesUnsafe(strconv.Itoa(i) + key))
 		ch.peerKeys = append(ch.peerKeys, peerInfo{

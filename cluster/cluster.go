@@ -96,7 +96,7 @@ func StartWith(localPeers []gubernator.PeerInfo) error {
 
 		// Add the peers and daemons to the package level variables
 		peers = append(peers, gubernator.PeerInfo{
-			GRPCAddress: d.GRPCListener.Addr().String(),
+			GRPCAddress: d.GRPCListeners[0].Addr().String(),
 			HTTPAddress: d.HTTPListener.Addr().String(),
 		})
 		daemons = append(daemons, d)

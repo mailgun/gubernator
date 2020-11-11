@@ -17,11 +17,14 @@ limitations under the License.
 package gubernator
 
 import (
+	"crypto/tls"
 	"math/rand"
+	"time"
 
 	"github.com/mailgun/holster/v3/clock"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 const (
@@ -34,35 +37,47 @@ func (m *RateLimitReq) HashKey() string {
 	return m.Name + "_" + m.UniqueKey
 }
 
-// Create a new connection to the server
-func DialV1Server(server string) (V1Client, error) {
+// DialV1Server is a convenience function for dialing gubernator instances
+func DialV1Server(server string, tls *tls.Config) (V1Client, error) {
 	if len(server) == 0 {
 		return nil, errors.New("server is empty; must provide a server")
 	}
 
-	conn, err := grpc.Dial(server, grpc.WithInsecure())
+	opts := []grpc.DialOption{grpc.WithInsecure()}
+	if tls != nil {
+		opts = []grpc.DialOption{grpc.WithTransportCredentials(credentials.NewTLS(tls))}
+	}
+
+	conn, err := grpc.Dial(server, opts...)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to dial peer %s", server)
+		return nil, errors.Wrapf(err, "failed to dial server %s", server)
 	}
 
 	return NewV1Client(conn), nil
 }
 
-// Convert a clock.Duration to a unix millisecond timestamp
-func ToTimeStamp(duration clock.Duration) int64 {
-	return int64(duration / clock.Millisecond)
+// ToTimeStamp is a convenience function to convert a time.Duration
+// to a unix millisecond timestamp. Useful when working with gubernator
+// request and response duration and reset_time fields.
+func ToTimeStamp(duration time.Duration) int64 {
+	return int64(duration / time.Millisecond)
 }
 
-// Convert a unix millisecond timestamp to a time.Duration
-func FromTimeStamp(ts int64) clock.Duration {
+// FromTimeStamp is a convenience function to convert a unix millisecond
+// timestamp to a time.Duration. Useful when working with gubernator
+// request and response duration and reset_time fields.
+func FromTimeStamp(ts int64) time.Duration {
 	return clock.Now().Sub(FromUnixMilliseconds(ts))
 }
 
-func FromUnixMilliseconds(ts int64) clock.Time {
+// FromUnixMilliseconds is a convenience function to convert a unix
+// millisecond timestamp to a time.Time. Useful when working with gubernator
+// request and response duration and reset_time fields.
+func FromUnixMilliseconds(ts int64) time.Time {
 	return clock.Unix(0, ts*int64(clock.Millisecond))
 }
 
-// Given a list of peers, return a random peer
+// RandomPeer returns a random peer from the list of peers provided
 func RandomPeer(peers []PeerInfo) PeerInfo {
 	rand.Shuffle(len(peers), func(i, j int) {
 		peers[i], peers[j] = peers[j], peers[i]
@@ -70,7 +85,7 @@ func RandomPeer(peers []PeerInfo) PeerInfo {
 	return peers[0]
 }
 
-// Return a random alpha string of 'n' length
+// RandomString returns a random alpha string of 'n' length
 func RandomString(n int) string {
 	const alphanum = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 	var bytes = make([]byte, n)

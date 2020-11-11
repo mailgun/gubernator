@@ -94,7 +94,7 @@ func (e *K8sPool) start() error {
 	e.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			key, err := cache.MetaNamespaceKeyFunc(obj)
-			e.log.Debugf("Queue (Add) '%s' - %s", key, err)
+			e.log.Debugf("Queue (Add) '%s' - %v", key, err)
 			if err != nil {
 				e.log.Errorf("while calling MetaNamespaceKeyFunc(): %s", err)
 				return
@@ -102,7 +102,7 @@ func (e *K8sPool) start() error {
 		},
 		UpdateFunc: func(obj, new interface{}) {
 			key, err := cache.MetaNamespaceKeyFunc(obj)
-			e.log.Debugf("Queue (Update) '%s' - %s", key, err)
+			e.log.Debugf("Queue (Update) '%s' - %v", key, err)
 			if err != nil {
 				e.log.Errorf("while calling MetaNamespaceKeyFunc(): %s", err)
 				return
@@ -111,7 +111,7 @@ func (e *K8sPool) start() error {
 		},
 		DeleteFunc: func(obj interface{}) {
 			key, err := cache.MetaNamespaceKeyFunc(obj)
-			e.log.Debugf("Queue (Delete) '%s' - %s", key, err)
+			e.log.Debugf("Queue (Delete) '%s' - %v", key, err)
 			if err != nil {
 				e.log.Errorf("while calling MetaNamespaceKeyFunc(): %s", err)
 				return

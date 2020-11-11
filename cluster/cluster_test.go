@@ -59,9 +59,9 @@ func TestStartMultipleDaemons(t *testing.T) {
 	daemons := cluster.GetDaemons()
 	assert.Equal(t, wantPeers, cluster.GetPeers())
 	assert.Equal(t, 2, len(daemons))
-	assert.Equal(t, "127.0.0.1:1111", daemons[0].GRPCListener.Addr().String())
-	assert.Equal(t, "127.0.0.1:2222", daemons[1].GRPCListener.Addr().String())
-	assert.Equal(t, "127.0.0.1:2222", cluster.DaemonAt(1).GRPCListener.Addr().String())
+	assert.Equal(t, "127.0.0.1:1111", daemons[0].GRPCListeners[0].Addr().String())
+	assert.Equal(t, "127.0.0.1:2222", daemons[1].GRPCListeners[0].Addr().String())
+	assert.Equal(t, "127.0.0.1:2222", cluster.DaemonAt(1).GRPCListeners[0].Addr().String())
 	assert.Equal(t, "127.0.0.1:2222", cluster.PeerAt(1).GRPCAddress)
 }
 

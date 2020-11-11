@@ -18,7 +18,7 @@ func TestReplicatedConsistantHash(t *testing.T) {
 		hash := NewReplicatedConsistentHash(nil, DefaultReplicas)
 
 		for _, h := range hosts {
-			hash.Add(&PeerClient{info: PeerInfo{GRPCAddress: h}})
+			hash.Add(&PeerClient{conf: PeerConfig{Info: PeerInfo{GRPCAddress: h}}})
 		}
 
 		assert.Equal(t, len(hosts), hash.Size())
@@ -29,7 +29,7 @@ func TestReplicatedConsistantHash(t *testing.T) {
 		hostMap := map[string]*PeerClient{}
 
 		for _, h := range hosts {
-			peer := &PeerClient{info: PeerInfo{GRPCAddress: h}}
+			peer := &PeerClient{conf: PeerConfig{Info: PeerInfo{GRPCAddress: h}}}
 			hash.Add(peer)
 			hostMap[h] = peer
 		}
@@ -62,13 +62,13 @@ func TestReplicatedConsistantHash(t *testing.T) {
 				hostMap := map[string]int{}
 
 				for _, h := range hosts {
-					hash.Add(&PeerClient{info: PeerInfo{GRPCAddress: h}})
+					hash.Add(&PeerClient{conf: PeerConfig{Info: PeerInfo{GRPCAddress: h}}})
 					hostMap[h] = 0
 				}
 
 				for i := range strings {
 					peer, _ := hash.Get(strings[i])
-					hostMap[peer.info.GRPCAddress]++
+					hostMap[peer.Info().GRPCAddress]++
 				}
 
 				for host, a := range hostMap {
@@ -96,7 +96,7 @@ func BenchmarkReplicatedConsistantHash(b *testing.B) {
 			hash := NewReplicatedConsistentHash(hashFunc, DefaultReplicas)
 			hosts := []string{"a.svc.local", "b.svc.local", "c.svc.local"}
 			for _, h := range hosts {
-				hash.Add(&PeerClient{info: PeerInfo{GRPCAddress: h}})
+				hash.Add(&PeerClient{conf: PeerConfig{Info: PeerInfo{GRPCAddress: h}}})
 			}
 
 			b.ResetTimer()

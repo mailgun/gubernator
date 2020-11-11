@@ -18,6 +18,7 @@ package gubernator
 
 import (
 	"context"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -31,61 +32,19 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
-var DebugEnabled = false
-
-type DaemonConfig struct {
-	// (Required) The `address:port` that will accept GRPC requests
-	GRPCListenAddress string
-
-	// (Required) The `address:port` that will accept HTTP requests
-	HTTPListenAddress string
-
-	// (Optional) The `address:port` that is advertised to other Gubernator peers.
-	// Defaults to `GRPCListenAddress`
-	AdvertiseAddress string
-
-	// (Optional) The number of items in the cache. Defaults to 50,000
-	CacheSize int
-
-	// (Optional) Configure how behaviours behave
-	Behaviors BehaviorConfig
-
-	// (Optional) Identifies the datacenter this instance is running in. For
-	// use with multi-region support
-	DataCenter string
-
-	// (Optional) Which pool to use when discovering other Gubernator peers
-	//  Valid options are [etcd, k8s, member-list] (Defaults to 'member-list')
-	PeerDiscoveryType string
-
-	// (Optional) Etcd configuration used for peer discovery
-	EtcdPoolConf EtcdPoolConfig
-
-	// (Optional) K8s configuration used for peer discovery
-	K8PoolConf K8sPoolConfig
-
-	// (Optional) Member list configuration used for peer discovery
-	MemberListPoolConf MemberListPoolConfig
-
-	// (Optional) The PeerPicker as selected by `GUBER_PEER_PICKER`
-	Picker PeerPicker
-
-	// (Optional) A Logger which implements the declared logger interface (typically *logrus.Entry)
-	Logger logrus.FieldLogger
-}
-
 type Daemon struct {
-	GRPCListener net.Listener
-	HTTPListener net.Listener
-	V1Server     *V1Instance
+	GRPCListeners []net.Listener
+	HTTPListener  net.Listener
+	V1Server      *V1Instance
 
 	log          logrus.FieldLogger
 	pool         PoolInterface
 	conf         DaemonConfig
 	httpSrv      *http.Server
-	grpcSrv      *grpc.Server
+	grpcSrvs     []*grpc.Server
 	wg           syncutil.WaitGroup
 	statsHandler *GRPCStatsHandler
 	promRegister *prometheus.Registry
@@ -122,16 +81,27 @@ func (s *Daemon) Start(ctx context.Context) error {
 	s.statsHandler = NewGRPCStatsHandler()
 	s.promRegister.Register(s.statsHandler)
 
-	// New GRPC server
-	s.grpcSrv = grpc.NewServer(
+	opts := []grpc.ServerOption{
 		grpc.StatsHandler(s.statsHandler),
-		grpc.MaxRecvMsgSize(1024*1024))
+		grpc.MaxRecvMsgSize(1024 * 1024),
+	}
+
+	if err := SetupTLS(s.conf.TLS); err != nil {
+		return err
+	}
+
+	if s.conf.ServerTLS() != nil {
+		// Create two GRPC server instances, one for TLS and the other for the API Gateway
+		s.grpcSrvs = append(s.grpcSrvs, grpc.NewServer(append(opts, grpc.Creds(credentials.NewTLS(s.conf.ServerTLS())))...))
+	}
+	s.grpcSrvs = append(s.grpcSrvs, grpc.NewServer(opts...))
 
 	// Registers a new gubernator instance with the GRPC server
 	s.V1Server, err = NewV1Instance(Config{
+		PeerTLS:     s.conf.ClientTLS(),
 		DataCenter:  s.conf.DataCenter,
 		LocalPicker: s.conf.Picker,
-		GRPCServer:  s.grpcSrv,
+		GRPCServers: s.grpcSrvs,
 		Logger:      s.log,
 		Cache:       cache,
 	})
@@ -142,18 +112,44 @@ func (s *Daemon) Start(ctx context.Context) error {
 	// V1Server instance also implements prometheus.Collector interface
 	s.promRegister.Register(s.V1Server)
 
-	s.GRPCListener, err = net.Listen("tcp", s.conf.GRPCListenAddress)
+	l, err := net.Listen("tcp", s.conf.GRPCListenAddress)
 	if err != nil {
 		return errors.Wrap(err, "while starting GRPC listener")
 	}
+	s.GRPCListeners = append(s.GRPCListeners, l)
 
 	// Start serving GRPC Requests
 	s.wg.Go(func() {
 		s.log.Infof("GRPC Listening on %s ...", s.conf.GRPCListenAddress)
-		if err := s.grpcSrv.Serve(s.GRPCListener); err != nil {
+		if err := s.grpcSrvs[0].Serve(l); err != nil {
 			s.log.WithError(err).Error("while starting GRPC server")
 		}
 	})
+
+	var gatewayAddr string
+	if s.conf.ServerTLS() != nil {
+		// We start a new local GRPC instance because we can't guarantee the TLS cert provided by the
+		// user has localhost or the local interface included in the certs valid hostnames. If they are not
+		// included it means the local gateway connections will not be able to connect.
+		l, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			return errors.Wrap(err, "while starting GRPC Gateway listener")
+		}
+		s.GRPCListeners = append(s.GRPCListeners, l)
+
+		s.wg.Go(func() {
+			s.log.Infof("GRPC Gateway Listening on %s ...", l.Addr())
+			if err := s.grpcSrvs[1].Serve(l); err != nil {
+				s.log.WithError(err).Error("while starting GRPC Gateway server")
+			}
+		})
+		gatewayAddr = l.Addr().String()
+	} else {
+		gatewayAddr, err = ResolveHostIP(s.conf.GRPCListenAddress)
+		if err != nil {
+			return errors.Wrap(err, "while resolving GRPC gateway client address")
+		}
+	}
 
 	switch s.conf.PeerDiscoveryType {
 	case "k8s":
@@ -190,8 +186,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 	gateway := runtime.NewServeMux()
 	var gwCtx context.Context
 	gwCtx, s.gwCancel = context.WithCancel(context.Background())
-	err = RegisterV1HandlerFromEndpoint(gwCtx, gateway,
-		s.conf.GRPCListenAddress, []grpc.DialOption{grpc.WithInsecure()})
+	err = RegisterV1HandlerFromEndpoint(gwCtx, gateway, gatewayAddr, []grpc.DialOption{grpc.WithInsecure()})
 	if err != nil {
 		return errors.Wrap(err, "while registering GRPC gateway handler")
 	}
@@ -203,24 +198,43 @@ func (s *Daemon) Start(ctx context.Context) error {
 		s.promRegister, promhttp.HandlerFor(s.promRegister, promhttp.HandlerOpts{}),
 	))
 	mux.Handle("/", gateway)
-	s.httpSrv = &http.Server{Addr: s.conf.HTTPListenAddress, Handler: mux}
+	log := log.New(newLogWriter(s.log), "", 0)
+	s.httpSrv = &http.Server{Addr: s.conf.HTTPListenAddress, Handler: mux, ErrorLog: log}
 
 	s.HTTPListener, err = net.Listen("tcp", s.conf.HTTPListenAddress)
 	if err != nil {
 		return errors.Wrap(err, "while starting HTTP listener")
 	}
 
-	s.wg.Go(func() {
-		s.log.Infof("HTTP Gateway Listening on %s ...", s.conf.HTTPListenAddress)
-		if err := s.httpSrv.Serve(s.HTTPListener); err != nil {
-			if err != http.ErrServerClosed {
-				s.log.WithError(err).Error("while starting HTTP server")
+	if s.conf.ServerTLS() != nil {
+		// This is to avoid any race conditions that might occur
+		// since the tls config is a shared pointer.
+		s.httpSrv.TLSConfig = s.conf.ServerTLS().Clone()
+		s.wg.Go(func() {
+			s.log.Infof("HTTPS Gateway Listening on %s ...", s.conf.HTTPListenAddress)
+			if err := s.httpSrv.ServeTLS(s.HTTPListener, "", ""); err != nil {
+				if err != http.ErrServerClosed {
+					s.log.WithError(err).Error("while starting TLS HTTP server")
+				}
 			}
-		}
-	})
+		})
+	} else {
+		s.wg.Go(func() {
+			s.log.Infof("HTTP Gateway Listening on %s ...", s.conf.HTTPListenAddress)
+			if err := s.httpSrv.Serve(s.HTTPListener); err != nil {
+				if err != http.ErrServerClosed {
+					s.log.WithError(err).Error("while starting HTTP server")
+				}
+			}
+		})
+	}
 
 	// Validate we can reach the GRPC and HTTP endpoints before returning
-	if err := WaitForConnect(ctx, []string{s.conf.HTTPListenAddress, s.conf.GRPCListenAddress}); err != nil {
+	addrs := []string{s.conf.HTTPListenAddress}
+	for _, l := range s.GRPCListeners {
+		addrs = append(addrs, l.Addr().String())
+	}
+	if err := WaitForConnect(ctx, addrs); err != nil {
 		return err
 	}
 
@@ -239,13 +253,15 @@ func (s *Daemon) Close() {
 
 	s.log.Infof("HTTP Gateway close for %s ...", s.conf.HTTPListenAddress)
 	s.httpSrv.Shutdown(context.Background())
-	s.log.Infof("GRPC close for %s ...", s.conf.GRPCListenAddress)
-	s.grpcSrv.GracefulStop()
+	for i, srv := range s.grpcSrvs {
+		s.log.Infof("GRPC close for %s ...", s.GRPCListeners[i].Addr())
+		srv.GracefulStop()
+	}
 	s.wg.Stop()
 	s.statsHandler.Close()
 	s.gwCancel()
 	s.httpSrv = nil
-	s.grpcSrv = nil
+	s.grpcSrvs = nil
 }
 
 // SetPeers sets the peers for this daemon
@@ -270,12 +286,13 @@ func (s *Daemon) Config() DaemonConfig {
 func (s *Daemon) Peers() []PeerInfo {
 	var peers []PeerInfo
 	for _, client := range s.V1Server.GetPeerList() {
-		peers = append(peers, client.PeerInfo())
+		peers = append(peers, client.Info())
 	}
 	return peers
 }
 
-// WaitForConnect returns nil if the list of addresses is listening for connections; will block until context is cancelled.
+// WaitForConnect returns nil if the list of addresses is listening
+// for connections; will block until context is cancelled.
 func WaitForConnect(ctx context.Context, addresses []string) error {
 	var d net.Dialer
 	var errs []error
@@ -286,6 +303,9 @@ func WaitForConnect(ctx context.Context, addresses []string) error {
 				continue
 			}
 
+			// TODO: golang 15.3 introduces tls.DialContext(). When we are ready to drop
+			//  support for older versions we can detect tls and use the tls.DialContext to
+			//  avoid the `http: TLS handshake error` we get when using TLS.
 			conn, err := d.DialContext(ctx, "tcp", addr)
 			if err != nil {
 				errs = append(errs, err)

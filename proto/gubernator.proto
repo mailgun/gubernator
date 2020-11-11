@@ -122,9 +122,9 @@ enum Behavior {
   // cache value. For `LEAKY_BUCKET` it sets the `Remaining` to `Limit`.
   RESET_REMAINING = 8;
 
-  // Enables rate limits to be pushed to other regions. Currently this is only implemented on memberlist
-  // pools. Also requires GUBER_DATA_CENTER to be set to different values on at least 2 instances of
-  // Gubernator.
+  // Enables rate limits to be pushed to other regions. Currently this is only implemented when using
+  // 'member-list' peer discovery. Also requires GUBER_DATA_CENTER to be set to different values on at
+  // least 2 instances of Gubernator.
   MULTI_REGION = 16;
 
   // TODO: Add support for LOCAL. Which would force the rate limit to be handled by the local instance

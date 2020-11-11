@@ -32,10 +32,46 @@ func ResolveHostIP(addr string) (string, error) {
 	return addr, nil
 }
 
+type netInfo struct {
+	IPAddresses []string
+	DNSNames    []string
+}
+
+// Attempts to discover all the external ips and dns names associated with the current host.
+func discoverNetwork() (netInfo, error) {
+	var result netInfo
+
+	var err error
+	result.IPAddresses, err = discoverNetworkAddresses()
+	if err != nil {
+		return result, err
+	}
+
+	for _, ip := range result.IPAddresses {
+		records, _ := net.LookupAddr(ip)
+		result.DNSNames = append(result.DNSNames, records...)
+	}
+	return result, nil
+}
+
+// Returns the first external ip address it finds
 func discoverIP() (string, error) {
+	addrs, err := discoverNetworkAddresses()
+	if err != nil {
+		return "", errors.Wrap(err, "while detecting external ip address")
+	}
+	if len(addrs) == 0 {
+		return "", errors.New("No external ip address found; please set `GUBER_ADVERTISE_ADDRESS`")
+	}
+	return addrs[0], err
+}
+
+// Returns a list of net addresses by inspecting the network interfaces on the current host.
+func discoverNetworkAddresses() ([]string, error) {
+	var results []string
 	ifaces, err := net.Interfaces()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	for _, iface := range ifaces {
 		if iface.Flags&net.FlagUp == 0 {
@@ -46,7 +82,7 @@ func discoverIP() (string, error) {
 		}
 		addrs, err := iface.Addrs()
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		for _, addr := range addrs {
 			var ip net.IP
@@ -63,8 +99,8 @@ func discoverIP() (string, error) {
 			if ip == nil {
 				continue // not an ipv4 address
 			}
-			return ip.String(), nil
+			results = append(results, ip.String())
 		}
 	}
-	return "", errors.New("Unable to detect external ip address; please set `GUBER_ADVERTISE_ADDRESS`?")
+	return results, nil
 }

@@ -191,6 +191,7 @@ func TestLeakyBucket(t *testing.T) {
 		},
 	}
 
+	now := clock.Now()
 	for i, test := range tests {
 		resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
 			Requests: []*guber.RateLimitReq{
@@ -212,7 +213,7 @@ func TestLeakyBucket(t *testing.T) {
 		assert.Equal(t, test.Status, rl.Status, i)
 		assert.Equal(t, test.Remaining, rl.Remaining, i)
 		assert.Equal(t, int64(5), rl.Limit, i)
-		assert.True(t, rl.ResetTime != 0)
+		assert.True(t, rl.ResetTime > now.Unix())
 		clock.Advance(test.Sleep)
 	}
 }

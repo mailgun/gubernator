@@ -118,7 +118,7 @@ func TestTokenBucket(t *testing.T) {
 		{
 			Remaining: 0,
 			Status:    guber.Status_UNDER_LIMIT,
-			Sleep:     clock.Duration(clock.Millisecond * 100),
+			Sleep:     clock.Millisecond * 100,
 		},
 		{
 			Remaining: 1,
@@ -153,6 +153,81 @@ func TestTokenBucket(t *testing.T) {
 	}
 }
 
+func TestTokenBucketGregorian(t *testing.T) {
+	defer clock.Freeze(clock.Now()).Unfreeze()
+
+	client, errs := guber.DialV1Server(cluster.GetRandomPeer().GRPCAddress, nil)
+	require.Nil(t, errs)
+
+	tests := []struct {
+		Name      string
+		Remaining int64
+		Status    guber.Status
+		Sleep     clock.Duration
+		Hits      int64
+	}{
+		{
+			Name:      "first hit",
+			Hits:      1,
+			Remaining: 59,
+			Status:    guber.Status_UNDER_LIMIT,
+		},
+		{
+			Name:      "second hit",
+			Hits:      1,
+			Remaining: 58,
+			Status:    guber.Status_UNDER_LIMIT,
+		},
+		{
+			Name:      "consume remaining hits",
+			Hits:      58,
+			Remaining: 0,
+			Status:    guber.Status_UNDER_LIMIT,
+		},
+		{
+			Name:      "should be over the limit",
+			Hits:      1,
+			Remaining: 0,
+			Status:    guber.Status_OVER_LIMIT,
+			Sleep:     clock.Second * 61,
+		},
+		{
+			Name:      "should be under the limit",
+			Hits:      0,
+			Remaining: 60,
+			Status:    guber.Status_UNDER_LIMIT,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+				Requests: []*guber.RateLimitReq{
+					{
+						Name:      "test_token_bucket_greg",
+						UniqueKey: "account:12345",
+						Behavior:  guber.Behavior_DURATION_IS_GREGORIAN,
+						Algorithm: guber.Algorithm_TOKEN_BUCKET,
+						Duration:  guber.GregorianMinutes,
+						Hits:      test.Hits,
+						Limit:     60,
+					},
+				},
+			})
+			require.Nil(t, err)
+
+			rl := resp.Responses[0]
+
+			assert.Empty(t, rl.Error)
+			assert.Equal(t, test.Status, rl.Status)
+			assert.Equal(t, test.Remaining, rl.Remaining)
+			assert.Equal(t, int64(60), rl.Limit)
+			assert.True(t, rl.ResetTime != 0)
+			clock.Advance(test.Sleep)
+		})
+	}
+}
+
 func TestLeakyBucket(t *testing.T) {
 	defer clock.Freeze(clock.Now()).Unfreeze()
 
@@ -160,61 +235,161 @@ func TestLeakyBucket(t *testing.T) {
 	require.Nil(t, errs)
 
 	tests := []struct {
+		Name      string
 		Hits      int64
 		Remaining int64
 		Status    guber.Status
 		Sleep     clock.Duration
 	}{
 		{
-			Hits:      5,
+			Name:      "first hit",
+			Hits:      1,
+			Remaining: 9,
+			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Second,
+		},
+		{
+			Name:      "second hit; no leak",
+			Hits:      1,
+			Remaining: 8,
+			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Second,
+		},
+		{
+			Name:      "third hit; no leak",
+			Hits:      1,
+			Remaining: 7,
+			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Millisecond * 1500,
+		},
+		{
+			Name:      "should leak one hit 3 seconds after first hit",
+			Hits:      0,
+			Remaining: 8,
+			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Second * 3,
+		},
+		{
+			Name:      "3 Seconds later we should have leaked another hit",
+			Hits:      0,
+			Remaining: 9,
+			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Duration(0),
+		},
+		{
+			Name:      "max out our bucket and sleep for 3 seconds",
+			Hits:      9,
 			Remaining: 0,
 			Status:    guber.Status_UNDER_LIMIT,
 			Sleep:     clock.Duration(0),
 		},
 		{
+			Name:      "should be over the limit",
 			Hits:      1,
 			Remaining: 0,
 			Status:    guber.Status_OVER_LIMIT,
-			Sleep:     clock.Millisecond * 100,
+			Sleep:     clock.Second * 3,
 		},
 		{
-			Hits:      1,
-			Remaining: 0,
+			Name:      "should have leaked 1 hit",
+			Hits:      0,
+			Remaining: 1,
 			Status:    guber.Status_UNDER_LIMIT,
-			Sleep:     clock.Millisecond * 400,
-		},
-		{
-			Hits:      1,
-			Remaining: 4,
-			Status:    guber.Status_UNDER_LIMIT,
-			Sleep:     clock.Duration(0),
+			Sleep:     clock.Second,
 		},
 	}
 
 	now := clock.Now()
-	for i, test := range tests {
-		resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
-			Requests: []*guber.RateLimitReq{
-				{
-					Name:      "test_leaky_bucket",
-					UniqueKey: "account:1234",
-					Algorithm: guber.Algorithm_LEAKY_BUCKET,
-					Duration:  guber.Millisecond * 300,
-					Hits:      test.Hits,
-					Limit:     5,
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+				Requests: []*guber.RateLimitReq{
+					{
+						Name:      "test_leaky_bucket",
+						UniqueKey: "account:1234",
+						Algorithm: guber.Algorithm_LEAKY_BUCKET,
+						Duration:  guber.Second * 30,
+						Hits:      test.Hits,
+						Limit:     10,
+					},
 				},
-			},
+			})
+			clock.Freeze(clock.Now())
+			require.NoError(t, err)
+
+			rl := resp.Responses[0]
+
+			assert.Equal(t, test.Status, rl.Status)
+			assert.Equal(t, test.Remaining, rl.Remaining)
+			assert.Equal(t, int64(10), rl.Limit)
+			assert.True(t, rl.ResetTime > now.Unix())
+			clock.Advance(test.Sleep)
 		})
-		clock.Freeze(clock.Now())
-		require.NoError(t, err)
+	}
+}
 
-		rl := resp.Responses[0]
+func TestLeakyBucketGregorian(t *testing.T) {
+	defer clock.Freeze(clock.Now()).Unfreeze()
 
-		assert.Equal(t, test.Status, rl.Status, i)
-		assert.Equal(t, test.Remaining, rl.Remaining, i)
-		assert.Equal(t, int64(5), rl.Limit, i)
-		assert.True(t, rl.ResetTime > now.Unix())
-		clock.Advance(test.Sleep)
+	client, errs := guber.DialV1Server(cluster.PeerAt(0).GRPCAddress, nil)
+	require.Nil(t, errs)
+
+	tests := []struct {
+		Name      string
+		Hits      int64
+		Remaining int64
+		Status    guber.Status
+		Sleep     clock.Duration
+	}{
+		{
+			Name:      "first hit",
+			Hits:      1,
+			Remaining: 59,
+			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Millisecond * 500,
+		},
+		{
+			Name:      "second hit; no leak",
+			Hits:      1,
+			Remaining: 58,
+			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Second,
+		},
+		{
+			Name:      "third hit; leak one hit",
+			Hits:      1,
+			Remaining: 58,
+			Status:    guber.Status_UNDER_LIMIT,
+		},
+	}
+
+	now := clock.Now()
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+				Requests: []*guber.RateLimitReq{
+					{
+						Name:      "test_leaky_bucket_greg",
+						UniqueKey: "account:12345",
+						Behavior:  guber.Behavior_DURATION_IS_GREGORIAN,
+						Algorithm: guber.Algorithm_LEAKY_BUCKET,
+						Duration:  guber.GregorianMinutes,
+						Hits:      test.Hits,
+						Limit:     60,
+					},
+				},
+			})
+			clock.Freeze(clock.Now())
+			require.NoError(t, err)
+
+			rl := resp.Responses[0]
+
+			assert.Equal(t, test.Status, rl.Status)
+			assert.Equal(t, test.Remaining, rl.Remaining)
+			assert.Equal(t, int64(60), rl.Limit)
+			assert.True(t, rl.ResetTime > now.Unix())
+			clock.Advance(test.Sleep)
+		})
 	}
 }
 

@@ -291,7 +291,7 @@ func getRemaining(item *gubernator.CacheItem) int64 {
 	case gubernator.Algorithm_TOKEN_BUCKET:
 		return item.Value.(*gubernator.TokenBucketItem).Remaining
 	case gubernator.Algorithm_LEAKY_BUCKET:
-		return item.Value.(*gubernator.LeakyBucketItem).Remaining
+		return int64(item.Value.(*gubernator.LeakyBucketItem).Remaining)
 	}
 	return 0
 }

@@ -239,13 +239,16 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 		return nil, err
 	}
 
+	// See NOTE above about RLock and wg.Add(1)
+	c.mutex.RLock()
+	if c.status == peerClosing {
+		return nil, &PeerErr{err: errors.New("already disconnecting")}
+	}
 	req := request{request: r, resp: make(chan *response, 1)}
 
 	// Enqueue the request to be sent
 	c.queue <- &req
 
-	// See NOTE above about RLock and wg.Add(1)
-	c.mutex.RLock()
 	c.wg.Add(1)
 	defer func() {
 		c.mutex.RUnlock()

@@ -11,7 +11,7 @@ package gubernator
 type LeakyBucketItem struct {
 	Limit     int64
 	Duration  int64
-	Remaining int64
+	Remaining float64
 	UpdatedAt int64
 }
 

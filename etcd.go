@@ -51,8 +51,8 @@ type EtcdPool struct {
 }
 
 type EtcdPoolConfig struct {
-	// (Required) The address etcd will advertise to other gubernator instances
-	AdvertiseAddress string
+	// (Required) This is the peer information that will be advertised to other gubernator instances
+	Advertise PeerInfo
 
 	// (Required) An etcd client currently connected to an etcd cluster
 	Client *etcd.Client
@@ -68,17 +68,14 @@ type EtcdPoolConfig struct {
 
 	// (Optional) An interface through which logging will occur (Usually *logrus.Entry)
 	Logger logrus.FieldLogger
-
-	// (Optional) The datacenter this instance belongs too
-	DataCenter string
 }
 
 func NewEtcdPool(conf EtcdPoolConfig) (*EtcdPool, error) {
 	setter.SetDefault(&conf.KeyPrefix, defaultBaseKey)
 	setter.SetDefault(&conf.Logger, logrus.WithField("category", "gubernator"))
 
-	if conf.AdvertiseAddress == "" {
-		return nil, errors.New("AdvertiseAddress is required")
+	if conf.Advertise.GRPCAddress == "" {
+		return nil, errors.New("Advertise.GRPCAddress is required")
 	}
 
 	if conf.Client == nil {
@@ -93,13 +90,13 @@ func NewEtcdPool(conf EtcdPoolConfig) (*EtcdPool, error) {
 		conf:      conf,
 		ctx:       ctx,
 	}
-	return pool, pool.run(conf.AdvertiseAddress)
+	return pool, pool.run(conf.Advertise)
 }
 
-func (e *EtcdPool) run(addr string) error {
+func (e *EtcdPool) run(peer PeerInfo) error {
 
 	// Register our instance with etcd
-	if err := e.register(addr); err != nil {
+	if err := e.register(peer); err != nil {
 		return err
 	}
 
@@ -233,14 +230,11 @@ func (e *EtcdPool) watch() error {
 	return nil
 }
 
-func (e *EtcdPool) register(name string) error {
-	instanceKey := e.conf.KeyPrefix + name
-	e.log.Infof("Registering peer '%s' with etcd", name)
+func (e *EtcdPool) register(peer PeerInfo) error {
+	instanceKey := e.conf.KeyPrefix + peer.GRPCAddress
+	e.log.Infof("Registering peer '%s' with etcd", peer)
 
-	b, err := json.Marshal(PeerInfo{
-		GRPCAddress: e.conf.AdvertiseAddress,
-		DataCenter:  e.conf.DataCenter,
-	})
+	b, err := json.Marshal(peer)
 	if err != nil {
 		return errors.Wrap(err, "while marshalling PeerInfo")
 	}
@@ -341,7 +335,7 @@ func (e *EtcdPool) callOnUpdate() {
 	var peers []PeerInfo
 
 	for _, p := range e.peers {
-		if p.GRPCAddress == e.conf.AdvertiseAddress {
+		if p.GRPCAddress == e.conf.Advertise.GRPCAddress {
 			p.IsOwner = true
 		}
 		peers = append(peers, p)

@@ -6,7 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.0-rc.5] - 2020-12-21
 ### Change
+* Respect SIGTERM from docker during shutdown.
 * Peer info provided to etcd and memberlist pools is now consistent.
+### Added
+* Added GUBER_K8S_WATCH_MECHANISM for k8s deployments.
 
 ## [1.0.0-rc.4] - 2020-12-18
 ### Change

@@ -232,7 +232,7 @@ func (e *EtcdPool) watch() error {
 
 func (e *EtcdPool) register(peer PeerInfo) error {
 	instanceKey := e.conf.KeyPrefix + peer.GRPCAddress
-	e.log.Infof("Registering peer '%s' with etcd", peer)
+	e.log.Infof("Registering peer '%#v' with etcd", peer)
 
 	b, err := json.Marshal(peer)
 	if err != nil {

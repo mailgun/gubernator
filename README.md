@@ -296,7 +296,7 @@ $ docker-compose -f docker-compose-tls.yaml up -d
 
 # Hit the HTTP API at localhost:9080 (GRPC is at 9081)
 $ curl --cacert certs/ca.pem --cert certs/gubernator.pem --key certs/gubernator.key  https://localhost:9080/v1/HealthCheck
-`
+```
 
 ### Configuration
 Gubernator is configured via environment variables with an optional `--config` flag

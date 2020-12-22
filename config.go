@@ -316,6 +316,12 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 	conf.K8PoolConf.PodIP = os.Getenv("GUBER_K8S_POD_IP")
 	conf.K8PoolConf.PodPort = os.Getenv("GUBER_K8S_POD_PORT")
 	conf.K8PoolConf.Selector = os.Getenv("GUBER_K8S_ENDPOINTS_SELECTOR")
+	var assignErr error
+	conf.K8PoolConf.Mechanism, assignErr = WatchMechanismFromString(os.Getenv("GUBER_K8S_WATCH_MECHANISM"))
+	if assignErr != nil {
+		return conf, errors.New("invalid value for watch mechanism " +
+			"`GUBER_K8S_WATCH_MECHANISM` needs to be either 'endpoints' or 'watch' or empty(defaulting to 'endpoints'))")
+	}
 
 	// PeerPicker Config
 	if pp := os.Getenv("GUBER_PEER_PICKER"); pp != "" {

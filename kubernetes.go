@@ -29,7 +29,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -42,6 +41,26 @@ type K8sPool struct {
 	done     chan struct{}
 }
 
+type WatchMechanism string
+
+const (
+	WatchEndpoints WatchMechanism = "endpoints"
+	WatchPods      WatchMechanism = "pods"
+)
+
+func WatchMechanismFromString(mechanism string) (WatchMechanism, error) {
+	switch WatchMechanism(mechanism) {
+	case "": // keep default behavior
+		return WatchEndpoints, nil
+	case WatchEndpoints:
+		return WatchEndpoints, nil
+	case WatchPods:
+		return WatchPods, nil
+	default:
+		return "", fmt.Errorf("unknown watch mechanism specified: %s", mechanism)
+	}
+}
+
 type K8sPoolConfig struct {
 	Logger    logrus.FieldLogger
 	OnUpdate  UpdateFunc
@@ -49,10 +68,12 @@ type K8sPoolConfig struct {
 	Selector  string
 	PodIP     string
 	PodPort   string
+
+	Mechanism WatchMechanism
 }
 
 func NewK8sPool(conf K8sPoolConfig) (*K8sPool, error) {
-	config, err := rest.InClusterConfig()
+	config, err := RestConfig()
 	if err != nil {
 		return nil, errors.Wrap(err, "during InClusterConfig()")
 	}
@@ -74,19 +95,20 @@ func NewK8sPool(conf K8sPoolConfig) (*K8sPool, error) {
 }
 
 func (e *K8sPool) start() error {
+	switch e.conf.Mechanism {
+	case WatchEndpoints:
+		return e.startEndpointWatch()
+	case WatchPods:
+		return e.startPodWatch()
+	default:
+		return fmt.Errorf("unknown value for watch mechanism: %s", e.conf.Mechanism)
+	}
+}
 
+func (e *K8sPool) startGenericWatch(objType runtime.Object, listWatch *cache.ListWatch, updateFunc func()) error {
 	e.informer = cache.NewSharedIndexInformer(
-		&cache.ListWatch{
-			ListFunc: func(options meta_v1.ListOptions) (runtime.Object, error) {
-				options.LabelSelector = e.conf.Selector
-				return e.client.CoreV1().Endpoints(e.conf.Namespace).List(options)
-			},
-			WatchFunc: func(options meta_v1.ListOptions) (watch.Interface, error) {
-				options.LabelSelector = e.conf.Selector
-				return e.client.CoreV1().Endpoints(e.conf.Namespace).Watch(options)
-			},
-		},
-		&api_v1.Endpoints{},
+		listWatch,
+		objType,
 		0, //Skip resync
 		cache.Indexers{},
 	)
@@ -99,6 +121,7 @@ func (e *K8sPool) start() error {
 				e.log.Errorf("while calling MetaNamespaceKeyFunc(): %s", err)
 				return
 			}
+			updateFunc()
 		},
 		UpdateFunc: func(obj, new interface{}) {
 			key, err := cache.MetaNamespaceKeyFunc(obj)
@@ -107,7 +130,7 @@ func (e *K8sPool) start() error {
 				e.log.Errorf("while calling MetaNamespaceKeyFunc(): %s", err)
 				return
 			}
-			e.updatePeers()
+			updateFunc()
 		},
 		DeleteFunc: func(obj interface{}) {
 			key, err := cache.MetaNamespaceKeyFunc(obj)
@@ -116,7 +139,7 @@ func (e *K8sPool) start() error {
 				e.log.Errorf("while calling MetaNamespaceKeyFunc(): %s", err)
 				return
 			}
-			e.updatePeers()
+			updateFunc()
 		},
 	})
 
@@ -130,7 +153,64 @@ func (e *K8sPool) start() error {
 	return nil
 }
 
-func (e *K8sPool) updatePeers() {
+func (e *K8sPool) startPodWatch() error {
+	listWatch := &cache.ListWatch{
+		ListFunc: func(options meta_v1.ListOptions) (runtime.Object, error) {
+			options.LabelSelector = e.conf.Selector
+			return e.client.CoreV1().Pods(e.conf.Namespace).List(options)
+		},
+		WatchFunc: func(options meta_v1.ListOptions) (watch.Interface, error) {
+			options.LabelSelector = e.conf.Selector
+			return e.client.CoreV1().Pods(e.conf.Namespace).Watch(options)
+		},
+	}
+	return e.startGenericWatch(&api_v1.Pod{}, listWatch, e.updatePeersFromPods)
+}
+
+func (e *K8sPool) startEndpointWatch() error {
+	listWatch := &cache.ListWatch{
+		ListFunc: func(options meta_v1.ListOptions) (runtime.Object, error) {
+			options.LabelSelector = e.conf.Selector
+			return e.client.CoreV1().Endpoints(e.conf.Namespace).List(options)
+		},
+		WatchFunc: func(options meta_v1.ListOptions) (watch.Interface, error) {
+			options.LabelSelector = e.conf.Selector
+			return e.client.CoreV1().Endpoints(e.conf.Namespace).Watch(options)
+		},
+	}
+	return e.startGenericWatch(&api_v1.Endpoints{}, listWatch, e.updatePeersFromEndpoints)
+}
+
+func (e *K8sPool) updatePeersFromPods() {
+	e.log.Debug("Fetching peer list from pods API")
+	var peers []PeerInfo
+main:
+	for _, obj := range e.informer.GetStore().List() {
+		pod, ok := obj.(*api_v1.Pod)
+		if !ok {
+			e.log.Errorf("expected type v1.Endpoints got '%s' instead", reflect.TypeOf(obj).String())
+		}
+
+		peer := PeerInfo{GRPCAddress: fmt.Sprintf("%s:%s", pod.Status.PodIP, e.conf.PodPort)}
+
+		// if containers are not ready or not running then skip this peer
+		for _, status := range pod.Status.ContainerStatuses {
+			if !status.Ready || status.State.Running == nil {
+				e.log.Debugf("Skipping peer because it's not ready or not running: %+v\n", peer)
+				continue main
+			}
+		}
+
+		if pod.Status.PodIP == e.conf.PodIP {
+			peer.IsOwner = true
+		}
+		e.log.Debugf("Peer: %+v\n", peer)
+		peers = append(peers, peer)
+	}
+	e.conf.OnUpdate(peers)
+}
+
+func (e *K8sPool) updatePeersFromEndpoints() {
 	e.log.Debug("Fetching peer list from endpoints API")
 	var peers []PeerInfo
 	for _, obj := range e.informer.GetStore().List() {

@@ -63,13 +63,12 @@ func WatchMechanismFromString(mechanism string) (WatchMechanism, error) {
 
 type K8sPoolConfig struct {
 	Logger    logrus.FieldLogger
+	Mechanism WatchMechanism
 	OnUpdate  UpdateFunc
 	Namespace string
 	Selector  string
 	PodIP     string
 	PodPort   string
-
-	Mechanism WatchMechanism
 }
 
 func NewK8sPool(conf K8sPoolConfig) (*K8sPool, error) {

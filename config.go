@@ -320,7 +320,7 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 	conf.K8PoolConf.Mechanism, assignErr = WatchMechanismFromString(os.Getenv("GUBER_K8S_WATCH_MECHANISM"))
 	if assignErr != nil {
 		return conf, errors.New("invalid value for watch mechanism " +
-			"`GUBER_K8S_WATCH_MECHANISM` needs to be either 'endpoints' or 'watch' or empty(defaulting to 'endpoints'))")
+			"`GUBER_K8S_WATCH_MECHANISM` needs to be either 'endpoints' or 'pods' (defaults to 'endpoints')")
 	}
 
 	// PeerPicker Config

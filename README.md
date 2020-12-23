@@ -7,7 +7,7 @@ limiting service.
 #### Features of Gubernator
 * Gubernator evenly distributes rate limit requests across the entire cluster,
   which means you can scale the system by simply adding more nodes. 
-* Gubernator doesn’t rely on external caches like memcache or redis, as such
+* Gubernator doesn’t rely on external caches like memcached or redis, as such
   there is no deployment synchronization with a dependant service. This makes
   dynamically growing or shrinking the cluster in an orchestration system like
   kubernetes or nomad trivial.

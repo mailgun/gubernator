@@ -79,14 +79,14 @@ var _ Cache = &LRUCache{}
 
 // New creates a new Cache with a maximum size
 func NewLRUCache(maxSize int) *LRUCache {
-	setter.SetDefault(&maxSize, 50000)
+	setter.SetDefault(&maxSize, 50_000)
 
 	return &LRUCache{
 		cache:     make(map[interface{}]*list.Element),
 		ll:        list.New(),
 		cacheSize: maxSize,
 		sizeMetric: prometheus.NewDesc("gubernator_cache_size",
-			"Size of the LRU Cache which holds the rate limits.", nil, nil),
+			"The number of items in LRU Cache which holds the rate limits.", nil, nil),
 		accessMetric: prometheus.NewDesc("gubernator_cache_access_count",
 			"Cache access counts.", []string{"type"}, nil),
 	}

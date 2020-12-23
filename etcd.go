@@ -147,12 +147,15 @@ func (e *EtcdPool) collectPeers(revision *int64) error {
 		return errors.Wrapf(err, "while fetching peer listing from '%s'", e.conf.KeyPrefix)
 	}
 
+	peers := make(map[string]PeerInfo)
 	// Collect all the peers
 	for _, v := range resp.Kvs {
 		p := e.unMarshallValue(v.Value)
-		e.peers[p.GRPCAddress] = p
+		peers[p.GRPCAddress] = p
 	}
 
+	e.peers = peers
+	*revision = resp.Header.Revision
 	e.callOnUpdate()
 	return nil
 }
@@ -169,6 +172,8 @@ func (e *EtcdPool) unMarshallValue(v []byte) PeerInfo {
 }
 
 func (e *EtcdPool) watch() error {
+	var rev int64
+
 	// Initialize watcher
 	if err := e.watchPeers(); err != nil {
 		return errors.Wrap(err, "while attempting to start watch")
@@ -185,23 +190,7 @@ func (e *EtcdPool) watch() error {
 				e.log.Errorf("watch error: %v", err)
 				goto restart
 			}
-
-			for _, event := range response.Events {
-				switch event.Type {
-				case etcd.EventTypePut:
-					if event.Kv != nil {
-						e.log.Debugf("new peer [%s]", string(event.Kv.Value))
-						p := e.unMarshallValue(event.Kv.Value)
-						e.peers[p.GRPCAddress] = p
-					}
-				case etcd.EventTypeDelete:
-					if event.PrevKv != nil {
-						e.log.Debugf("removed peer [%s]", string(event.PrevKv.Value))
-						delete(e.peers, string(event.PrevKv.Value))
-					}
-				}
-				e.callOnUpdate()
-			}
+			e.collectPeers(&rev)
 		}
 
 	restart:

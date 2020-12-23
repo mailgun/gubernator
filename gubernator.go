@@ -51,7 +51,7 @@ type V1Instance struct {
 // instance with the provided GRPCServer.
 func NewV1Instance(conf Config) (*V1Instance, error) {
 	if conf.GRPCServers == nil {
-		return nil, errors.New("At least one GRPCServer instance is required")
+		return nil, errors.New("at least one GRPCServer instance is required")
 	}
 
 	if err := conf.SetDefaults(); err != nil {
@@ -427,7 +427,7 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 		for _, p := range shutdownPeers {
 			peers = append(peers, p.Info().GRPCAddress)
 		}
-		s.log.WithField("peers", peers).Debug("Peers shutdown")
+		s.log.WithField("peers", peers).Debug("peers shutdown")
 	}
 }
 

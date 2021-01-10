@@ -32,7 +32,7 @@ func BenchmarkServer_GetPeerRateLimitNoBatching(b *testing.B) {
 	}
 
 	client := guber.NewPeerClient(guber.PeerConfig{
-		Info:     cluster.GetRandomPeer(),
+		Info:     cluster.GetRandomPeer(cluster.DataCenterNone),
 		Behavior: conf.Behaviors,
 	})
 
@@ -54,7 +54,7 @@ func BenchmarkServer_GetPeerRateLimitNoBatching(b *testing.B) {
 }
 
 func BenchmarkServer_GetRateLimit(b *testing.B) {
-	client, err := guber.DialV1Server(cluster.GetRandomPeer().GRPCAddress, nil)
+	client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
 	if err != nil {
 		b.Errorf("NewV1Client err: %s", err)
 	}
@@ -80,7 +80,7 @@ func BenchmarkServer_GetRateLimit(b *testing.B) {
 }
 
 func BenchmarkServer_Ping(b *testing.B) {
-	client, err := guber.DialV1Server(cluster.GetRandomPeer().GRPCAddress, nil)
+	client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
 	if err != nil {
 		b.Errorf("NewV1Client err: %s", err)
 	}
@@ -108,7 +108,7 @@ func BenchmarkServer_Ping(b *testing.B) {
 }*/
 
 func BenchmarkServer_ThunderingHeard(b *testing.B) {
-	client, err := guber.DialV1Server(cluster.GetRandomPeer().GRPCAddress, nil)
+	client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
 	if err != nil {
 		b.Errorf("NewV1Client err: %s", err)
 	}

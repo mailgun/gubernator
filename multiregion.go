@@ -18,7 +18,7 @@ func newMultiRegionManager(conf BehaviorConfig, instance *V1Instance) *mutliRegi
 		conf:     conf,
 		instance: instance,
 		log:      instance.log,
-		reqQueue: make(chan *RateLimitReq, 0),
+		reqQueue: make(chan *RateLimitReq, conf.MultiRegionBatchLimit),
 	}
 	mm.runAsyncReqs()
 	return &mm

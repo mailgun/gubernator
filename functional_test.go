@@ -38,12 +38,18 @@ import (
 // Setup and shutdown the mock gubernator cluster for the entire test suite
 func TestMain(m *testing.M) {
 	if err := cluster.StartWith([]guber.PeerInfo{
-		{GRPCAddress: "127.0.0.1:9990", HTTPAddress: "127.0.0.1:9980"},
-		{GRPCAddress: "127.0.0.1:9991", HTTPAddress: "127.0.0.1:9981"},
-		{GRPCAddress: "127.0.0.1:9992", HTTPAddress: "127.0.0.1:9982"},
-		{GRPCAddress: "127.0.0.1:9993", HTTPAddress: "127.0.0.1:9983"},
-		{GRPCAddress: "127.0.0.1:9994", HTTPAddress: "127.0.0.1:9984"},
-		{GRPCAddress: "127.0.0.1:9995", HTTPAddress: "127.0.0.1:9985"},
+		{GRPCAddress: "127.0.0.1:9990", HTTPAddress: "127.0.0.1:9980", DataCenter: cluster.DataCenterNone},
+		{GRPCAddress: "127.0.0.1:9991", HTTPAddress: "127.0.0.1:9981", DataCenter: cluster.DataCenterNone},
+		{GRPCAddress: "127.0.0.1:9992", HTTPAddress: "127.0.0.1:9982", DataCenter: cluster.DataCenterNone},
+		{GRPCAddress: "127.0.0.1:9993", HTTPAddress: "127.0.0.1:9983", DataCenter: cluster.DataCenterNone},
+		{GRPCAddress: "127.0.0.1:9994", HTTPAddress: "127.0.0.1:9984", DataCenter: cluster.DataCenterNone},
+		{GRPCAddress: "127.0.0.1:9995", HTTPAddress: "127.0.0.1:9985", DataCenter: cluster.DataCenterNone},
+
+		// DataCenterOne
+		{GRPCAddress: "127.0.0.1:9890", HTTPAddress: "127.0.0.1:9880", DataCenter: cluster.DataCenterOne},
+		{GRPCAddress: "127.0.0.1:9891", HTTPAddress: "127.0.0.1:9881", DataCenter: cluster.DataCenterOne},
+		{GRPCAddress: "127.0.0.1:9892", HTTPAddress: "127.0.0.1:9882", DataCenter: cluster.DataCenterOne},
+		{GRPCAddress: "127.0.0.1:9893", HTTPAddress: "127.0.0.1:9883", DataCenter: cluster.DataCenterOne},
 	}); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -53,7 +59,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestOverTheLimit(t *testing.T) {
-	client, errs := guber.DialV1Server(cluster.GetRandomPeer().GRPCAddress, nil)
+	client, errs := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
 	require.Nil(t, errs)
 
 	tests := []struct {
@@ -102,61 +108,68 @@ func TestOverTheLimit(t *testing.T) {
 func TestTokenBucket(t *testing.T) {
 	defer clock.Freeze(clock.Now()).Unfreeze()
 
-	client, errs := guber.DialV1Server(cluster.GetRandomPeer().GRPCAddress, nil)
+	addr := cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress
+	client, errs := guber.DialV1Server(addr, nil)
 	require.Nil(t, errs)
 
 	tests := []struct {
+		name      string
 		Remaining int64
 		Status    guber.Status
 		Sleep     clock.Duration
 	}{
 		{
+			name:      "remaining should be one",
 			Remaining: 1,
 			Status:    guber.Status_UNDER_LIMIT,
 			Sleep:     clock.Duration(0),
 		},
 		{
+			name:      "remaining should be zero and under limit",
 			Remaining: 0,
 			Status:    guber.Status_UNDER_LIMIT,
 			Sleep:     clock.Millisecond * 100,
 		},
 		{
+			name:      "after waiting 100ms remaining should be 1 and under limit",
 			Remaining: 1,
 			Status:    guber.Status_UNDER_LIMIT,
 			Sleep:     clock.Duration(0),
 		},
 	}
 
-	for _, test := range tests {
-		resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
-			Requests: []*guber.RateLimitReq{
-				{
-					Name:      "test_token_bucket",
-					UniqueKey: "account:1234",
-					Algorithm: guber.Algorithm_TOKEN_BUCKET,
-					Duration:  guber.Millisecond * 5,
-					Limit:     2,
-					Hits:      1,
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+				Requests: []*guber.RateLimitReq{
+					{
+						Name:      "test_token_bucket",
+						UniqueKey: "account:1234",
+						Algorithm: guber.Algorithm_TOKEN_BUCKET,
+						Duration:  guber.Millisecond * 5,
+						Limit:     2,
+						Hits:      1,
+					},
 				},
-			},
+			})
+			require.Nil(t, err)
+
+			rl := resp.Responses[0]
+
+			assert.Empty(t, rl.Error)
+			assert.Equal(t, tt.Status, rl.Status)
+			assert.Equal(t, tt.Remaining, rl.Remaining)
+			assert.Equal(t, int64(2), rl.Limit)
+			assert.True(t, rl.ResetTime != 0)
+			clock.Advance(tt.Sleep)
 		})
-		require.Nil(t, err)
-
-		rl := resp.Responses[0]
-
-		assert.Empty(t, rl.Error)
-		assert.Equal(t, test.Status, rl.Status)
-		assert.Equal(t, test.Remaining, rl.Remaining)
-		assert.Equal(t, int64(2), rl.Limit)
-		assert.True(t, rl.ResetTime != 0)
-		clock.Advance(test.Sleep)
 	}
 }
 
 func TestTokenBucketGregorian(t *testing.T) {
 	defer clock.Freeze(clock.Now()).Unfreeze()
 
-	client, errs := guber.DialV1Server(cluster.GetRandomPeer().GRPCAddress, nil)
+	client, errs := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
 	require.Nil(t, errs)
 
 	tests := []struct {
@@ -394,7 +407,7 @@ func TestLeakyBucketGregorian(t *testing.T) {
 }
 
 func TestMissingFields(t *testing.T) {
-	client, errs := guber.DialV1Server(cluster.GetRandomPeer().GRPCAddress, nil)
+	client, errs := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
 	require.Nil(t, errs)
 
 	tests := []struct {
@@ -527,7 +540,7 @@ func TestGlobalRateLimits(t *testing.T) {
 }
 
 func TestChangeLimit(t *testing.T) {
-	client, errs := guber.DialV1Server(cluster.GetRandomPeer().GRPCAddress, nil)
+	client, errs := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
 	require.Nil(t, errs)
 
 	tests := []struct {
@@ -622,7 +635,7 @@ func TestChangeLimit(t *testing.T) {
 }
 
 func TestResetRemaining(t *testing.T) {
-	client, errs := guber.DialV1Server(cluster.GetRandomPeer().GRPCAddress, nil)
+	client, errs := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
 	require.Nil(t, errs)
 
 	tests := []struct {
@@ -765,7 +778,7 @@ func TestHealthCheck(t *testing.T) {
 func TestLeakyBucketDivBug(t *testing.T) {
 	defer clock.Freeze(clock.Now()).Unfreeze()
 
-	client, err := guber.DialV1Server(cluster.GetRandomPeer().GRPCAddress, nil)
+	client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
 	require.NoError(t, err)
 
 	resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
@@ -804,8 +817,18 @@ func TestLeakyBucketDivBug(t *testing.T) {
 	assert.Equal(t, int64(2000), resp.Responses[0].Limit)
 }
 
+func TestMutliRegion(t *testing.T) {
+
+	// TODO: Queue a rate limit with multi region behavior on the DataCenterNone cluster
+	// TODO: Check the immediate response is correct
+	// TODO: Wait until the rate limit count shows up on the DataCenterOne and DataCenterTwo cluster
+
+	// TODO: Increment the counts on the DataCenterTwo and DataCenterOne clusters
+	// TODO: Wait until both rate limit count show up on all datacenters
+}
+
 func TestGRPCGateway(t *testing.T) {
-	resp, err := http.DefaultClient.Get("http://" + cluster.GetRandomPeer().HTTPAddress + "/v1/HealthCheck")
+	resp, err := http.DefaultClient.Get("http://" + cluster.GetRandomPeer(cluster.DataCenterNone).HTTPAddress + "/v1/HealthCheck")
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }

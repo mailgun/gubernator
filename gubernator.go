@@ -227,8 +227,11 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 // getGlobalRateLimit handles rate limits that are marked as `Behavior = GLOBAL`. Rate limit responses
 // are returned from the local cache and the hits are queued to be sent to the owning peer.
 func (s *V1Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, error) {
-	// Queue the hit for async update
-	s.global.QueueHit(req)
+	// Queue the hit for async update after we have prepared our response.
+	// NOTE: The defer here avoids a race condition where we queue the req to
+	// be forwarded to the owning peer in a separate goroutine but simultaneously
+	// access and possibly copy the req in this method.
+	defer s.global.QueueHit(req)
 
 	s.conf.Cache.Lock()
 	item, ok := s.conf.Cache.GetItem(req.HashKey())

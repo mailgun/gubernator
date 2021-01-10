@@ -53,8 +53,8 @@ func newGlobalManager(conf BehaviorConfig, instance *V1Instance) *globalManager 
 			Name:       "gubernator_broadcast_durations",
 			Objectives: map[float64]float64{0.5: 0.05, 0.99: 0.001},
 		}),
-		asyncQueue:     make(chan *RateLimitReq, 0),
-		broadcastQueue: make(chan *RateLimitReq, 0),
+		asyncQueue:     make(chan *RateLimitReq, conf.GlobalBatchLimit),
+		broadcastQueue: make(chan *RateLimitReq, conf.GlobalBatchLimit),
 		instance:       instance,
 		conf:           conf,
 	}

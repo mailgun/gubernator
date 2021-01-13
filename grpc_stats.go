@@ -53,8 +53,8 @@ func NewGRPCStatsHandler() *GRPCStatsHandler {
 			Help: "GRPC requests by status.",
 		}, []string{"status", "method"}),
 		grpcRequestDuration: prometheus.NewSummaryVec(prometheus.SummaryOpts{
-			Name:       "gubernator_grpc_request_duration_milliseconds",
-			Help:       "GRPC request durations in milliseconds.",
+			Name:       "gubernator_grpc_request_duration",
+			Help:       "GRPC request durations in seconds",
 			Objectives: map[float64]float64{0.5: 0.05, 0.99: 0.001},
 		}, []string{"method"}),
 	}

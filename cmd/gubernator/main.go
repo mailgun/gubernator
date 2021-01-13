@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"syscall"
 
 	"github.com/mailgun/gubernator"
 	"github.com/mailgun/holster/v3/clock"
@@ -62,13 +63,11 @@ func main() {
 
 	// Wait here for signals to clean up our mess
 	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	for sig := range c {
-		if sig == os.Interrupt {
-			log.Info("caught interrupt; user requested premature exit")
-			daemon.Close()
-			os.Exit(0)
-		}
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	for range c {
+		log.Info("caught signal; shutting down")
+		daemon.Close()
+		os.Exit(0)
 	}
 }
 

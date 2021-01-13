@@ -18,6 +18,7 @@ package cluster
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 
 	"github.com/mailgun/gubernator"
@@ -26,12 +27,30 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const (
+	DataCenterNone = ""
+	DataCenterOne  = "datacenter-1"
+	DataCenterTwo  = "datacenter-2"
+)
+
 var daemons []*gubernator.Daemon
 var peers []gubernator.PeerInfo
 
 // Returns a random peer from the cluster
-func GetRandomPeer() gubernator.PeerInfo {
-	return peers[rand.Intn(len(peers))]
+func GetRandomPeer(dc string) gubernator.PeerInfo {
+	var local []gubernator.PeerInfo
+
+	for _, p := range peers {
+		if p.DataCenter == dc {
+			local = append(local, p)
+		}
+	}
+
+	if len(local) == 0 {
+		panic(fmt.Sprintf("failed to find random peer for dc '%s'", dc))
+	}
+
+	return local[rand.Intn(len(local))]
 }
 
 // Returns a list of all peers in the cluster
@@ -81,6 +100,7 @@ func StartWith(localPeers []gubernator.PeerInfo) error {
 			Logger:            logrus.WithField("instance", peer.GRPCAddress),
 			GRPCListenAddress: peer.GRPCAddress,
 			HTTPListenAddress: peer.HTTPAddress,
+			DataCenter:        peer.DataCenter,
 			Behaviors: gubernator.BehaviorConfig{
 				// Suitable for testing but not production
 				GlobalSyncWait:     clock.Millisecond * 50,
@@ -98,6 +118,7 @@ func StartWith(localPeers []gubernator.PeerInfo) error {
 		peers = append(peers, gubernator.PeerInfo{
 			GRPCAddress: d.GRPCListeners[0].Addr().String(),
 			HTTPAddress: d.HTTPListener.Addr().String(),
+			DataCenter:  peer.DataCenter,
 		})
 		daemons = append(daemons, d)
 	}

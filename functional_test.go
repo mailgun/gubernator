@@ -308,11 +308,17 @@ func TestLeakyBucket(t *testing.T) {
 			Hits:      0,
 			Remaining: 1,
 			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Second * 60,
+		},
+		{
+			Name:      "should max out the limit",
+			Hits:      0,
+			Remaining: 10,
+			Status:    guber.Status_UNDER_LIMIT,
 			Sleep:     clock.Second,
 		},
 	}
 
-	now := clock.Now()
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
 			resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
@@ -327,15 +333,15 @@ func TestLeakyBucket(t *testing.T) {
 					},
 				},
 			})
-			clock.Freeze(clock.Now())
 			require.NoError(t, err)
+			require.Len(t, resp.Responses, 1)
 
 			rl := resp.Responses[0]
 
 			assert.Equal(t, test.Status, rl.Status)
 			assert.Equal(t, test.Remaining, rl.Remaining)
 			assert.Equal(t, int64(10), rl.Limit)
-			assert.True(t, rl.ResetTime > now.Unix())
+			assert.Equal(t, clock.Now().Unix()+3, rl.ResetTime/1000)
 			clock.Advance(test.Sleep)
 		})
 	}

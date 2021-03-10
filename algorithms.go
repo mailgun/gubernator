@@ -235,13 +235,13 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 		elapsed := now - b.UpdatedAt
 		leak := float64(elapsed) / rate
 
-		if int64(b.Remaining) > b.Limit {
-			b.Remaining = float64(b.Limit)
-		}
-
 		if int64(leak) > 0 {
 			b.Remaining += leak
 			b.UpdatedAt = now
+		}
+
+		if int64(b.Remaining) > b.Limit {
+			b.Remaining = float64(b.Limit)
 		}
 
 		rl := &RateLimitResp{

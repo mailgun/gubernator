@@ -159,6 +159,10 @@ type DaemonConfig struct {
 	// (Required) The `address:port` that will accept HTTP requests
 	HTTPListenAddress string
 
+	// (Optional) Defines the max age connection from client in seconds.
+	// Default is infinity
+	GRPCMaxConnectionAgeSeconds int64
+
 	// (Optional) The `address:port` that is advertised to other Gubernator peers.
 	// Defaults to `GRPCListenAddress`
 	AdvertiseAddress string
@@ -233,6 +237,7 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 	// Main config
 	setter.SetDefault(&conf.GRPCListenAddress, os.Getenv("GUBER_GRPC_ADDRESS"), "localhost:81")
 	setter.SetDefault(&conf.HTTPListenAddress, os.Getenv("GUBER_HTTP_ADDRESS"), "localhost:80")
+	setter.SetDefault(&conf.GRPCMaxConnectionAgeSeconds, os.Getenv("GUBER_GRPC_MAX_CONN_AGE_SEC"), 0)
 	setter.SetDefault(&conf.CacheSize, getEnvInteger(log, "GUBER_CACHE_SIZE"), 50_000)
 	setter.SetDefault(&conf.AdvertiseAddress, os.Getenv("GUBER_ADVERTISE_ADDRESS"), conf.GRPCListenAddress)
 	setter.SetDefault(&conf.DataCenter, os.Getenv("GUBER_DATA_CENTER"), "")

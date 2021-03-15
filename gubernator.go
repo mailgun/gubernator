@@ -53,7 +53,6 @@ func NewV1Instance(conf Config) (*V1Instance, error) {
 	if conf.GRPCServers == nil {
 		return nil, errors.New("at least one GRPCServer instance is required")
 	}
-
 	if err := conf.SetDefaults(); err != nil {
 		return nil, err
 	}

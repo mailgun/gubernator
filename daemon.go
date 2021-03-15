@@ -22,6 +22,9 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
+
+	"google.golang.org/grpc/keepalive"
 
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/mailgun/holster/v3/etcdutil"
@@ -84,6 +87,13 @@ func (s *Daemon) Start(ctx context.Context) error {
 	opts := []grpc.ServerOption{
 		grpc.StatsHandler(s.statsHandler),
 		grpc.MaxRecvMsgSize(1024 * 1024),
+	}
+
+	if s.conf.GRPCMaxConnectionAgeSeconds > 0 {
+		opts = append(opts, grpc.KeepaliveParams(keepalive.ServerParameters{
+			MaxConnectionAge:      time.Second * time.Duration(s.conf.GRPCMaxConnectionAgeSeconds),
+			MaxConnectionAgeGrace: time.Second * time.Duration(s.conf.GRPCMaxConnectionAgeSeconds),
+		}))
 	}
 
 	if err := SetupTLS(s.conf.TLS); err != nil {

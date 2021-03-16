@@ -57,6 +57,11 @@ spec:
           # Enable debug for diagnosing issues
           - name: GUBER_DEBUG
             value: "true"
+          # Defines the max age of a client connection
+          # Default is infinity
+          # - name: GUBER_GRPC_MAX_CONN_AGE_SEC
+          #  value: "30"
+
       restartPolicy: Always
 ---
 apiVersion: v1

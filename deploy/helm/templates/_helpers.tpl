@@ -11,15 +11,10 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 If release name contains chart name it will be used as a full name.
 */}}
 {{- define "gubernator.fullname" -}}
-{{- if .Values.fullnameOverride }}
-{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
+{{- if .Values.gubernator.fullnameOverride }}
+{{- .Values.gubernator.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
-{{- $name := default .Chart.Name .Values.nameOverride }}
-{{- if contains $name .Release.Name }}
-{{- .Release.Name | trunc 63 | trimSuffix "-" }}
-{{- else }}
-{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" }}
-{{- end }}
+{{- printf "%s" .Release.Name | trunc 63 | trimSuffix "-" }}
 {{- end }}
 {{- end }}
 
@@ -34,11 +29,11 @@ Create chart name and version as used by the chart label.
 Gubernator Annotations
 */}}
 {{- define "gubernator.annotations" -}}
-{{- with .Values.gubernator.annotations }}
-{{- toYaml . | trim }}
-{{- end }}
 meta.helm.sh/release-name: {{ .Release.Name }}
 meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+{{- with .Values.gubernator.annotations }}
+{{- toYaml . }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -54,7 +49,7 @@ Common labels
 */}}
 {{- define "gubernator.labels" -}}
 {{- with .Values.gubernator.labels }}
-{{- toYaml . | trim }}
+{{- toYaml . }}
 {{- end }}
 helm.sh/chart: {{ include "gubernator.chart" . }}
 {{ include "gubernator.selectorLabels" . }}

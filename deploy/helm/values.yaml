@@ -1,19 +1,22 @@
 gubernator:
 
+#  fullnameOverride: "gubernator123"
+#  nameOverride: "teste"
+
   image:
     repository: thrawn01/gubernator
     pullPolicy: IfNotPresent
     # Overrides the image tag whose default is the chart appVersion.
     tag: "latest"
 
-#  labels:
-#    a: "b"
+  labels:
+    a: "b"
 
   annotations: { }
 
   serviceAccount:
     create: true
-    name: "teste"
+#    name: "teste"
 
 
 

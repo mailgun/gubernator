@@ -3,7 +3,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ .Values.gubernator.serviceAccount.name }}
+  name: {{ include "gubernator.fullname" . }}
   labels:
   {{- include "gubernator.labels" . | nindent 4 }}
   annotations:
@@ -20,7 +20,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ .Values.gubernator.serviceAccount.name }}
+  name: {{ include "gubernator.fullname" . }}
   labels:
   {{- include "gubernator.labels" . | nindent 4 }}
   annotations:
@@ -28,8 +28,8 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ .Values.gubernator.serviceAccount.name }}
+  name: {{ include "gubernator.fullname" . }}
 subjects:
   - kind: ServiceAccount
-    name: {{ .Values.gubernator.serviceAccount.name }}
+    name: {{ include "gubernator.fullname" . }}
 {{- end }}

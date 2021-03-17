@@ -7,7 +7,9 @@ metadata:
   annotations:
   {{- include "gubernator.annotations" . | nindent 4}}
 spec:
-  replicas: 4
+  {{- if not .Values.gubernator.autoscaling.enabled }}
+  replicas: {{ .Values.gubernator.replicaCount }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "gubernator.selectorLabels" . | nindent 6 }}

@@ -1,7 +1,8 @@
 gubernator:
 
-#  fullnameOverride: "gubernator123"
-#  nameOverride: "teste"
+  fullnameOverride: {}
+  nameOverride: {}
+  priorityClassName: "priorityClass"
 
   image:
     repository: thrawn01/gubernator
@@ -12,15 +13,34 @@ gubernator:
   labels:
     a: "b"
 
+  debug: true
+#  watchPods: true
+
+  server:
+    http:
+      port: "80"
+    grpc:
+      port: "81"
+      maxConnAgeSeconds: 30
+
   annotations: { }
 
   serviceAccount:
-    create: true
-#    name: "teste"
+    create: false
+    name: "teste"
 
+  nodeSelector:
+    group: apps
 
+  resources:
+    limits:
+      cpu: "2"
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 150Mi
 
-#replicaCount: 1
+  #replicaCount: 1
 #
 #
 #imagePullSecrets: [ ]

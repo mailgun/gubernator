@@ -51,10 +51,69 @@ Common labels
 {{- with .Values.gubernator.labels }}
 {{- toYaml . }}
 {{- end }}
+app: gubernator
 helm.sh/chart: {{ include "gubernator.chart" . }}
 {{ include "gubernator.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}
+
+{{/*
+GRPC Port
+*/}}
+{{- define "gubernator.grpc.port" -}}
+{{- if .Values.gubernator.server.grpc.port }}
+{{- .Values.gubernator.server.grpc.port}}
+{{- else }}
+{{- print "81" }}
+{{- end }}
+{{- end }}
+
+{{/*
+HTTP Port
+*/}}
+{{- define "gubernator.http.port" -}}
+{{- if .Values.gubernator.server.http.port }}
+{{- .Values.gubernator.server.http.port}}
+{{- else }}
+{{- print "80" }}
+{{- end }}
+{{- end }}
+
+{{/*Gubernator env*/}}
+{{- define "gubernator.env"}}
+- name: GUBER_K8S_NAMESPACE
+  valueFrom:
+    fieldRef:
+      fieldPath: metadata.namespace
+- name: GUBER_K8S_POD_IP
+  valueFrom:
+    fieldRef:
+      fieldPath: status.podIP
+- name: GUBER_GRPC_ADDRESS
+  value: "0.0.0.0:{{ include "gubernator.grpc.port" . }}"
+- name: GUBER_HTTP_ADDRESS
+  value: "0.0.0.0:{{ include "gubernator.http.port" . }}"
+- name: GUBER_PEER_DISCOVERY_TYPE
+  value: "k8s"
+- name: GUBER_K8S_POD_PORT
+  value: {{ include "gubernator.grpc.port" . }}
+- name: GUBER_K8S_ENDPOINTS_SELECTOR
+  value: "app=gubernator"
+{{- if .Values.gubernator.debug }}
+- name: GUBER_DEBUG
+  value: "true"
+{{- end }}
+- name: GUBER_K8S_WATCH_MECHANISM
+{{- if .Values.gubernator.watchPods }}
+  value: "pods"
+{{- else }}
+  value: "endpoints"
+{{- end }}
+{{- if .Values.gubernator.server.grpc.maxConnAgeSeconds }}
+- name: GUBER_GRPC_MAX_CONN_AGE_SEC
+  value: {{ .Values.gubernator.server.grpc.maxConnAgeSeconds }}
+{{- end }}
 {{- end }}

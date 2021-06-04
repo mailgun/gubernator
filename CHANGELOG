@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0-rc.5] - 2021-06-03
+## Changes
+* Implemented performance recommendations reported in Issue #74
+
+## [2.0.0-rc.4] - 2021-06-03
+## Changes
+* Add support for burst in leaky bucket #103
+* Add working example of aws ecs service discovery deployment #102
+
 ## [2.0.0-rc.2] - 2021-07-11
 ## Changes
 * Deprecated github.com/golang/protobuf was replaced with google.golang.org/protobuf

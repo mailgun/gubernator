@@ -38,6 +38,8 @@ const (
 )
 
 type V1Instance struct {
+	UnimplementedV1Server
+	UnimplementedPeersV1Server
 	health      HealthCheckResp
 	global      *globalManager
 	mutliRegion *mutliRegionManager

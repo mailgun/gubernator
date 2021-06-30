@@ -25,7 +25,7 @@ import (
 	"os"
 
 	"github.com/davecgh/go-spew/spew"
-	guber "github.com/mailgun/gubernator"
+	guber "github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"

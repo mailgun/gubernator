@@ -6,8 +6,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/mailgun/gubernator"
-	"github.com/mailgun/gubernator/cluster"
+	"github.com/mailgun/gubernator/v2"
+	"github.com/mailgun/gubernator/v2/cluster"
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/stretchr/testify/assert"
 )

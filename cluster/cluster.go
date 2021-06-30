@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/mailgun/gubernator"
+	"github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"

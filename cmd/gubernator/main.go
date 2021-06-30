@@ -24,7 +24,7 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/mailgun/gubernator"
+	"github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/sirupsen/logrus"
 	"k8s.io/klog"

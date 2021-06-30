@@ -8,7 +8,7 @@ import (
 
 	"github.com/mailgun/gubernator"
 	"github.com/mailgun/gubernator/cluster"
-	"github.com/mailgun/holster/v3/clock"
+	"github.com/mailgun/holster/v4/clock"
 	"github.com/stretchr/testify/assert"
 )
 

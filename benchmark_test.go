@@ -22,7 +22,7 @@ import (
 
 	guber "github.com/mailgun/gubernator"
 	"github.com/mailgun/gubernator/cluster"
-	"github.com/mailgun/holster/v3/syncutil"
+	"github.com/mailgun/holster/v4/syncutil"
 )
 
 func BenchmarkServer_GetPeerRateLimitNoBatching(b *testing.B) {

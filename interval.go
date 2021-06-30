@@ -20,8 +20,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/mailgun/holster/v3/clock"
-	"github.com/mailgun/holster/v3/syncutil"
+	"github.com/mailgun/holster/v4/clock"
+	"github.com/mailgun/holster/v4/syncutil"
 )
 
 type Interval struct {

@@ -27,15 +27,15 @@ import (
 	"strings"
 	"time"
 
-	etcd "github.com/coreos/etcd/clientv3"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/mailgun/holster/v3/clock"
-	"github.com/mailgun/holster/v3/setter"
-	"github.com/mailgun/holster/v3/slice"
+	"github.com/mailgun/holster/v4/clock"
+	"github.com/mailgun/holster/v4/setter"
+	"github.com/mailgun/holster/v4/slice"
 	"github.com/pkg/errors"
 	"github.com/segmentio/fasthash/fnv1"
 	"github.com/segmentio/fasthash/fnv1a"
 	"github.com/sirupsen/logrus"
+	etcd "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 )
 

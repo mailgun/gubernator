@@ -20,12 +20,12 @@ import (
 	"context"
 	"encoding/json"
 
-	etcd "github.com/coreos/etcd/clientv3"
-	"github.com/mailgun/holster/v3/clock"
-	"github.com/mailgun/holster/v3/setter"
-	"github.com/mailgun/holster/v3/syncutil"
+	"github.com/mailgun/holster/v4/clock"
+	"github.com/mailgun/holster/v4/setter"
+	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	etcd "go.etcd.io/etcd/client/v3"
 )
 
 const (

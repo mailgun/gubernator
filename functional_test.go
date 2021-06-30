@@ -27,8 +27,8 @@ import (
 
 	guber "github.com/mailgun/gubernator"
 	"github.com/mailgun/gubernator/cluster"
-	"github.com/mailgun/holster/v3/clock"
-	"github.com/mailgun/holster/v3/testutil"
+	"github.com/mailgun/holster/v4/clock"
+	"github.com/mailgun/holster/v4/testutil"
 	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/assert"

@@ -5,7 +5,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/mailgun/holster/v3/clock"
+	"github.com/mailgun/holster/v4/clock"
 	"github.com/segmentio/fasthash/fnv1"
 	"github.com/segmentio/fasthash/fnv1a"
 	"github.com/stretchr/testify/assert"

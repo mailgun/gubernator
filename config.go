@@ -116,7 +116,7 @@ func (c *Config) SetDefaults() error {
 	setter.SetDefault(&c.Behaviors.MultiRegionBatchLimit, maxBatchSize)
 	setter.SetDefault(&c.Behaviors.MultiRegionSyncWait, time.Second)
 
-	setter.SetDefault(&c.LocalPicker, NewReplicatedConsistentHash(nil, DefaultReplicas))
+	setter.SetDefault(&c.LocalPicker, NewReplicatedConsistentHash(nil, defaultReplicas))
 	setter.SetDefault(&c.RegionPicker, NewRegionPicker(nil))
 	setter.SetDefault(&c.Cache, NewLRUCache(0))
 
@@ -335,12 +335,12 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 
 		switch pp {
 		case "replicated-hash":
-			setter.SetDefault(&replicas, getEnvInteger(log, "GUBER_REPLICATED_HASH_REPLICAS"), DefaultReplicas)
+			setter.SetDefault(&replicas, getEnvInteger(log, "GUBER_REPLICATED_HASH_REPLICAS"), defaultReplicas)
 			conf.Picker = NewReplicatedConsistentHash(nil, replicas)
 			setter.SetDefault(&hash, os.Getenv("GUBER_PEER_PICKER_HASH"), "fnv1a")
-			hashFuncs := map[string]HashFunc64{
-				"fnv1a": fnv1a.HashBytes64,
-				"fnv1":  fnv1.HashBytes64,
+			hashFuncs := map[string]HashString64{
+				"fnv1a": fnv1a.HashString64,
+				"fnv1":  fnv1.HashString64,
 			}
 			fn, ok := hashFuncs[hash]
 			if !ok {
@@ -528,7 +528,7 @@ func validClientAuthTypes(m map[string]tls.ClientAuthType) string {
 	return strings.Join(rs, ",")
 }
 
-func validHash64Keys(m map[string]HashFunc64) string {
+func validHash64Keys(m map[string]HashString64) string {
 	var rs []string
 	for k, _ := range m {
 		rs = append(rs, k)

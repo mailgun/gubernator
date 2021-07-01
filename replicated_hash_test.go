@@ -13,7 +13,7 @@ func TestReplicatedConsistentHash(t *testing.T) {
 	hosts := []string{"a.svc.local", "b.svc.local", "c.svc.local"}
 
 	t.Run("Size", func(t *testing.T) {
-		hash := NewReplicatedConsistentHash(nil, DefaultReplicas)
+		hash := NewReplicatedConsistentHash(nil, defaultReplicas)
 
 		for _, h := range hosts {
 			hash.Add(&PeerClient{conf: PeerConfig{Info: PeerInfo{GRPCAddress: h}}})
@@ -23,7 +23,7 @@ func TestReplicatedConsistentHash(t *testing.T) {
 	})
 
 	t.Run("Host", func(t *testing.T) {
-		hash := NewReplicatedConsistentHash(nil, DefaultReplicas)
+		hash := NewReplicatedConsistentHash(nil, defaultReplicas)
 		hostMap := map[string]*PeerClient{}
 
 		for _, h := range hosts {
@@ -46,7 +46,7 @@ func TestReplicatedConsistentHash(t *testing.T) {
 
 		for _, tc := range []struct {
 			name            string
-			inHashFunc      HashFunc64
+			inHashFunc      HashString64
 			outDistribution map[string]int
 		}{{
 			name: "default",
@@ -55,19 +55,19 @@ func TestReplicatedConsistentHash(t *testing.T) {
 			},
 		}, {
 			name:       "fasthash/fnv1a",
-			inHashFunc: fnv1a.HashBytes64,
+			inHashFunc: fnv1a.HashString64,
 			outDistribution: map[string]int{
 				"a.svc.local": 3110, "b.svc.local": 3856, "c.svc.local": 3034,
 			},
 		}, {
 			name:       "fasthash/fnv1",
-			inHashFunc: fnv1.HashBytes64,
+			inHashFunc: fnv1.HashString64,
 			outDistribution: map[string]int{
 				"a.svc.local": 2948, "b.svc.local": 3592, "c.svc.local": 3460,
 			},
 		}} {
 			t.Run(tc.name, func(t *testing.T) {
-				hash := NewReplicatedConsistentHash(tc.inHashFunc, DefaultReplicas)
+				hash := NewReplicatedConsistentHash(tc.inHashFunc, defaultReplicas)
 				distribution := make(map[string]int)
 
 				for _, h := range hosts {
@@ -87,9 +87,9 @@ func TestReplicatedConsistentHash(t *testing.T) {
 }
 
 func BenchmarkReplicatedConsistantHash(b *testing.B) {
-	hashFuncs := map[string]HashFunc64{
-		"fasthash/fnv1a": fnv1a.HashBytes64,
-		"fasthash/fnv1":  fnv1.HashBytes64,
+	hashFuncs := map[string]HashString64{
+		"fasthash/fnv1a": fnv1a.HashString64,
+		"fasthash/fnv1":  fnv1.HashString64,
 	}
 
 	for name, hashFunc := range hashFuncs {
@@ -99,7 +99,7 @@ func BenchmarkReplicatedConsistantHash(b *testing.B) {
 				ips[i] = net.IPv4(byte(i>>24), byte(i>>16), byte(i>>8), byte(i)).String()
 			}
 
-			hash := NewReplicatedConsistentHash(hashFunc, DefaultReplicas)
+			hash := NewReplicatedConsistentHash(hashFunc, defaultReplicas)
 			hosts := []string{"a.svc.local", "b.svc.local", "c.svc.local"}
 			for _, h := range hosts {
 				hash.Add(&PeerClient{conf: PeerConfig{Info: PeerInfo{GRPCAddress: h}}})

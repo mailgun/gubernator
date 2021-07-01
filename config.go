@@ -334,20 +334,6 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 		var hash string
 
 		switch pp {
-		case "consistent-hash":
-			setter.SetDefault(&hash, os.Getenv("GUBER_PEER_PICKER_HASH"), "fnv1a")
-			hashFuncs := map[string]HashFunc{
-				"fnv1a": fnv1a.HashBytes32,
-				"fnv1":  fnv1.HashBytes32,
-				"crc32": nil,
-			}
-			fn, ok := hashFuncs[hash]
-			if !ok {
-				return conf, errors.Errorf("'GUBER_PEER_PICKER_HASH=%s' is invalid; choices are [%s]",
-					hash, validHashKeys(hashFuncs))
-			}
-			conf.Picker = NewConsistentHash(fn)
-
 		case "replicated-hash":
 			setter.SetDefault(&replicas, getEnvInteger(log, "GUBER_REPLICATED_HASH_REPLICAS"), DefaultReplicas)
 			conf.Picker = NewReplicatedConsistentHash(nil, replicas)
@@ -535,14 +521,6 @@ func fromEnvFile(log logrus.FieldLogger, configFile string) error {
 }
 
 func validClientAuthTypes(m map[string]tls.ClientAuthType) string {
-	var rs []string
-	for k, _ := range m {
-		rs = append(rs, k)
-	}
-	return strings.Join(rs, ",")
-}
-
-func validHashKeys(m map[string]HashFunc) string {
 	var rs []string
 	for k, _ := range m {
 		rs = append(rs, k)

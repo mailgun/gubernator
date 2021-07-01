@@ -19,8 +19,10 @@ package gubernator
 import (
 	"crypto/md5"
 	"fmt"
+	"reflect"
 	"sort"
 	"strconv"
+	"unsafe"
 
 	"github.com/pkg/errors"
 	"github.com/segmentio/fasthash/fnv1"
@@ -116,4 +118,15 @@ func (ch *ReplicatedConsistentHash) Get(key string) (*PeerClient, error) {
 	}
 
 	return ch.peerKeys[idx].peer, nil
+}
+
+// unsafely return the underlying bytes of a string
+// the caller cannot alter the returned byte slice
+func strToBytesUnsafe(str string) []byte {
+	hdr := *(*reflect.StringHeader)(unsafe.Pointer(&str))
+	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: hdr.Data,
+		Len:  hdr.Len,
+		Cap:  hdr.Len,
+	}))
 }

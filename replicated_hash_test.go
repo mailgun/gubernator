@@ -1,17 +1,15 @@
 package gubernator
 
 import (
-	"math/rand"
 	"net"
 	"testing"
 
-	"github.com/mailgun/holster/v4/clock"
 	"github.com/segmentio/fasthash/fnv1"
 	"github.com/segmentio/fasthash/fnv1a"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestReplicatedConsistantHash(t *testing.T) {
+func TestReplicatedConsistentHash(t *testing.T) {
 	hosts := []string{"a.svc.local", "b.svc.local", "c.svc.local"}
 
 	t.Run("Size", func(t *testing.T) {
@@ -40,40 +38,48 @@ func TestReplicatedConsistantHash(t *testing.T) {
 	})
 
 	t.Run("distribution", func(t *testing.T) {
-		const cases = 10000
-		rand.Seed(clock.Now().Unix())
-
-		strings := make([]string, cases)
-
-		for i := 0; i < cases; i++ {
-			r := rand.Int31()
-			ip := net.IPv4(192, byte(r>>16), byte(r>>8), byte(r))
+		strings := make([]string, 10000)
+		for i := range strings {
+			ip := net.IPv4(192, 168, byte(i>>8), byte(i))
 			strings[i] = ip.String()
 		}
 
-		hashFuncs := map[string]HashFunc64{
-			"fasthash/fnv1a": fnv1a.HashBytes64,
-			"fasthash/fnv1":  fnv1.HashBytes64,
-		}
-
-		for name, hashFunc := range hashFuncs {
-			t.Run(name, func(t *testing.T) {
-				hash := NewReplicatedConsistentHash(hashFunc, DefaultReplicas)
-				hostMap := map[string]int{}
+		for _, tc := range []struct {
+			name            string
+			inHashFunc      HashFunc64
+			outDistribution map[string]int
+		}{{
+			name: "default",
+			outDistribution: map[string]int{
+				"a.svc.local": 2948, "b.svc.local": 3592, "c.svc.local": 3460,
+			},
+		}, {
+			name:       "fasthash/fnv1a",
+			inHashFunc: fnv1a.HashBytes64,
+			outDistribution: map[string]int{
+				"a.svc.local": 3110, "b.svc.local": 3856, "c.svc.local": 3034,
+			},
+		}, {
+			name:       "fasthash/fnv1",
+			inHashFunc: fnv1.HashBytes64,
+			outDistribution: map[string]int{
+				"a.svc.local": 2948, "b.svc.local": 3592, "c.svc.local": 3460,
+			},
+		}} {
+			t.Run(tc.name, func(t *testing.T) {
+				hash := NewReplicatedConsistentHash(tc.inHashFunc, DefaultReplicas)
+				distribution := make(map[string]int)
 
 				for _, h := range hosts {
 					hash.Add(&PeerClient{conf: PeerConfig{Info: PeerInfo{GRPCAddress: h}}})
-					hostMap[h] = 0
+					distribution[h] = 0
 				}
 
 				for i := range strings {
 					peer, _ := hash.Get(strings[i])
-					hostMap[peer.Info().GRPCAddress]++
+					distribution[peer.Info().GRPCAddress]++
 				}
-
-				for host, a := range hostMap {
-					t.Logf("host: %s, percent: %f", host, float64(a)/cases)
-				}
+				assert.Equal(t, tc.outDistribution, distribution)
 			})
 		}
 	})

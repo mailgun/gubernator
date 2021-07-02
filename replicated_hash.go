@@ -26,15 +26,15 @@ import (
 	"github.com/segmentio/fasthash/fnv1"
 )
 
-const DefaultReplicas = 512
+const defaultReplicas = 512
 
-type HashFunc64 func(data []byte) uint64
+type HashString64 func(data string) uint64
 
-var DefaultHash64 HashFunc64 = fnv1.HashBytes64
+var defaultHashString64 HashString64 = fnv1.HashString64
 
 // Implements PeerPicker
 type ReplicatedConsistentHash struct {
-	hashFunc HashFunc64
+	hashFunc HashString64
 	peerKeys []peerInfo
 	peers    map[string]*PeerClient
 	replicas int
@@ -45,7 +45,7 @@ type peerInfo struct {
 	peer *PeerClient
 }
 
-func NewReplicatedConsistentHash(fn HashFunc64, replicas int) *ReplicatedConsistentHash {
+func NewReplicatedConsistentHash(fn HashString64, replicas int) *ReplicatedConsistentHash {
 	ch := &ReplicatedConsistentHash{
 		hashFunc: fn,
 		peers:    make(map[string]*PeerClient),
@@ -53,7 +53,7 @@ func NewReplicatedConsistentHash(fn HashFunc64, replicas int) *ReplicatedConsist
 	}
 
 	if ch.hashFunc == nil {
-		ch.hashFunc = DefaultHash64
+		ch.hashFunc = defaultHashString64
 	}
 	return ch
 }
@@ -80,7 +80,7 @@ func (ch *ReplicatedConsistentHash) Add(peer *PeerClient) {
 
 	key := fmt.Sprintf("%x", md5.Sum([]byte(peer.Info().GRPCAddress)))
 	for i := 0; i < ch.replicas; i++ {
-		hash := ch.hashFunc(strToBytesUnsafe(strconv.Itoa(i) + key))
+		hash := ch.hashFunc(strconv.Itoa(i) + key)
 		ch.peerKeys = append(ch.peerKeys, peerInfo{
 			hash: hash,
 			peer: peer,
@@ -105,7 +105,7 @@ func (ch *ReplicatedConsistentHash) Get(key string) (*PeerClient, error) {
 	if ch.Size() == 0 {
 		return nil, errors.New("unable to pick a peer; pool is empty")
 	}
-	hash := ch.hashFunc(strToBytesUnsafe(key))
+	hash := ch.hashFunc(key)
 
 	// Binary search for appropriate peer
 	idx := sort.Search(len(ch.peerKeys), func(i int) bool { return ch.peerKeys[i].hash >= hash })

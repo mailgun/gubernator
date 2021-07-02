@@ -20,9 +20,9 @@ import (
 	"context"
 	"testing"
 
-	guber "github.com/mailgun/gubernator"
-	"github.com/mailgun/gubernator/cluster"
-	"github.com/mailgun/holster/v3/syncutil"
+	guber "github.com/mailgun/gubernator/v2"
+	"github.com/mailgun/gubernator/v2/cluster"
+	"github.com/mailgun/holster/v4/syncutil"
 )
 
 func BenchmarkServer_GetPeerRateLimitNoBatching(b *testing.B) {

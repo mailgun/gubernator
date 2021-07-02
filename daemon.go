@@ -27,9 +27,9 @@ import (
 	"google.golang.org/grpc/keepalive"
 
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"github.com/mailgun/holster/v3/etcdutil"
-	"github.com/mailgun/holster/v3/setter"
-	"github.com/mailgun/holster/v3/syncutil"
+	"github.com/mailgun/holster/v4/etcdutil"
+	"github.com/mailgun/holster/v4/setter"
+	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"

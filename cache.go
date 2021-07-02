@@ -22,8 +22,8 @@ import (
 	"container/list"
 	"sync"
 
-	"github.com/mailgun/holster/v3/clock"
-	"github.com/mailgun/holster/v3/setter"
+	"github.com/mailgun/holster/v4/clock"
+	"github.com/mailgun/holster/v4/setter"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

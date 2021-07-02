@@ -16,7 +16,7 @@ limitations under the License.
 
 syntax = "proto3";
 
-option go_package = "gubernator";
+option go_package = "github.com/mailgun/gubernator";
 
 option cc_generic_services = true;
 

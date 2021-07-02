@@ -22,8 +22,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/mailgun/holster/v3/setter"
-	"github.com/mailgun/holster/v3/syncutil"
+	"github.com/mailgun/holster/v4/setter"
+	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
@@ -38,6 +38,8 @@ const (
 )
 
 type V1Instance struct {
+	UnimplementedV1Server
+	UnimplementedPeersV1Server
 	health      HealthCheckResp
 	global      *globalManager
 	mutliRegion *mutliRegionManager

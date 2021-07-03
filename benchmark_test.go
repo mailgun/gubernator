@@ -79,6 +79,33 @@ func BenchmarkServer_GetRateLimit(b *testing.B) {
 	})
 }
 
+func BenchmarkServer_GetRateLimitGlobal(b *testing.B) {
+	client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
+	if err != nil {
+		b.Errorf("NewV1Client err: %s", err)
+	}
+
+	b.Run("GetRateLimitGlobal", func(b *testing.B) {
+		for n := 0; n < b.N; n++ {
+			_, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+				Requests: []*guber.RateLimitReq{
+					{
+						Name:      "get_rate_limit_benchmark",
+						UniqueKey: guber.RandomString(10),
+						Behavior:  guber.Behavior_GLOBAL,
+						Limit:     10,
+						Duration:  guber.Second * 5,
+						Hits:      1,
+					},
+				},
+			})
+			if err != nil {
+				b.Errorf("client.RateLimit() err: %s", err)
+			}
+		}
+	})
+}
+
 func BenchmarkServer_Ping(b *testing.B) {
 	client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
 	if err != nil {
@@ -107,13 +134,13 @@ func BenchmarkServer_Ping(b *testing.B) {
 	}
 }*/
 
-func BenchmarkServer_ThunderingHeard(b *testing.B) {
+func BenchmarkServer_ThunderingHerd(b *testing.B) {
 	client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
 	if err != nil {
 		b.Errorf("NewV1Client err: %s", err)
 	}
 
-	b.Run("ThunderingHeard", func(b *testing.B) {
+	b.Run("ThunderingHerd", func(b *testing.B) {
 		fan := syncutil.NewFanOut(100)
 		for n := 0; n < b.N; n++ {
 			fan.Run(func(o interface{}) error {

@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "gubernator.fullname" . }}
+  labels:
+  {{- include "gubernator.labels" . | nindent 4 }}
+  annotations:
+  {{- include "gubernator.annotations" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - port: {{ include "gubernator.grpc.port" .  }}
+      targetPort: {{ include "gubernator.grpc.port" .  }}
+      protocol: TCP
+      name: grpc
+    - port: {{ include "gubernator.http.port" .  }}
+      targetPort: {{ include "gubernator.http.port" .  }}
+      protocol: TCP
+      name: http
+  selector:
+  {{- include "gubernator.selectorLabels" . | nindent 4 }}

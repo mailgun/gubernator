@@ -24,6 +24,7 @@ import (
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/proto"
 )
 
 // globalManager manages async hit queue and updates peers in
@@ -200,13 +201,13 @@ func (gm *globalManager) broadcastPeers(updates map[string]*RateLimitReq) {
 
 	for _, r := range updates {
 		// Copy the original since we removing the GLOBAL behavior
-		rl := *r
+		rl := proto.Clone(r).(*RateLimitReq)
 		// We are only sending the status of the rate limit so
 		// we clear the behavior flag so we don't get queued for update again.
 		SetBehavior(&rl.Behavior, Behavior_GLOBAL, false)
 		rl.Hits = 0
 
-		status, err := gm.instance.getRateLimit(&rl)
+		status, err := gm.instance.getRateLimit(rl)
 		if err != nil {
 			gm.log.WithError(err).Errorf("while broadcasting update to peers for: '%s'", rl.HashKey())
 			continue

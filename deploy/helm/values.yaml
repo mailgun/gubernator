@@ -12,21 +12,28 @@ gubernator:
   image:
     repository: thrawn01/gubernator
     pullPolicy: IfNotPresent
-    # Overrides the image tag whose default is the chart appVersion.
+
+    # By default tag is overriding appVersion from .Chart.yaml
     tag: "latest"
 
-#  labels:
-#    a: "b"
+  labels:
+    a: "b"
 
-#  debug: true
-#  watchPods: true
+  # Enabling gubernator debugger, default false
+  # debug: true
+
+  # Defines the mechanism to discover new pods
+  # default is endpoints
+  # watchPods: true
 
   server:
     http:
       port: "80"
     grpc:
       port: "81"
-#      maxConnAgeSeconds: 30
+      # Defines the max age of a client connection
+      # default is infinity
+      # maxConnAgeSeconds: 30
 
   annotations: { }
 

@@ -13,10 +13,12 @@ spec:
   selector:
     matchLabels:
       {{- include "gubernator.selectorLabels" . | nindent 6 }}
+      track: stable
   template:
     metadata:
       labels:
     {{- include "gubernator.labels" . | nindent 8 }}
+        track: stable
     spec:
       {{- if .Values.gubernator.priorityClassName }}
       priorityClassName: {{ .Values.gubernator.priorityClassName }}
@@ -30,7 +32,7 @@ spec:
         - name: gubernator
           env:
           {{- include "gubernator.env" . | nindent 10 }}
-          image: {{ .Values.gubernator.image.repository }}:{{ .Values.gubernator.image.tag }}
+          image: {{ .Values.gubernator.image.repository }}:{{ .Values.gubernator.image.tag | default .Chart.AppVersion }}
           imagePullPolicy: {{ .Values.gubernator.image.pullPolicy }}
           ports:
             - name: grpc
@@ -52,7 +54,6 @@ spec:
             periodSeconds: 1
             successThreshold: 1
             timeoutSeconds: 1
-
           {{- with .Values.gubernator.resources }}
           resources:
           {{- toYaml . | nindent 12 }}

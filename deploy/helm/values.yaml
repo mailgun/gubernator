@@ -5,7 +5,10 @@ gubernator:
   priorityClassName: {}
 
   autoscaling:
-    enabled: false
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    cpuAverageUtilization: 50
 
   replicaCount: 4
 
@@ -38,7 +41,7 @@ gubernator:
   annotations: { }
 
   serviceAccount:
-    create: true
+    create: false
 #    name: "teste"
 
   nodeSelector:

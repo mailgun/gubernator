@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/mailgun/gubernator"
-	"github.com/mailgun/holster/v3/clock"
+	"github.com/mailgun/gubernator/v2"
+	"github.com/mailgun/holster/v4/clock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
@@ -286,5 +286,5 @@ func TestHTTPSClientAuth(t *testing.T) {
 	require.NoError(t, err)
 	b, err := ioutil.ReadAll(resp.Body)
 	require.NoError(t, err)
-	assert.Equal(t, `{"status":"healthy"}`, string(b))
+	assert.Equal(t, `{"status":"healthy","message":"","peerCount":0}`, string(b))
 }

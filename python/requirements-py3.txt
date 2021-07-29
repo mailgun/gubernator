@@ -6,6 +6,6 @@ grpcio-tools==1.19.0
 more-itertools==6.0.0
 pluggy==0.8.1
 protobuf==3.6.1
-py==1.7.0
+py==1.10.0
 pytest==4.3.0
 six==1.12.0

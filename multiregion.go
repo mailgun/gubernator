@@ -1,7 +1,7 @@
 package gubernator
 
 import (
-	"github.com/mailgun/holster/v3/syncutil"
+	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/sirupsen/logrus"
 )
 

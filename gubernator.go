@@ -22,13 +22,14 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/mailgun/holster/v3/setter"
-	"github.com/mailgun/holster/v3/syncutil"
+	"github.com/mailgun/holster/v4/setter"
+	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -38,6 +39,8 @@ const (
 )
 
 type V1Instance struct {
+	UnimplementedV1Server
+	UnimplementedPeersV1Server
 	health      HealthCheckResp
 	global      *globalManager
 	mutliRegion *mutliRegionManager
@@ -244,10 +247,10 @@ func (s *V1Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, erro
 		// We get here if the owning node hasn't asynchronously forwarded it's updates to us yet and
 		// our cache still holds the rate limit we created on the first hit.
 	}
-	cpy := *req
+	cpy := proto.Clone(req).(*RateLimitReq)
 	cpy.Behavior = Behavior_NO_BATCHING
 	// Process the rate limit like we own it
-	resp, err := s.getRateLimit(&cpy)
+	resp, err := s.getRateLimit(cpy)
 	return resp, err
 }
 

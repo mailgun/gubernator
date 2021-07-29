@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0-rc.2] - 2021-07-11
+## Changes
+* Deprecated github.com/golang/protobuf was replaced with google.golang.org/protobuf
+* github.com/grpc-ecosystem/grpc-gateway was upgraded to v2
+
+## [2.0.0-rc.1] - 2021-07-02
+## Changes
+* github.com/coreos/etcd was replaced with go.etcd.io/etcd/client/v3. This is
+ an API breaking change. It entailed updated of github.com/mailgun/holster to
+ the next major version v4
+* Deprecated ConsistentHash was removed
+* HashBytes64 is replaced with HashString64 to avoid unsafe conversions that is
+ reported by go vet since v1.16 https://github.com/golang/go/issues/40701#issue-677219527
+
 ## [1.0.0-rc.8] - 2021-03-16
 ## Added
 * Add GUBER_GRPC_MAX_CONN_AGE_SEC to limit GRPC keep alive

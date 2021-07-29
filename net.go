@@ -4,7 +4,7 @@ import (
 	"net"
 	"os"
 
-	"github.com/mailgun/holster/v3/slice"
+	"github.com/mailgun/holster/v4/slice"
 	"github.com/pkg/errors"
 )
 

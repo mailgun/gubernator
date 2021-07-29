@@ -25,10 +25,10 @@ import (
 	"strings"
 	"testing"
 
-	guber "github.com/mailgun/gubernator"
-	"github.com/mailgun/gubernator/cluster"
-	"github.com/mailgun/holster/v3/clock"
-	"github.com/mailgun/holster/v3/testutil"
+	guber "github.com/mailgun/gubernator/v2"
+	"github.com/mailgun/gubernator/v2/cluster"
+	"github.com/mailgun/holster/v4/clock"
+	"github.com/mailgun/holster/v4/testutil"
 	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/assert"
@@ -417,12 +417,12 @@ func TestMissingFields(t *testing.T) {
 	require.Nil(t, errs)
 
 	tests := []struct {
-		Req    guber.RateLimitReq
+		Req    *guber.RateLimitReq
 		Status guber.Status
 		Error  string
 	}{
 		{
-			Req: guber.RateLimitReq{
+			Req: &guber.RateLimitReq{
 				Name:      "test_missing_fields",
 				UniqueKey: "account:1234",
 				Hits:      1,
@@ -433,7 +433,7 @@ func TestMissingFields(t *testing.T) {
 			Status: guber.Status_UNDER_LIMIT,
 		},
 		{
-			Req: guber.RateLimitReq{
+			Req: &guber.RateLimitReq{
 				Name:      "test_missing_fields",
 				UniqueKey: "account:12345",
 				Hits:      1,
@@ -444,7 +444,7 @@ func TestMissingFields(t *testing.T) {
 			Status: guber.Status_OVER_LIMIT,
 		},
 		{
-			Req: guber.RateLimitReq{
+			Req: &guber.RateLimitReq{
 				UniqueKey: "account:1234",
 				Hits:      1,
 				Duration:  10000,
@@ -454,7 +454,7 @@ func TestMissingFields(t *testing.T) {
 			Status: guber.Status_UNDER_LIMIT,
 		},
 		{
-			Req: guber.RateLimitReq{
+			Req: &guber.RateLimitReq{
 				Name:     "test_missing_fields",
 				Hits:     1,
 				Duration: 10000,
@@ -467,7 +467,7 @@ func TestMissingFields(t *testing.T) {
 
 	for i, test := range tests {
 		resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
-			Requests: []*guber.RateLimitReq{&test.Req},
+			Requests: []*guber.RateLimitReq{test.Req},
 		})
 		require.Nil(t, err)
 		assert.Equal(t, test.Error, resp.Responses[0].Error, i)

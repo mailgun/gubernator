@@ -22,8 +22,8 @@ import (
 	"net"
 	"testing"
 
-	"github.com/mailgun/gubernator"
-	"github.com/mailgun/holster/v3/clock"
+	"github.com/mailgun/gubernator/v2"
+	"github.com/mailgun/holster/v4/clock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -131,7 +131,7 @@ func TestStore(t *testing.T) {
 		secondStatus    gubernator.Status
 		algorithm       gubernator.Algorithm
 		switchAlgorithm gubernator.Algorithm
-		testCase        func(gubernator.RateLimitReq, *gubernator.MockStore)
+		testCase        func(*gubernator.RateLimitReq, *gubernator.MockStore)
 	}{
 		{
 			name:            "Given there are no token bucket limits in the store",
@@ -141,7 +141,7 @@ func TestStore(t *testing.T) {
 			secondStatus:    gubernator.Status_UNDER_LIMIT,
 			algorithm:       gubernator.Algorithm_TOKEN_BUCKET,
 			switchAlgorithm: gubernator.Algorithm_LEAKY_BUCKET,
-			testCase:        func(req gubernator.RateLimitReq, store *gubernator.MockStore) {},
+			testCase:        func(req *gubernator.RateLimitReq, store *gubernator.MockStore) {},
 		},
 		{
 			name:            "Given the store contains a token bucket rate limit not in the guber cache",
@@ -151,7 +151,7 @@ func TestStore(t *testing.T) {
 			secondStatus:    gubernator.Status_OVER_LIMIT,
 			algorithm:       gubernator.Algorithm_TOKEN_BUCKET,
 			switchAlgorithm: gubernator.Algorithm_LEAKY_BUCKET,
-			testCase: func(req gubernator.RateLimitReq, store *gubernator.MockStore) {
+			testCase: func(req *gubernator.RateLimitReq, store *gubernator.MockStore) {
 				now := gubernator.MillisecondNow()
 				// Expire 1 second from now
 				expire := now + gubernator.Second
@@ -176,7 +176,7 @@ func TestStore(t *testing.T) {
 			secondStatus:    gubernator.Status_UNDER_LIMIT,
 			algorithm:       gubernator.Algorithm_LEAKY_BUCKET,
 			switchAlgorithm: gubernator.Algorithm_TOKEN_BUCKET,
-			testCase:        func(req gubernator.RateLimitReq, store *gubernator.MockStore) {},
+			testCase:        func(req *gubernator.RateLimitReq, store *gubernator.MockStore) {},
 		},
 		{
 			name:            "Given the store contains a leaky bucket rate limit not in the guber cache",
@@ -186,7 +186,7 @@ func TestStore(t *testing.T) {
 			secondStatus:    gubernator.Status_OVER_LIMIT,
 			algorithm:       gubernator.Algorithm_LEAKY_BUCKET,
 			switchAlgorithm: gubernator.Algorithm_TOKEN_BUCKET,
-			testCase: func(req gubernator.RateLimitReq, store *gubernator.MockStore) {
+			testCase: func(req *gubernator.RateLimitReq, store *gubernator.MockStore) {
 				// Expire 1 second from now
 				expire := gubernator.MillisecondNow() + gubernator.Second
 				store.CacheItems[req.HashKey()] = &gubernator.CacheItem{
@@ -231,7 +231,7 @@ func TestStore(t *testing.T) {
 				Hits:      1,
 			}
 
-			tt.testCase(req, store)
+			tt.testCase(&req, store)
 
 			// This request for the rate limit should ask the store via Get() and then
 			// tell the store about the change to the rate limit by calling OnChange()

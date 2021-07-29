@@ -1,7 +1,7 @@
 package gubernator
 
 import (
-	"github.com/mailgun/holster/v3/syncutil"
+	"github.com/mailgun/holster/v4/syncutil"
 )
 
 type RegionPeerPicker interface {
@@ -25,11 +25,11 @@ type RegionPicker struct {
 	reqQueue chan *RateLimitReq
 }
 
-func NewRegionPicker(fn HashFunc64) *RegionPicker {
+func NewRegionPicker(fn HashString64) *RegionPicker {
 	rp := &RegionPicker{
 		regions:                  make(map[string]PeerPicker),
 		reqQueue:                 make(chan *RateLimitReq, 0),
-		ReplicatedConsistentHash: NewReplicatedConsistentHash(fn, DefaultReplicas),
+		ReplicatedConsistentHash: NewReplicatedConsistentHash(fn, defaultReplicas),
 	}
 	return rp
 }

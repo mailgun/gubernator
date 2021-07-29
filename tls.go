@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mailgun/holster/v3/setter"
+	"github.com/mailgun/holster/v4/setter"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )

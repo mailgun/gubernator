@@ -17,7 +17,7 @@ limitations under the License.
 package gubernator
 
 import (
-	"github.com/mailgun/holster/v3/clock"
+	"github.com/mailgun/holster/v4/clock"
 )
 
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket

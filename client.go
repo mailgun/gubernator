@@ -21,7 +21,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/mailgun/holster/v3/clock"
+	"github.com/mailgun/holster/v4/clock"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"

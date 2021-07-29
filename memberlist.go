@@ -28,9 +28,9 @@ import (
 	"strconv"
 
 	ml "github.com/hashicorp/memberlist"
-	"github.com/mailgun/holster/v3/clock"
-	"github.com/mailgun/holster/v3/retry"
-	"github.com/mailgun/holster/v3/setter"
+	"github.com/mailgun/holster/v4/clock"
+	"github.com/mailgun/holster/v4/retry"
+	"github.com/mailgun/holster/v4/setter"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )

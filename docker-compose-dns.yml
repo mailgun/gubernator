@@ -1,0 +1,29 @@
+version: "3.7"
+
+services:
+  gubernator:
+    # FIXME update after merge when new image is built from thrawn01 repo
+    image: dimaqq/gubernator:test
+    environment:
+      GUBER_PEER_DISCOVERY_TYPE: dns
+      # Docker will resolve replica addresses by the service name, `gubernator`
+      GUBER_DNS_FQDN: gubernator
+      GUBER_GRPC_ADDRESS: 0.0.0.0:81
+      GUBER_HTTP_ADDRESS: 0.0.0.0:80
+      GUBER_DEBUG: 1
+    deploy:
+      mode: replicated
+      replicas: 2
+      endpoint_mode: dnsrr
+    networks:
+      - vpc
+  shell:
+    # docker exec -it into this container to poke gubernator instances
+    image: praqma/network-multitool
+    command: sleep 3600
+    init: true
+    networks:
+      - vpc
+
+networks:
+  vpc:

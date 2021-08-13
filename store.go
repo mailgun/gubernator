@@ -13,6 +13,7 @@ type LeakyBucketItem struct {
 	Duration  int64
 	Remaining float64
 	UpdatedAt int64
+	Burst     int64
 }
 
 type TokenBucketItem struct {

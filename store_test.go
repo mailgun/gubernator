@@ -198,6 +198,7 @@ func TestStore(t *testing.T) {
 						Duration:  req.Duration,
 						Limit:     req.Limit,
 						Remaining: 1,
+						Burst:     req.Limit,
 					},
 				}
 			},

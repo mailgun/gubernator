@@ -181,6 +181,10 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 
 // Implements leaky bucket algorithm for rate limiting https://en.wikipedia.org/wiki/Leaky_bucket
 func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+	if r.Burst == 0 {
+		r.Burst = r.Limit
+	}
+
 	now := MillisecondNow()
 	item, ok := c.GetItem(r.HashKey())
 	if s != nil {
@@ -204,10 +208,17 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 		}
 
 		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
-			b.Remaining = float64(r.Limit)
+			b.Remaining = float64(r.Burst)
 		}
 
-		// Update limit and duration if they changed
+		// Update burst, limit and duration if they changed
+		if b.Burst != r.Burst {
+			if r.Burst > int64(b.Remaining) {
+				b.Remaining = float64(r.Burst)
+			}
+			b.Burst = r.Burst
+		}
+
 		b.Limit = r.Limit
 		b.Duration = r.Duration
 
@@ -240,8 +251,8 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 			b.UpdatedAt = now
 		}
 
-		if int64(b.Remaining) > b.Limit {
-			b.Remaining = float64(b.Limit)
+		if int64(b.Remaining) > b.Burst {
+			b.Remaining = float64(b.Burst)
 		}
 
 		rl := &RateLimitResp{
@@ -302,21 +313,22 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 
 	// Create a new leaky bucket
 	b := LeakyBucketItem{
-		Remaining: float64(r.Limit - r.Hits),
+		Remaining: float64(r.Burst - r.Hits),
 		Limit:     r.Limit,
 		Duration:  duration,
 		UpdatedAt: now,
+		Burst:     r.Burst,
 	}
 
 	rl := RateLimitResp{
 		Status:    Status_UNDER_LIMIT,
-		Limit:     r.Limit,
-		Remaining: r.Limit - r.Hits,
+		Limit:     b.Limit,
+		Remaining: r.Burst - r.Hits,
 		ResetTime: now + duration/r.Limit,
 	}
 
 	// Client could be requesting that we start with the bucket OVER_LIMIT
-	if r.Hits > r.Limit {
+	if r.Hits > r.Burst {
 		rl.Status = Status_OVER_LIMIT
 		rl.Remaining = 0
 		b.Remaining = 0

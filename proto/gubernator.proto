@@ -156,6 +156,9 @@ message RateLimitReq {
 
   // Behavior is a set of int32 flags that control the behavior of the rate limit in gubernator
   Behavior behavior = 7;
+
+  // Maximum burst size that the limit can accept.
+  int64 burst = 8;
 }
 
 enum Status {

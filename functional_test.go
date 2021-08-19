@@ -347,6 +347,113 @@ func TestLeakyBucket(t *testing.T) {
 	}
 }
 
+func TestLeakyBucketWithBurst(t *testing.T) {
+	defer clock.Freeze(clock.Now()).Unfreeze()
+
+	client, errs := guber.DialV1Server(cluster.PeerAt(0).GRPCAddress, nil)
+	require.Nil(t, errs)
+
+	tests := []struct {
+		Name      string
+		Hits      int64
+		Remaining int64
+		Status    guber.Status
+		Sleep     clock.Duration
+	}{
+		{
+			Name:      "first hit",
+			Hits:      1,
+			Remaining: 19,
+			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Second,
+		},
+		{
+			Name:      "second hit; no leak",
+			Hits:      1,
+			Remaining: 18,
+			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Second,
+		},
+		{
+			Name:      "third hit; no leak",
+			Hits:      1,
+			Remaining: 17,
+			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Millisecond * 1500,
+		},
+		{
+			Name:      "should leak one hit 3 seconds after first hit",
+			Hits:      0,
+			Remaining: 18,
+			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Second * 3,
+		},
+		{
+			Name:      "3 Seconds later we should have leaked another hit",
+			Hits:      0,
+			Remaining: 19,
+			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Duration(0),
+		},
+		{
+			Name:      "max out our bucket and sleep for 3 seconds",
+			Hits:      19,
+			Remaining: 0,
+			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Duration(0),
+		},
+		{
+			Name:      "should be over the limit",
+			Hits:      1,
+			Remaining: 0,
+			Status:    guber.Status_OVER_LIMIT,
+			Sleep:     clock.Second * 3,
+		},
+		{
+			Name:      "should have leaked 1 hit",
+			Hits:      0,
+			Remaining: 1,
+			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Second * 60,
+		},
+		{
+			Name:      "should max out remaining",
+			Hits:      0,
+			Remaining: 20,
+			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Second,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+				Requests: []*guber.RateLimitReq{
+					{
+						Name:      "test_leaky_bucket_with_burst",
+						UniqueKey: "account:1234",
+						Algorithm: guber.Algorithm_LEAKY_BUCKET,
+						Duration:  guber.Second * 30,
+						Hits:      test.Hits,
+						Limit:     10,
+						Burst:     20,
+					},
+				},
+			})
+			require.NoError(t, err)
+			require.Len(t, resp.Responses, 1)
+
+			rl := resp.Responses[0]
+
+			assert.Equal(t, test.Status, rl.Status)
+			assert.Equal(t, test.Remaining, rl.Remaining)
+			assert.Equal(t, int64(10), rl.Limit)
+			assert.Equal(t, clock.Now().Unix()+3, rl.ResetTime/1000)
+			clock.Advance(test.Sleep)
+		})
+	}
+}
+
 func TestLeakyBucketGregorian(t *testing.T) {
 	defer clock.Freeze(clock.Now()).Unfreeze()
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/mailgun/gubernator/v2"
@@ -286,5 +287,5 @@ func TestHTTPSClientAuth(t *testing.T) {
 	require.NoError(t, err)
 	b, err := ioutil.ReadAll(resp.Body)
 	require.NoError(t, err)
-	assert.Equal(t, `{"status":"healthy","message":"","peerCount":0}`, string(b))
+	assert.Equal(t, `{"status":"healthy","message":"","peerCount":0}`, strings.ReplaceAll(string(b), " ", ""))
 }

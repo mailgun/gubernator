@@ -52,6 +52,12 @@ func TestMain(m *testing.M) {
 		{GRPCAddress: "127.0.0.1:9891", HTTPAddress: "127.0.0.1:9881", DataCenter: cluster.DataCenterOne},
 		{GRPCAddress: "127.0.0.1:9892", HTTPAddress: "127.0.0.1:9882", DataCenter: cluster.DataCenterOne},
 		{GRPCAddress: "127.0.0.1:9893", HTTPAddress: "127.0.0.1:9883", DataCenter: cluster.DataCenterOne},
+
+		// DataCenterTwo
+		{GRPCAddress: "127.0.0.1:9790", HTTPAddress: "127.0.0.1:9780", DataCenter: cluster.DataCenterTwo},
+		{GRPCAddress: "127.0.0.1:9791", HTTPAddress: "127.0.0.1:9781", DataCenter: cluster.DataCenterTwo},
+		{GRPCAddress: "127.0.0.1:9792", HTTPAddress: "127.0.0.1:9782", DataCenter: cluster.DataCenterTwo},
+		{GRPCAddress: "127.0.0.1:9793", HTTPAddress: "127.0.0.1:9783", DataCenter: cluster.DataCenterTwo},
 	}); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

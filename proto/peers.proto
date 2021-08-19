@@ -31,6 +31,9 @@ service PeersV1 {
 
     // Used by peers send global rate limit updates to other peers
     rpc UpdatePeerGlobals (UpdatePeerGlobalsReq) returns (UpdatePeerGlobalsResp) {}
+
+    // Used by multi-region manager to send rate limits to other regions
+    rpc UpdateRateLimits (UpdateRateLimitsReq) returns (UpdateRateLimitsResp) {}
 }
 
 message GetPeerRateLimitsReq {
@@ -54,4 +57,12 @@ message UpdatePeerGlobal {
     RateLimitResp status = 2;
     Algorithm algorithm = 3;
 }
+
 message UpdatePeerGlobalsResp {}
+
+message UpdateRateLimitsReq {
+    // Must specify at least one RateLimit
+    repeated RateLimitReq rate_limits = 1;
+}
+
+message UpdateRateLimitsResp {}

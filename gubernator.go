@@ -307,6 +307,61 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 	return &UpdatePeerGlobalsResp{}, nil
 }
 
+// UpdateRateLimits updates the local cache with a list of rate limits from another region.
+func (s *V1Instance) UpdateRateLimits(ctx context.Context, r *UpdateRateLimitsReq) (*UpdatePeerGlobalsResp, error) {
+	s.conf.Cache.Lock()
+	defer s.conf.Cache.Unlock()
+
+	for _, rl := range r.RateLimits {
+		SetBehavior(&rl.Behavior, Behavior_GLOBAL|Behavior_MULTI_REGION, false)
+
+		// Does the rate limit already exist in the local cache?
+		i, ok := s.conf.Cache.GetItem(rl.HashKey())
+		if !ok {
+			_, err := s.getRateLimit(rl)
+			if err != nil {
+				s.log.WithError(err).Errorf("UpdateRateLimits(): while creating rate limit")
+			}
+			continue
+		}
+
+		var attempts int
+	retry:
+		if attempts > 1 {
+			s.log.Errorf("UpdateRateLimits(): local algorithm doesn't match algorithm from remote peer")
+			continue
+		}
+
+		switch rl.Algorithm {
+		case Algorithm_TOKEN_BUCKET:
+			t, ok := i.Value.(*TokenBucketItem)
+			if !ok {
+				rl.Algorithm = Algorithm_LEAKY_BUCKET
+				attempts++
+				goto retry
+			}
+			// Adjust the remaining based on the hits
+			t.Remaining -= rl.Hits
+			if t.Remaining < 0 {
+				t.Remaining = 0
+			}
+		case Algorithm_LEAKY_BUCKET:
+			t, ok := i.Value.(*LeakyBucketItem)
+			if !ok {
+				rl.Algorithm = Algorithm_TOKEN_BUCKET
+				attempts++
+				goto retry
+			}
+			// Adjust the remaining based on the hits
+			t.Remaining -= float64(rl.Hits)
+			if int64(t.Remaining) < 0 {
+				t.Remaining = 0
+			}
+		}
+	}
+	return &UpdatePeerGlobalsResp{}, nil
+}
+
 // GetPeerRateLimits is called by other peers to get the rate limits owned by this peer.
 func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
 	var resp GetPeerRateLimitsResp

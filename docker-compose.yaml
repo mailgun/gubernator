@@ -65,6 +65,7 @@ services:
       # A Comma separated list of known gubernator nodes
       - GUBER_MEMBERLIST_KNOWN_NODES=gubernator-1,gubernator-2
       #- GUBER_DATA_CENTER=us-west-2
+      #- GUBER_METRIC_FLAGS=golang,os
     ports:
       - "9381:81"
       - "9380:80"

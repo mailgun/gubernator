@@ -932,7 +932,7 @@ func TestLeakyBucketDivBug(t *testing.T) {
 	assert.Equal(t, int64(2000), resp.Responses[0].Limit)
 }
 
-func TestMutliRegion(t *testing.T) {
+func TestMultiRegion(t *testing.T) {
 
 	// TODO: Queue a rate limit with multi region behavior on the DataCenterNone cluster
 	// TODO: Check the immediate response is correct

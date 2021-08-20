@@ -39,6 +39,7 @@ import (
 	"google.golang.org/grpc"
 )
 
+// BehaviorConfig controls the handling of rate limits in the cluster
 type BehaviorConfig struct {
 	// How long we should wait for a batched response from a peer
 	BatchTimeout time.Duration
@@ -62,7 +63,7 @@ type BehaviorConfig struct {
 	MultiRegionBatchLimit int
 }
 
-// config for a gubernator instance
+// Config for a gubernator instance
 type Config struct {
 	// (Required) A list of GRPC servers to register our instance with
 	GRPCServers []*grpc.Server
@@ -143,7 +144,7 @@ type PeerInfo struct {
 	IsOwner bool `json:"is-owner,omitempty"`
 }
 
-// Returns the hash key used to identify this peer in the Picker.
+// HashKey returns the hash key used to identify this peer in the Picker.
 func (p PeerInfo) HashKey() string {
 	return p.GRPCAddress
 }
@@ -199,6 +200,9 @@ type DaemonConfig struct {
 	// (Optional) TLS Configuration; SpawnDaemon() will modify the passed TLS config in an
 	// attempt to build a complete TLS config if one is not provided.
 	TLS *TLSConfig
+
+	// (Optional) Metrics Flags which enable or disable collection of some types of metrics
+	MetricFlags MetricFlags
 }
 
 func (d *DaemonConfig) ClientTLS() *tls.Config {
@@ -241,6 +245,7 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 	setter.SetDefault(&conf.CacheSize, getEnvInteger(log, "GUBER_CACHE_SIZE"), 50_000)
 	setter.SetDefault(&conf.AdvertiseAddress, os.Getenv("GUBER_ADVERTISE_ADDRESS"), conf.GRPCListenAddress)
 	setter.SetDefault(&conf.DataCenter, os.Getenv("GUBER_DATA_CENTER"), "")
+	setter.SetDefault(&conf.MetricFlags, getEnvMetricFlags(log, "GUBER_METRIC_FLAGS"))
 
 	advAddr, advPort, err := net.SplitHostPort(conf.AdvertiseAddress)
 	if err != nil {
@@ -367,10 +372,6 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 			return conf, errors.New("when using `member-list` for peer discovery, you MUST provide a " +
 				"hostname of a known host in the cluster via `GUBER_MEMBERLIST_KNOWN_NODES`")
 		}
-	}
-
-	if anyHasPrefix("GUBER_ETCD_", os.Environ()) {
-		log.Debug("ETCD peer pool config found")
 	}
 
 	// If env contains any TLS configuration

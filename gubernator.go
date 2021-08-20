@@ -475,7 +475,7 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 	}
 }
 
-// GetPeers returns a peer client for the hash key provided
+// GetPeer returns a peer client for the hash key provided
 func (s *V1Instance) GetPeer(key string) (*PeerClient, error) {
 	s.peerMutex.RLock()
 	peer, err := s.conf.LocalPicker.Get(key)

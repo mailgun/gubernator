@@ -30,6 +30,7 @@ import (
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -220,6 +221,20 @@ func (s *Daemon) Start(ctx context.Context) error {
 
 	// Serve the JSON Gateway and metrics handlers via standard HTTP/1
 	mux := http.NewServeMux()
+
+	// Optionally collect process metrics
+	if s.conf.MetricFlags.Has(FlagOSMetrics) {
+		s.log.Debug("Collecting OS Metrics")
+		s.promRegister.MustRegister(collectors.NewProcessCollector(
+			collectors.ProcessCollectorOpts{Namespace: "gubernator"},
+		))
+	}
+
+	// Optionally collect golang internal metrics
+	if s.conf.MetricFlags.Has(FlagGolangMetrics) {
+		s.log.Debug("Collecting Golang Metrics")
+		s.promRegister.MustRegister(collectors.NewGoCollector())
+	}
 
 	mux.Handle("/metrics", promhttp.InstrumentMetricHandler(
 		s.promRegister, promhttp.HandlerFor(s.promRegister, promhttp.HandlerOpts{}),

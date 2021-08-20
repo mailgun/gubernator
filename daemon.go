@@ -35,6 +35,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 type Daemon struct {
@@ -191,8 +192,25 @@ func (s *Daemon) Start(ctx context.Context) error {
 		}
 	}
 
+	// We override the default Marshaller to enable the `UseProtoNames` option.
+	// We do this is because the default JSONPb in 2.5.0 marshals proto structs using
+	// `camelCase`, while all the JSON annotations are `under_score`.
+	// Our protobuf files follow convention described here
+	// https://developers.google.com/protocol-buffers/docs/style#message-and-field-names
+	// Camel case breaks unmarshalling our GRPC gateway responses with protobuf structs.
+	gateway := runtime.NewServeMux(
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{
+			MarshalOptions: protojson.MarshalOptions{
+				UseProtoNames:   true,
+				EmitUnpopulated: true,
+			},
+			UnmarshalOptions: protojson.UnmarshalOptions{
+				DiscardUnknown: true,
+			},
+		}),
+	)
+
 	// Setup an JSON Gateway API for our GRPC methods
-	gateway := runtime.NewServeMux()
 	var gwCtx context.Context
 	gwCtx, s.gwCancel = context.WithCancel(context.Background())
 	err = RegisterV1HandlerFromEndpoint(gwCtx, gateway, gatewayAddr, []grpc.DialOption{grpc.WithInsecure()})

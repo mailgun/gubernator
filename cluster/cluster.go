@@ -36,7 +36,7 @@ const (
 var daemons []*gubernator.Daemon
 var peers []gubernator.PeerInfo
 
-// Returns a random peer from the cluster
+// GetRandomPeer returns a random peer from the cluster
 func GetRandomPeer(dc string) gubernator.PeerInfo {
 	var local []gubernator.PeerInfo
 
@@ -53,27 +53,27 @@ func GetRandomPeer(dc string) gubernator.PeerInfo {
 	return local[rand.Intn(len(local))]
 }
 
-// Returns a list of all peers in the cluster
+// GetPeers returns a list of all peers in the cluster
 func GetPeers() []gubernator.PeerInfo {
 	return peers
 }
 
-// Returns a list of all deamons in the cluster
+// GetDaemons returns a list of all daemons in the cluster
 func GetDaemons() []*gubernator.Daemon {
 	return daemons
 }
 
-// Returns a specific peer
+// PeerAt returns a specific peer
 func PeerAt(idx int) gubernator.PeerInfo {
 	return peers[idx]
 }
 
-// Returns a specific daemon
+// DaemonAt returns a specific daemon
 func DaemonAt(idx int) *gubernator.Daemon {
 	return daemons[idx]
 }
 
-// Returns the number of instances
+// NumOfDaemons returns the number of instances
 func NumOfDaemons() int {
 	return len(daemons)
 }
@@ -84,15 +84,19 @@ func Start(numInstances int) error {
 	return StartWith(peers)
 }
 
-func Restart(ctx context.Context) {
+// Restart the cluster
+func Restart(ctx context.Context) error {
 	for i := 0; i < len(daemons); i++ {
 		daemons[i].Close()
-		daemons[i].Start(ctx)
+		if err := daemons[i].Start(ctx); err != nil {
+			return err
+		}
 		daemons[i].SetPeers(peers)
 	}
+	return nil
 }
 
-// Start a local cluster with specific addresses
+// StartWith a local cluster with specific addresses
 func StartWith(localPeers []gubernator.PeerInfo) error {
 	for _, peer := range localPeers {
 		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
@@ -130,6 +134,7 @@ func StartWith(localPeers []gubernator.PeerInfo) error {
 	return nil
 }
 
+// Stop all daemons in the cluster
 func Stop() {
 	for _, d := range daemons {
 		d.Close()

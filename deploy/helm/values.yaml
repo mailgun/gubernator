@@ -1,0 +1,53 @@
+gubernator:
+
+  fullnameOverride: {}
+  nameOverride: {}
+  priorityClassName: {}
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    cpuAverageUtilization: 50
+
+  replicaCount: 4
+
+  image:
+    repository: thrawn01/gubernator
+    pullPolicy: IfNotPresent
+
+    # By default tag is overriding appVersion from .Chart.yaml
+    tag: "latest"
+
+  labels:
+    a: "b"
+
+  # Enabling gubernator debugger, default false
+  # debug: true
+
+  # Defines the mechanism to discover new pods
+  # default is endpoints
+  # watchPods: true
+
+  server:
+    http:
+      port: "80"
+    grpc:
+      port: "81"
+      # Defines the max age of a client connection
+      # default is infinity
+      # maxConnAgeSeconds: 30
+
+  annotations: { }
+
+  serviceAccount:
+    create: false
+#    name: "teste"
+
+  nodeSelector:
+    group: apps
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 150Mi

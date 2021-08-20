@@ -1,0 +1,9 @@
+apiVersion: v2
+name: helm
+description: A Helm Chart for gubernator
+
+type: application
+
+version: 1.0.0
+
+appVersion: "1.0.0"

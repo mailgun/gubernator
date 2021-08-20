@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gubernator
+  labels:
+  {{- include "gubernator.labels" . | nindent 4 }}
+  annotations:
+  {{- include "gubernator.annotations" . | nindent 4}}
+spec:
+  {{- if not .Values.gubernator.autoscaling.enabled }}
+  replicas: {{ .Values.gubernator.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "gubernator.selectorLabels" . | nindent 6 }}
+      track: stable
+  template:
+    metadata:
+      labels:
+    {{- include "gubernator.labels" . | nindent 8 }}
+        track: stable
+    spec:
+      {{- if .Values.gubernator.priorityClassName }}
+      priorityClassName: {{ .Values.gubernator.priorityClassName }}
+      {{- end }}
+      {{- if .Values.gubernator.serviceAccount.create }}
+      serviceAccountName: {{ include "gubernator.fullname" . }}
+      {{ else }}
+      serviceAccountName: {{ .Values.gubernator.serviceAccount.name }}
+      {{- end}}
+      containers:
+        - name: gubernator
+          env:
+          {{- include "gubernator.env" . | nindent 10 }}
+          image: {{ .Values.gubernator.image.repository }}:{{ .Values.gubernator.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.gubernator.image.pullPolicy }}
+          ports:
+            - name: grpc
+              containerPort: {{ include "gubernator.grpc.port" .  }}
+            - name: http
+              containerPort: {{ include "gubernator.http.port" .  }}
+          livenessProbe:
+            failureThreshold: 2
+            tcpSocket:
+              port: {{ include "gubernator.grpc.port" . }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          readinessProbe:
+            failureThreshold: 20
+            tcpSocket:
+              port: {{ include "gubernator.grpc.port" . }}
+            periodSeconds: 1
+            successThreshold: 1
+            timeoutSeconds: 1
+          {{- with .Values.gubernator.resources }}
+          resources:
+          {{- toYaml . | nindent 12 }}
+      {{- end }}
+      {{- with .Values.gubernator.nodeSelector }}
+      nodeSelector:
+      {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -41,7 +41,6 @@ const (
 type V1Instance struct {
 	UnimplementedV1Server
 	UnimplementedPeersV1Server
-	health      HealthCheckResp
 	global      *globalManager
 	mutliRegion *mutliRegionManager
 	peerMutex   sync.RWMutex
@@ -358,15 +357,18 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*Healt
 		}
 	}
 
-	s.health.Status = Healthy
+	health := HealthCheckResp{
+		PeerCount: int32(len(localPeers) + len(regionPeers)),
+		Status:    Healthy,
+	}
+
 	if len(errs) != 0 {
-		s.health.Status = UnHealthy
-		s.health.Message = strings.Join(errs, "|")
-		s.health.PeerCount = int32(s.conf.LocalPicker.Size())
+		health.Status = UnHealthy
+		health.Message = strings.Join(errs, "|")
 	}
 
 	defer s.peerMutex.RUnlock()
-	return &s.health, nil
+	return &health, nil
 }
 
 func (s *V1Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {

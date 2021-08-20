@@ -18,8 +18,10 @@ package gubernator_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
@@ -885,7 +887,7 @@ func TestHealthCheck(t *testing.T) {
 	// Restart stopped instances
 	ctx, cancel := context.WithTimeout(context.Background(), clock.Second*15)
 	defer cancel()
-	cluster.Restart(ctx)
+	require.NoError(t, cluster.Restart(ctx))
 }
 
 func TestLeakyBucketDivBug(t *testing.T) {
@@ -944,6 +946,17 @@ func TestGRPCGateway(t *testing.T) {
 	resp, err := http.DefaultClient.Get("http://" + cluster.GetRandomPeer(cluster.DataCenterNone).HTTPAddress + "/v1/HealthCheck")
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	b, err := ioutil.ReadAll(resp.Body)
+
+	// This test ensures future upgrades don't accidentally change `under_score` to `camelCase` again.
+	assert.Contains(t, string(b), "peer_count")
+
+	// Should unmarshall JSON correctly
+	var hc guber.HealthCheckResp
+	require.NoError(t, json.Unmarshal(b, &hc))
+	assert.Equal(t, int32(10), hc.PeerCount)
+
+	require.NoError(t, err)
 }
 
 // TODO: Add a test for sending no rate limits RateLimitReqList.RateLimits = nil

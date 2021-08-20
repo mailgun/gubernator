@@ -25,12 +25,13 @@ PYTHON_DST_DIR=$REPO_ROOT/python/gubernator
 GOLANG_DST_DIR=$REPO_ROOT
 
 # Build Golang stabs
-go get google.golang.org/protobuf/cmd/protoc-gen-go
-go install google.golang.org/protobuf/cmd/protoc-gen-go
-go get google.golang.org/grpc/cmd/protoc-gen-go-grpc
-go install google.golang.org/grpc/cmd/protoc-gen-go-grpc
-go get github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway
-go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway
+
+
+go install \
+  google.golang.org/protobuf/cmd/protoc-gen-go \
+  google.golang.org/grpc/cmd/protoc-gen-go-grpc \
+  github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway \
+  github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2
 GOPATH=$(go env GOPATH)
 export PATH=$PATH:$GOPATH/bin
 
@@ -64,7 +65,7 @@ protoc -I=$PROTO_DIR \
 mkdir -p "$PYTHON_DST_DIR"
 pip install grpcio
 pip install grpcio-tools
-python -m grpc.tools.protoc \
+python3 -m grpc.tools.protoc \
     -I=$PROTO_DIR \
     -I=$GOOGLE_APIS_DIR \
     --python_out=$PYTHON_DST_DIR \

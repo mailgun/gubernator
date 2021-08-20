@@ -287,5 +287,5 @@ func TestHTTPSClientAuth(t *testing.T) {
 	require.NoError(t, err)
 	b, err := ioutil.ReadAll(resp.Body)
 	require.NoError(t, err)
-	assert.Equal(t, `{"status":"healthy","message":"","peerCount":0}`, strings.ReplaceAll(string(b), " ", ""))
+	assert.Equal(t, `{"status":"healthy","message":"","peer_count":1}`, strings.ReplaceAll(string(b), " ", ""))
 }

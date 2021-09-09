@@ -182,6 +182,12 @@ func (s *Daemon) Start(ctx context.Context) error {
 		if err != nil {
 			return errors.Wrap(err, "while creating etcd pool")
 		}
+	case "dns":
+		s.conf.DNSPoolConf.OnUpdate = s.V1Server.SetPeers
+		s.pool, err = NewDNSPool(s.conf.DNSPoolConf)
+		if err != nil {
+			return errors.Wrap(err, "while creating the DNS pool")
+		}
 	case "member-list":
 		s.conf.MemberListPoolConf.OnUpdate = s.V1Server.SetPeers
 		s.conf.MemberListPoolConf.Logger = s.log

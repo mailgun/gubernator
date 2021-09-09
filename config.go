@@ -188,6 +188,9 @@ type DaemonConfig struct {
 	// (Optional) K8s configuration used for peer discovery
 	K8PoolConf K8sPoolConfig
 
+	// (Optional) DNS Configuration used for peer discovery
+	DNSPoolConf DNSPoolConfig
+
 	// (Optional) Member list configuration used for peer discovery
 	MemberListPoolConf MemberListPoolConfig
 
@@ -270,7 +273,7 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 	setter.SetDefault(&conf.Behaviors.MultiRegionBatchLimit, getEnvInteger(log, "GUBER_MULTI_REGION_BATCH_LIMIT"))
 	setter.SetDefault(&conf.Behaviors.MultiRegionSyncWait, getEnvDuration(log, "GUBER_MULTI_REGION_SYNC_WAIT"))
 
-	choices := []string{"member-list", "k8s", "etcd"}
+	choices := []string{"member-list", "k8s", "etcd", "dns"}
 	setter.SetDefault(&conf.PeerDiscoveryType, os.Getenv("GUBER_PEER_DISCOVERY_TYPE"), "member-list")
 	if !slice.ContainsString(conf.PeerDiscoveryType, choices, nil) {
 		return conf, fmt.Errorf("GUBER_PEER_DISCOVERY_TYPE is invalid; choices are [%s]`", strings.Join(choices, ","))
@@ -333,6 +336,11 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 			"`GUBER_K8S_WATCH_MECHANISM` needs to be either 'endpoints' or 'pods' (defaults to 'endpoints')")
 	}
 
+	// DNS Config
+	setter.SetDefault(&conf.DNSPoolConf.FQDN, os.Getenv("GUBER_DNS_FQDN"))
+	setter.SetDefault(&conf.DNSPoolConf.ResolvConf, os.Getenv("GUBER_RESOLV_CONF"), "/etc/resolv.conf")
+	setter.SetDefault(&conf.DNSPoolConf.OwnAddress, conf.AdvertiseAddress)
+
 	// PeerPicker Config
 	if pp := os.Getenv("GUBER_PEER_PICKER"); pp != "" {
 		var replicas int
@@ -372,6 +380,10 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 			return conf, errors.New("when using `member-list` for peer discovery, you MUST provide a " +
 				"hostname of a known host in the cluster via `GUBER_MEMBERLIST_KNOWN_NODES`")
 		}
+	}
+
+	if anyHasPrefix("GUBER_DNS_", os.Environ()) {
+		log.Debug("DNS peer pool config found")
 	}
 
 	// If env contains any TLS configuration

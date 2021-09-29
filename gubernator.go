@@ -251,6 +251,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 			resp.Resp = &RateLimitResp{
 				Error: fmt.Sprintf("while fetching rate limit '%s' from peer - '%s'", req.Key, err),
 			}
+			break
 		}
 		// Inform the client of the owner key of the key
 		resp.Resp = r

@@ -343,7 +343,7 @@ func TestLeakyBucket(t *testing.T) {
 			assert.Equal(t, test.Status, rl.Status)
 			assert.Equal(t, test.Remaining, rl.Remaining)
 			assert.Equal(t, int64(10), rl.Limit)
-			assert.Equal(t, clock.Now().Unix()+3, rl.ResetTime/1000)
+			assert.Equal(t, clock.Now().Unix() + (rl.Limit - rl.Remaining) * 3, rl.ResetTime/1000)
 			clock.Advance(test.Sleep)
 		})
 	}
@@ -450,7 +450,7 @@ func TestLeakyBucketWithBurst(t *testing.T) {
 			assert.Equal(t, test.Status, rl.Status)
 			assert.Equal(t, test.Remaining, rl.Remaining)
 			assert.Equal(t, int64(10), rl.Limit)
-			assert.Equal(t, clock.Now().Unix()+3, rl.ResetTime/1000)
+			assert.Equal(t, clock.Now().Unix() + (rl.Limit - rl.Remaining) * 3, rl.ResetTime/1000)
 			clock.Advance(test.Sleep)
 		})
 	}

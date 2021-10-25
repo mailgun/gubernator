@@ -81,3 +81,7 @@ func (mm *mutliRegionManager) runAsyncReqs() {
 func (mm *mutliRegionManager) sendHits(r map[string]*RateLimitReq, picker PeerPicker) {
 	// Does nothing for now
 }
+
+func (mm *mutliRegionManager) Close() {
+	mm.wg.Stop()
+}

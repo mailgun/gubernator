@@ -107,6 +107,54 @@ func TestOverTheLimit(t *testing.T) {
 	}
 }
 
+// TestMultipleAsync tests a regression that occurred when a client requests multiple
+// rate limits that are asynchronously sent to other nodes.
+func TestMultipleAsync(t *testing.T) {
+	// If the consistent hash changes or the number of peers changes, this might
+	// need to be changed. We want the test to forward both rate limits to other
+	// nodes in the cluster.
+
+	t.Logf("Asking Peer: %s", cluster.GetPeers()[0].GRPCAddress)
+	client, errs := guber.DialV1Server(cluster.GetPeers()[0].GRPCAddress, nil)
+	require.Nil(t, errs)
+
+	resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+		Requests: []*guber.RateLimitReq{
+			{
+				Name:      "test_multiple_async",
+				UniqueKey: "account:9234",
+				Algorithm: guber.Algorithm_TOKEN_BUCKET,
+				Duration:  guber.Second * 9,
+				Limit:     2,
+				Hits:      1,
+				Behavior:  0,
+			},
+			{
+				Name:      "test_multiple_async",
+				UniqueKey: "account:5678",
+				Algorithm: guber.Algorithm_TOKEN_BUCKET,
+				Duration:  guber.Second * 9,
+				Limit:     10,
+				Hits:      5,
+				Behavior:  0,
+			},
+		},
+	})
+	require.Nil(t, err)
+
+	require.Len(t, resp.Responses, 2)
+
+	rl := resp.Responses[0]
+	assert.Equal(t, guber.Status_UNDER_LIMIT, rl.Status)
+	assert.Equal(t, int64(1), rl.Remaining)
+	assert.Equal(t, int64(2), rl.Limit)
+
+	rl = resp.Responses[1]
+	assert.Equal(t, guber.Status_UNDER_LIMIT, rl.Status)
+	assert.Equal(t, int64(5), rl.Remaining)
+	assert.Equal(t, int64(10), rl.Limit)
+}
+
 func TestTokenBucket(t *testing.T) {
 	defer clock.Freeze(clock.Now()).Unfreeze()
 

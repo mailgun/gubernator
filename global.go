@@ -241,3 +241,7 @@ func (gm *globalManager) broadcastPeers(updates map[string]*RateLimitReq) {
 
 	gm.broadcastMetrics.Observe(time.Since(start).Seconds())
 }
+
+func (gm *globalManager) Close() {
+	gm.wg.Stop()
+}

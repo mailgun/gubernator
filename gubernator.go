@@ -98,6 +98,9 @@ func (s *V1Instance) Close() error {
 		return nil
 	}
 
+	s.global.Close()
+	s.mutliRegion.Close()
+
 	out := make(chan *CacheItem, 500)
 	go func() {
 		for item := range s.conf.Cache.Each() {
@@ -169,7 +172,6 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 				resp.Responses[i].Metadata = map[string]string{"owner": peer.Info().GRPCAddress}
 				continue
 			}
-
 			wg.Add(1)
 			go s.asyncRequests(ctx, &AsyncReq{
 				AsyncCh: asyncCh,
@@ -177,6 +179,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 				Req:     req,
 				WG:      &wg,
 				Key:     key,
+				Idx:     i,
 			})
 		}
 	}

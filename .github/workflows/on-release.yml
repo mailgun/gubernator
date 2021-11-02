@@ -22,7 +22,7 @@ jobs:
           build-args: |
             VERSION=${{ github.event.release.tag_name }}
           push: true
-          secrets: GIT_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}
+          secrets: GIT_AUTH_TOKEN=${{ github.token }}
           
       #- name: Commit changes
       #  uses: EndBug/add-and-commit@v7

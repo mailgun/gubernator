@@ -14,15 +14,31 @@ jobs:
         
       - name: Update 'version' file
         run: echo "${{ github.event.release.tag_name }}" > version
-           
-      - name: Build docker image
+   
+      # Buildx Needs QEMU
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      
+      # We use Buildx so we can take advantage of the caching
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1 
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ github.token }}
+      -
+        name: Build and push
         uses: docker/build-push-action@v2
         with:
-          tags: gcr.io/gubernator:${{ github.event.release.tag_name }},gcr.io/gubernator:latest
+          tags: |
+            ghcr.io/mailgun/gubernator:${{ github.event.release.tag_name }}
+            ghcr.io/mailgun/gubernator:latest
           build-args: |
             VERSION=${{ github.event.release.tag_name }}
-          push: true
-          secrets: GIT_AUTH_TOKEN=${{ github.token }}
+          push: true           
           
       #- name: Commit changes
       #  uses: EndBug/add-and-commit@v7

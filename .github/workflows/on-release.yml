@@ -39,11 +39,11 @@ jobs:
           build-args: |
             VERSION=${{ github.event.release.tag_name }}
           push: true           
-          
-      #- name: Commit changes
-      #  uses: EndBug/add-and-commit@v7
-      #  with:
-      #    default_author: github_actions
-      #    author_email: mail@example.com
-      #    message: 'Update version number'
-      #    add: 'version'
+      
+      # Commit the updated 'version' file
+      - name: Commit changes
+        uses: EndBug/add-and-commit@v7
+        with:
+          default_author: github_actions
+          message: 'Update version number'
+          add: 'version'

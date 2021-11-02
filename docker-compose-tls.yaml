@@ -1,7 +1,7 @@
 version: '3'
 services:
   gubernator-1:
-    image: thrawn01/gubernator:latest
+    image: ghcr.io/mailgun/gubernator:latest
     command: "/gubernator"
     environment:
       # Basic member-list config
@@ -21,7 +21,7 @@ services:
       - ${PWD}/certs:/etc/tls
 
   gubernator-2:
-    image: thrawn01/gubernator:latest
+    image: ghcr.io/mailgun/gubernator:latest
     command: "/gubernator"
     environment:
       # Basic member-list config
@@ -41,7 +41,7 @@ services:
       - ${PWD}/certs:/etc/tls
 
   gubernator-3:
-    image: thrawn01/gubernator:latest
+    image: ghcr.io/mailgun/gubernator:latest
     command: "/gubernator"
     environment:
       # Basic member-list config
@@ -61,7 +61,7 @@ services:
       - ${PWD}/certs:/etc/tls
 
   gubernator-4:
-    image: thrawn01/gubernator:latest
+    image: ghcr.io/mailgun/gubernator:latest
     command: "/gubernator"
     environment:
       # Basic member-list config

@@ -1,7 +1,7 @@
 version: '3'
 services:
   gubernator-1:
-    image: thrawn01/gubernator:latest
+    image: ghcr.io/mailgun/gubernator:latest
     command: "/gubernator"
     environment:
       # The address GRPC requests will listen on
@@ -18,7 +18,7 @@ services:
       - "9080:80"
 
   gubernator-2:
-    image: thrawn01/gubernator:latest
+    image: ghcr.io/mailgun/gubernator:latest
     command: "/gubernator"
     environment:
       # The address GRPC requests will listen on
@@ -35,7 +35,7 @@ services:
       - "9180:80"
 
   gubernator-3:
-    image: thrawn01/gubernator:latest
+    image: ghcr.io/mailgun/gubernator:latest
     command: "/gubernator"
     environment:
       # The address GRPC requests will listen on
@@ -52,7 +52,7 @@ services:
       - "9280:80"
 
   gubernator-4:
-    image: thrawn01/gubernator:latest
+    image: ghcr.io/mailgun/gubernator:latest
     command: "/gubernator"
     environment:
       - GUBER_DEBUG=true

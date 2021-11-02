@@ -9,8 +9,8 @@ test:
 	go test ./... -v -race -p=1 -count=1
 
 docker:
-	docker build --build-arg VERSION=$(VERSION) -t thrawn01/gubernator:$(VERSION) .
-	docker tag thrawn01/gubernator:$(VERSION) thrawn01/gubernator:latest
+	docker build --build-arg VERSION=$(VERSION) -t ghcr.io/mailgun/gubernator:$(VERSION) .
+	docker tag ghcr.io/mailgun/gubernator:$(VERSION) ghcr.io/mailgun/gubernator:latest
 
 release:
 	GOOS=darwin GOARCH=amd64 go build -ldflags $(LDFLAGS) -o gubernator.darwin ./cmd/gubernator/main.go

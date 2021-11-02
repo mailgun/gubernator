@@ -16,7 +16,7 @@ spec:
     spec:
       serviceAccountName: gubernator
       containers:
-        - image: thrawn01/gubernator:latest
+        - image: ghcr.io/mailgun/gubernator:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: grpc-port

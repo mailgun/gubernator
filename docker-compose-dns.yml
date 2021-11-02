@@ -2,8 +2,7 @@ version: "3.7"
 
 services:
   gubernator:
-    # FIXME update after merge when new image is built from thrawn01 repo
-    image: dimaqq/gubernator:test
+    image: ghcr.io/mailgun/gubernator:latest
     environment:
       GUBER_PEER_DISCOVERY_TYPE: dns
       # Docker will resolve replica addresses by the service name, `gubernator`

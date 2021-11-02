@@ -54,7 +54,7 @@ Real gubernator would be accessible in `app.gubernator.example.com`
 | <a name="input_dns_namespace"></a> [dns\_namespace](#input\_dns\_namespace) | The domain name the service should run. Your Gubernator instances will be available at `app.<your inputted fqdn>.` | `string` | n/a | yes |
 | <a name="input_gubernator_config"></a> [gubernator\_config](#input\_gubernator\_config) | Map of ECS Configuration for gubernator service. map(cpu, memory) | `any` | <pre>{<br>  "cpu": 256,<br>  "memory": 512<br>}</pre> | no |
 | <a name="input_gubernator_debug_mode"></a> [gubernator\_debug\_mode](#input\_gubernator\_debug\_mode) | Enable GUBER\_DEBUG env flag | `bool` | `false` | no |
-| <a name="input_gubernator_repository"></a> [gubernator\_repository](#input\_gubernator\_repository) | Gubernator Docker Repository. e.g. thrawn01/gubernator | `string` | n/a | yes |
+| <a name="input_gubernator_repository"></a> [gubernator\_repository](#input\_gubernator\_repository) | Gubernator Docker Repository. e.g. ghcr.io/mailgun/gubernator | `string` | n/a | yes |
 | <a name="input_gubernator_version"></a> [gubernator\_version](#input\_gubernator\_version) | Gubernator docker tag to use | `string` | n/a | yes |
 | <a name="input_prefix"></a> [prefix](#input\_prefix) | Prefix of created resources | `string` | n/a | yes |
 | <a name="input_vpc_cidr"></a> [vpc\_cidr](#input\_vpc\_cidr) | IPv4 CIDR Notation for VPC IP range. e.g. 10.3.0.0/16 | `string` | n/a | yes |

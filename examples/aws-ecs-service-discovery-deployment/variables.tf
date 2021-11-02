@@ -16,7 +16,7 @@ variable "dns_namespace" {
 
 variable "gubernator_repository" {
   type        = string
-  description = "Gubernator Docker Repository. e.g. thrawn01/gubernator"
+  description = "Gubernator Docker Repository. e.g. ghcr.io/mailgun/gubernator"
 }
 
 variable "gubernator_version" {

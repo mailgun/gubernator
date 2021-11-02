@@ -99,7 +99,7 @@ type DNSPoolConfig struct {
 	// (Required) The FQDN that should resolve to gubernator instance ip addresses
 	FQDN string
 
-	// (Required) Filesystem path to "/etc/resolv.conf", override for testing, @thrawn01 insisted
+	// (Required) Filesystem path to "/etc/resolv.conf", override for testing
 	ResolvConf string
 
 	// (Required) Own GRPC address

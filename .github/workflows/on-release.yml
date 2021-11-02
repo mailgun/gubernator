@@ -1,0 +1,32 @@
+name: Docker Image CI
+
+on:
+  release:
+    types: [published]
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        
+      - name: Update 'version' file
+        run: echo "${{ github.event.release.tag_name }}" > version
+           
+      - name: Build docker image
+        uses: docker/build-push-action@v2
+        with:
+          tags: gubernator:${{ github.event.release.tag_name }},gubernator:latest
+          build-args: |
+            VERSION=${{ github.event.release.tag_name }}
+          push: true
+          
+      - name: Commit changes
+        uses: EndBug/add-and-commit@v7
+        with:
+          default_author: github_actions
+          author_email: mail@example.com
+          message: 'Update version number'
+          add: 'version'

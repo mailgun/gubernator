@@ -18,7 +18,7 @@ jobs:
       - name: Build docker image
         uses: docker/build-push-action@v2
         with:
-          tags: gubernator:${{ github.event.release.tag_name }},gubernator:latest
+          tags: gcr.io/gubernator:${{ github.event.release.tag_name }},gcr.io/gubernator:latest
           build-args: |
             VERSION=${{ github.event.release.tag_name }}
           push: true

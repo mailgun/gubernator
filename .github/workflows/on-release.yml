@@ -46,4 +46,5 @@ jobs:
         with:
           default_author: github_actions
           message: 'Update version number'
+          branch: master
           add: 'version'

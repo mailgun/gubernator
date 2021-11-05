@@ -218,10 +218,10 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 
 	for {
 		if attempts > 5 {
-      logrus.
-        WithError(errors.WithStack(err)).
-        WithField("key", req.Key).
-        Error("GetPeer() keeps returning peers taht are not connected")
+			logrus.
+				WithError(errors.WithStack(err)).
+				WithField("key", req.Key).
+				Error("GetPeer() keeps returning peers taht are not connected")
 			resp.Resp = &RateLimitResp{
 				Error: fmt.Sprintf("GetPeer() keeps returning peers that are not connected for '%s' - '%s'", req.Key, err),
 			}
@@ -233,10 +233,10 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 			if req.Peer.Info().IsOwner {
 				resp.Resp, err = s.getRateLimit(req.Req)
 				if err != nil {
-          logrus.
-            WithError(errors.WithStack(err)).
-            WithField("key", req.Key).
-            Error("Error applying rate limit")
+					logrus.
+						WithError(errors.WithStack(err)).
+						WithField("key", req.Key).
+						Error("Error applying rate limit")
 					resp.Resp = &RateLimitResp{
 						Error: fmt.Sprintf("while applying rate limit for '%s' - '%s'", req.Key, err),
 					}
@@ -252,10 +252,10 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 				attempts++
 				req.Peer, err = s.GetPeer(req.Key)
 				if err != nil {
-          logrus.
-            WithError(errors.WithStack(err)).
-            WithField("key", req.Key).
-            Error("Error finding peer that owns rate limit")
+					logrus.
+						WithError(errors.WithStack(err)).
+						WithField("key", req.Key).
+						Error("Error finding peer that owns rate limit")
 					resp.Resp = &RateLimitResp{
 						Error: fmt.Sprintf("while finding peer that owns rate limit '%s' - '%s'", req.Key, err),
 					}
@@ -263,10 +263,10 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 				}
 				continue
 			}
-      logrus.
-        WithError(errors.WithStack(err)).
-        WithField("key", req.Key).
-        Error("Error fetching rate limit from peer")
+			logrus.
+				WithError(errors.WithStack(err)).
+				WithField("key", req.Key).
+				Error("Error fetching rate limit from peer")
 			resp.Resp = &RateLimitResp{
 				Error: fmt.Sprintf("while fetching rate limit '%s' from peer - '%s'", req.Key, err),
 			}

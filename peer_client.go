@@ -25,6 +25,7 @@ import (
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/collections"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -153,6 +154,7 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 
   rateLimitResp, err := c.getPeerRateLimitsBatch(ctx, r)
   if err != nil {
+    logrus.WithError(errors.WithStack(err)).Error("Error in getPeerRateLimitsBatch")
     return nil, errors.Wrap(err, "Error in getPeerRateLimitsBatch")
   }
 
@@ -264,11 +266,13 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	// Wait for a response or context cancel
 	select {
 	case resp := <-req.resp:
+    logrus.WithField("place", "case 1").Info()
 		if resp.err != nil {
 			return nil, errors.Wrap(c.setLastErr(resp.err), "Request error")
 		}
 		return resp.rl, nil
 	case <-ctx.Done():
+    logrus.WithError(ctx.Err()).WithField("place", "case 2").Info()
 		return nil, c.setLastErr(ctx.Err())
 	}
 }
@@ -276,6 +280,7 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 // run waits for requests to be queued, when either c.batchWait time
 // has elapsed or the queue reaches c.batchLimit. Send what is in the queue.
 func (c *PeerClient) run() {
+  logrus.WithField("config", c.conf).Info("run() starting...")
 	var interval = NewInterval(c.conf.Behavior.BatchWait)
 	defer interval.Stop()
 
@@ -284,6 +289,12 @@ func (c *PeerClient) run() {
 	for {
 		select {
 		case r, ok := <-c.queue:
+			logrus.WithFields(logrus.Fields{
+				"queueLen": len(queue),
+				"batchLimit": c.conf.Behavior.BatchLimit,
+				"batchWait": c.conf.Behavior.BatchWait,
+			}).Info("run() received request")
+
 			// If the queue has shutdown, we need to send the rest of the queue
 			if !ok {
 				if len(queue) > 0 {
@@ -296,7 +307,12 @@ func (c *PeerClient) run() {
 
 			// Send the queue if we reached our batch limit
 			if len(queue) == c.conf.Behavior.BatchLimit {
+				logrus.WithFields(logrus.Fields{
+					"queueLen": len(queue),
+					"batchLimit": c.conf.Behavior.BatchLimit,
+				}).Info("run() reached batch limit")
 				c.sendQueue(queue)
+				logrus.Info("run() batch sent")
 				queue = nil
 				continue
 			}
@@ -308,8 +324,10 @@ func (c *PeerClient) run() {
 			}
 
 		case <-interval.C:
+      // logrus.WithField("queueLen", len(queue)).Info("run() periodic sendQueue()...")
 			if len(queue) != 0 {
 				c.sendQueue(queue)
+        // logrus.Info("run() periodic sendQueue() Done")
 				queue = nil
 			}
 
@@ -326,11 +344,17 @@ func (c *PeerClient) sendQueue(queue []*request) {
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), c.conf.Behavior.BatchTimeout)
+  logrus.WithField("queueLen", len(queue)).Info("sendQueue() calling GetPeerRateLimits...")
 	resp, err := c.client.GetPeerRateLimits(ctx, &req)
+  logrus.Info("sendQueue() called GetPeerRateLimits done")
 	cancel()
 
 	// An error here indicates the entire request failed
 	if err != nil {
+		logrus.
+			WithError(err).
+			WithField("queueLen", len(queue)).
+			Error("Error in client.GetPeerRateLimits")
 		c.setLastErr(err)
 		for _, r := range queue {
 			r.resp <- &response{err: err}

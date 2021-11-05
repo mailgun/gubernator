@@ -146,17 +146,23 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 			Requests: []*RateLimitReq{r},
 		})
 		if err != nil {
-			return nil, c.setLastErr(err)
+			return nil, errors.Wrap(c.setLastErr(err), "Error in GetPeerRateLimits")
 		}
 		return resp.RateLimits[0], nil
 	}
-	return c.getPeerRateLimitsBatch(ctx, r)
+
+  rateLimitResp, err := c.getPeerRateLimitsBatch(ctx, r)
+  if err != nil {
+    return nil, errors.Wrap(err, "Error in getPeerRateLimitsBatch")
+  }
+
+  return rateLimitResp, nil
 }
 
 // GetPeerRateLimits requests a list of rate limit statuses from a peer
 func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
 	if err := c.connect(); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Error in connect")
 	}
 
 	// NOTE: This must be done within the RLock since calling Wait() in Shutdown() causes
@@ -171,7 +177,7 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 
 	resp, err := c.client.GetPeerRateLimits(ctx, r)
 	if err != nil {
-		return nil, c.setLastErr(err)
+		return nil, errors.Wrap(c.setLastErr(err), "Error in client.GetPeerRateLimits")
 	}
 
 	// Unlikely, but this avoids a panic if something wonky happens
@@ -236,7 +242,7 @@ func (c *PeerClient) GetLastErr() []string {
 
 func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
 	if err := c.connect(); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Error in connect")
 	}
 
 	// See NOTE above about RLock and wg.Add(1)
@@ -259,7 +265,7 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	select {
 	case resp := <-req.resp:
 		if resp.err != nil {
-			return nil, c.setLastErr(resp.err)
+			return nil, errors.Wrap(c.setLastErr(resp.err), "Request error")
 		}
 		return resp.rl, nil
 	case <-ctx.Done():

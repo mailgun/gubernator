@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
@@ -329,6 +330,22 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 
 // GetPeerRateLimits is called by other peers to get the rate limits owned by this peer.
 func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
+	// Log warning if request runs too long.
+	ctx2, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		select {
+		case <-ctx2.Done():
+			return
+		case <-time.After(80 * time.Millisecond):
+			logrus.
+				WithFields(logrus.Fields{
+					"request": r,
+				}).
+				Warn("GetPeerRateLimits() long run warning")
+		}
+	}()
+
 	var resp GetPeerRateLimitsResp
 
 	if len(r.Requests) > maxBatchSize {

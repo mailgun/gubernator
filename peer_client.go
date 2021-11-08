@@ -156,7 +156,10 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 	if err != nil {
 		logrus.
 			WithError(errors.WithStack(err)).
-			WithField("request", r).
+			WithFields(logrus.Fields{
+				"request": r,
+				"peer": c.conf,
+			}).
 			Error("Error in getPeerRateLimitsBatch")
 		return nil, errors.Wrap(err, "Error in getPeerRateLimitsBatch")
 	}
@@ -313,7 +316,6 @@ func (c *PeerClient) run() {
 					"batchLimit": c.conf.Behavior.BatchLimit,
 				}).Info("run() reached batch limit")
 				c.sendQueue(queue)
-				logrus.Info("run() batch sent")
 				queue = nil
 				continue
 			}

@@ -158,7 +158,7 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 			WithError(errors.WithStack(err)).
 			WithFields(logrus.Fields{
 				"request": r,
-				"peer": c.conf,
+				"peerAddr": c.conf.Info.GRPCAddress,
 			}).
 			Error("Error in getPeerRateLimitsBatch")
 		return nil, errors.Wrap(err, "Error in getPeerRateLimitsBatch")

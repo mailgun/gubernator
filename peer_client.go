@@ -152,13 +152,16 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 		return resp.RateLimits[0], nil
 	}
 
-  rateLimitResp, err := c.getPeerRateLimitsBatch(ctx, r)
-  if err != nil {
-    logrus.WithError(errors.WithStack(err)).Error("Error in getPeerRateLimitsBatch")
-    return nil, errors.Wrap(err, "Error in getPeerRateLimitsBatch")
-  }
+	rateLimitResp, err := c.getPeerRateLimitsBatch(ctx, r)
+	if err != nil {
+		logrus.
+			WithError(errors.WithStack(err)).
+			WithField("request", r).
+			Error("Error in getPeerRateLimitsBatch")
+		return nil, errors.Wrap(err, "Error in getPeerRateLimitsBatch")
+	}
 
-  return rateLimitResp, nil
+	return rateLimitResp, nil
 }
 
 // GetPeerRateLimits requests a list of rate limit statuses from a peer
@@ -266,13 +269,16 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	// Wait for a response or context cancel
 	select {
 	case resp := <-req.resp:
-    logrus.WithField("place", "case 1").Info()
+		logrus.Info("getPeerRateLimitsBatch() received response!")
 		if resp.err != nil {
 			return nil, errors.Wrap(c.setLastErr(resp.err), "Request error")
 		}
 		return resp.rl, nil
 	case <-ctx.Done():
-    logrus.WithError(ctx.Err()).WithField("place", "case 2").Info()
+		logrus.
+			WithError(ctx.Err()).
+			WithField("request", r).
+			Info("getPeerRateLimitsBatch() context canceled")
 		return nil, c.setLastErr(ctx.Err())
 	}
 }

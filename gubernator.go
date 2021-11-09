@@ -50,14 +50,14 @@ type V1Instance struct {
 	isClosed    bool
 }
 
-var getPeerRateLimitDurationMetric = prometheus.NewSummary(prometheus.SummaryOpts{
+var getPeerRateLimitDurationMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 	Name: "baliedge_gubernator_duration",
-	Help: "Request time for calls to GetPeerRateLimit within Gubernator.",
+	Help: "Processing time for calls to getRateLimit within Gubernator.",
 	Objectives: map[float64]float64{
 		0.5:  0.05,
 		0.99: 0.001,
 	},
-})
+}, []string{"name"})
 
 // NewV1Instance instantiate a single instance of a gubernator peer and registers this
 // instance with the provided GRPCServer.
@@ -339,9 +339,6 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 
 // GetPeerRateLimits is called by other peers to get the rate limits owned by this peer.
 func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
-	requestTimer := prometheus.NewTimer(getPeerRateLimitDurationMetric)
-	defer requestTimer.ObserveDuration()
-
 	// Log warning if request runs too long.
 	ctx2, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -421,6 +418,11 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*Healt
 }
 
 func (s *V1Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
+	requestTimer := prometheus.NewTimer(
+		getPeerRateLimitDurationMetric.With(prometheus.Labels{"name": r.Name}),
+	)
+	defer requestTimer.ObserveDuration()
+
 	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
 
@@ -550,20 +552,16 @@ func (s *V1Instance) GetRegionPickers() map[string]PeerPicker {
 
 // Describe fetches prometheus metrics to be registered
 func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
-	logrus.Info("gubernator.Describe() start")
 	ch <- s.global.asyncMetrics.Desc()
 	ch <- s.global.broadcastMetrics.Desc()
-	ch <- getPeerRateLimitDurationMetric.Desc()
-	logrus.Info("gubernator.Describe() done")
+	getPeerRateLimitDurationMetric.Describe(ch)
 }
 
 // Collect fetches metrics from the server for use by prometheus
 func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
-	logrus.Info("gubernator.Collect() start")
 	ch <- s.global.asyncMetrics
 	ch <- s.global.broadcastMetrics
-	ch <- getPeerRateLimitDurationMetric
-	logrus.Info("gubernator.Collect() done")
+	getPeerRateLimitDurationMetric.Collect(ch)
 }
 
 // HasBehavior returns true if the provided behavior is set

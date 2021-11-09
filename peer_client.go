@@ -277,10 +277,6 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 		}
 		return resp.rl, nil
 	case <-ctx.Done():
-		logrus.
-			WithError(ctx.Err()).
-			WithField("request", r).
-			Info("getPeerRateLimitsBatch() context canceled")
 		return nil, c.setLastErr(ctx.Err())
 	}
 }

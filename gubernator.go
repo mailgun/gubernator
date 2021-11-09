@@ -51,8 +51,8 @@ type V1Instance struct {
 }
 
 var getPeerRateLimitDurationMetric = prometheus.NewSummary(prometheus.SummaryOpts{
-	Name: "baliedge_gubernator_getpeerratelimit_duration",
-	Help: "Request time for calls to GetPeerRateLimit.",
+	Name: "baliedge_gubernator_duration",
+	Help: "Request time for calls to GetPeerRateLimit within Gubernator.",
 	Objectives: map[float64]float64{
 		0.5:  0.05,
 		0.99: 0.001,

@@ -86,6 +86,8 @@ func NewPeerClient(conf PeerConfig) *PeerClient {
 
 // Connect establishes a GRPC connection to a peer
 func (c *PeerClient) connect() error {
+	logrus.Infof("PeerClient.connect() to %s", c.conf.Info.GRPCAddress)
+
 	// NOTE: To future self, this mutex is used here because we need to know if the peer is disconnecting and
 	// handle ErrClosing. Since this mutex MUST be here we take this opportunity to also see if we are connected.
 	// Doing this here encapsulates managing the connected state to the PeerClient struct. Previously a PeerClient
@@ -284,9 +286,6 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 // run waits for requests to be queued, when either c.batchWait time
 // has elapsed or the queue reaches c.batchLimit. Send what is in the queue.
 func (c *PeerClient) run() {
-	logrus.
-		WithField("config", c.conf).
-		Info("PeerClient.run() starting...")
 	var interval = NewInterval(c.conf.Behavior.BatchWait)
 	defer interval.Stop()
 

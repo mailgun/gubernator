@@ -58,6 +58,14 @@ var getPeerRateLimitDurationMetric = prometheus.NewSummaryVec(prometheus.Summary
 		0.99: 0.001,
 	},
 }, []string{"name"})
+var getPeerRateLimitLockDurationMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+	Name: "baliedge_gubernator_lock_duration",
+	Help: "Lock wait time for calls to getRateLimit within Gubernator.",
+	Objectives: map[float64]float64{
+		0.5:  0.05,
+		0.99: 0.001,
+	},
+}, []string{"name"})
 
 // NewV1Instance instantiate a single instance of a gubernator peer and registers this
 // instance with the provided GRPCServer.
@@ -422,8 +430,12 @@ func (s *V1Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
 		getPeerRateLimitDurationMetric.With(prometheus.Labels{"name": r.Name}),
 	)
 	defer requestTimer.ObserveDuration()
+	lockTimer := prometheus.NewTimer(
+		getPeerRateLimitLockDurationMetric.With(prometheus.Labels{"name": r.Name}),
+	)
 
 	s.conf.Cache.Lock()
+	lockTimer.ObserveDuration()
 	defer s.conf.Cache.Unlock()
 
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {

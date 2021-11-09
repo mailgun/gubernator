@@ -567,6 +567,7 @@ func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
 	ch <- s.global.asyncMetrics.Desc()
 	ch <- s.global.broadcastMetrics.Desc()
 	getPeerRateLimitDurationMetric.Describe(ch)
+	getPeerRateLimitLockDurationMetric.Describe(ch)
 }
 
 // Collect fetches metrics from the server for use by prometheus
@@ -574,6 +575,7 @@ func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
 	ch <- s.global.asyncMetrics
 	ch <- s.global.broadcastMetrics
 	getPeerRateLimitDurationMetric.Collect(ch)
+	getPeerRateLimitLockDurationMetric.Collect(ch)
 }
 
 // HasBehavior returns true if the provided behavior is set

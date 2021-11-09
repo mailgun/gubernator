@@ -550,16 +550,20 @@ func (s *V1Instance) GetRegionPickers() map[string]PeerPicker {
 
 // Describe fetches prometheus metrics to be registered
 func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
+	logrus.Info("gubernator.Describe() start")
 	ch <- s.global.asyncMetrics.Desc()
 	ch <- s.global.broadcastMetrics.Desc()
 	ch <- getPeerRateLimitDurationMetric.Desc()
+	logrus.Info("gubernator.Describe() done")
 }
 
 // Collect fetches metrics from the server for use by prometheus
 func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
+	logrus.Info("gubernator.Collect() start")
 	ch <- s.global.asyncMetrics
 	ch <- s.global.broadcastMetrics
 	ch <- getPeerRateLimitDurationMetric
+	logrus.Info("gubernator.Collect() done")
 }
 
 // HasBehavior returns true if the provided behavior is set

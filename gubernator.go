@@ -186,7 +186,9 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 		if peer.Info().IsOwner {
 			// Apply our rate limit algorithm to the request
 			getRateLimitCounter.WithLabelValues("local").Add(1)
+			funcTimer1 := prometheus.NewTimer(funcTimeMetric.WithLabelValues("getRateLimit (local)"))
 			resp.Responses[i], err = s.getRateLimit(req)
+			funcTimer1.ObserveDuration()
 			if err != nil {
 				resp.Responses[i] = &RateLimitResp{
 					Error: fmt.Sprintf("while applying rate limit for '%s' - '%s'", key, err),

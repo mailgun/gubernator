@@ -186,7 +186,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 		if peer.Info().IsOwner {
 			// Apply our rate limit algorithm to the request
 			getRateLimitCounter.WithLabelValues("local").Add(1)
-			funcTimer1 := prometheus.NewTimer(funcTimeMetric.WithLabelValues("getRateLimit (local)"))
+			funcTimer1 := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit (local)"))
 			resp.Responses[i], err = s.getRateLimit(req)
 			funcTimer1.ObserveDuration()
 			if err != nil {
@@ -245,7 +245,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 	var attempts int
 	var err error
 
-	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("asyncRequests"))
+	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.asyncRequests"))
 	defer funcTimer.ObserveDuration()
 
 	resp := AsyncResp{
@@ -257,7 +257,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 			logrus.
 				WithError(errors.WithStack(err)).
 				WithField("key", req.Key).
-				Error("GetPeer() keeps returning peers taht are not connected")
+				Error("GetPeer() keeps returning peers that are not connected")
 			resp.Resp = &RateLimitResp{
 				Error: fmt.Sprintf("GetPeer() keeps returning peers that are not connected for '%s' - '%s'", req.Key, err),
 			}
@@ -324,7 +324,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 // getGlobalRateLimit handles rate limits that are marked as `Behavior = GLOBAL`. Rate limit responses
 // are returned from the local cache and the hits are queued to be sent to the owning peer.
 func (s *V1Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, error) {
-	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("getGlobalRateLimit"))
+	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getGlobalRateLimit"))
 	defer funcTimer.ObserveDuration()
 	// Queue the hit for async update after we have prepared our response.
 	// NOTE: The defer here avoids a race condition where we queue the req to
@@ -452,11 +452,11 @@ func (s *V1Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
 
 	switch r.Algorithm {
 	case Algorithm_TOKEN_BUCKET:
-		tokenBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("getRateLimit_tokenBucket"))
+		tokenBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit_tokenBucket"))
 		defer tokenBucketTimer.ObserveDuration()
 		return tokenBucket(s.conf.Store, s.conf.Cache, r)
 	case Algorithm_LEAKY_BUCKET:
-		leakyBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("getRateLimit_leakyBucket"))
+		leakyBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit_leakyBucket"))
 		defer leakyBucketTimer.ObserveDuration()
 		return leakyBucket(s.conf.Store, s.conf.Cache, r)
 	}
@@ -548,7 +548,12 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 
 // GetPeer returns a peer client for the hash key provided
 func (s *V1Instance) GetPeer(key string) (*PeerClient, error) {
+	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.GetPeer"))
+	defer funcTimer.ObserveDuration()
+	lockTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.GetPeer_RLock"))
+
 	s.peerMutex.RLock()
+	lockTimer.ObserveDuration()
 	peer, err := s.conf.LocalPicker.Get(key)
 	if err != nil {
 		s.peerMutex.RUnlock()

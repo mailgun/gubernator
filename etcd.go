@@ -24,6 +24,7 @@ import (
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	etcd "go.etcd.io/etcd/client/v3"
 )
@@ -94,6 +95,8 @@ func NewEtcdPool(conf EtcdPoolConfig) (*EtcdPool, error) {
 }
 
 func (e *EtcdPool) run(peer PeerInfo) error {
+	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("EtcdPool.run"))
+	defer funcTimer.ObserveDuration()
 
 	// Register our instance with etcd
 	if err := e.register(peer); err != nil {
@@ -108,6 +111,9 @@ func (e *EtcdPool) run(peer PeerInfo) error {
 }
 
 func (e *EtcdPool) watchPeers() error {
+	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("EtcdPool.watchPeers"))
+	defer funcTimer.ObserveDuration()
+
 	var revision int64
 
 	// Update our list of peers
@@ -139,6 +145,9 @@ func (e *EtcdPool) watchPeers() error {
 }
 
 func (e *EtcdPool) collectPeers(revision *int64) error {
+	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("EtcdPool.collectPeers"))
+	defer funcTimer.ObserveDuration()
+
 	ctx, cancel := context.WithTimeout(e.ctx, etcdTimeout)
 	defer cancel()
 
@@ -172,6 +181,9 @@ func (e *EtcdPool) unMarshallValue(v []byte) PeerInfo {
 }
 
 func (e *EtcdPool) watch() error {
+	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("EtcdPool.watch"))
+	defer funcTimer.ObserveDuration()
+
 	var rev int64
 
 	// Initialize watcher
@@ -220,6 +232,9 @@ func (e *EtcdPool) watch() error {
 }
 
 func (e *EtcdPool) register(peer PeerInfo) error {
+	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("EtcdPool.register"))
+	defer funcTimer.ObserveDuration()
+
 	instanceKey := e.conf.KeyPrefix + peer.GRPCAddress
 	e.log.Infof("Registering peer '%#v' with etcd", peer)
 

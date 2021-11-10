@@ -25,6 +25,7 @@ import (
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/collections"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -92,7 +93,12 @@ func (c *PeerClient) connect() error {
 	// was connected when `NewPeerClient()` was called however, when adding support for multi data centers having a
 	// PeerClient connected to every Peer in every data center continuously is not desirable.
 
+	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("PeerClient.connect"))
+	defer funcTimer.ObserveDuration()
+	lockTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("PeerClient.connect_RLock"))
+
 	c.mutex.RLock()
+	lockTimer.ObserveDuration()
 	if c.status == peerClosing {
 		c.mutex.RUnlock()
 		return &PeerErr{err: errors.New("already disconnecting")}
@@ -249,6 +255,9 @@ func (c *PeerClient) GetLastErr() []string {
 }
 
 func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
+	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("PeerClient.getPeerRateLimitsBatch"))
+	defer funcTimer.ObserveDuration()
+
 	if err := c.connect(); err != nil {
 		return nil, errors.Wrap(err, "Error in connect")
 	}
@@ -332,6 +341,9 @@ func (c *PeerClient) run() {
 // sendQueue sends the queue provided and returns the responses to
 // waiting go routines
 func (c *PeerClient) sendQueue(queue []*request) {
+	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("PeerClient.sendQueue"))
+	defer funcTimer.ObserveDuration()
+
 	var req GetPeerRateLimitsReq
 	for _, r := range queue {
 		req.Requests = append(req.Requests, r.request)

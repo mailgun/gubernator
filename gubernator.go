@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
@@ -50,6 +49,10 @@ type V1Instance struct {
 	isClosed    bool
 }
 
+var getRateLimitCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Name: "gubernator_getratelimit_counter",
+	Help: "Count of getRateLimit() calls.  Label \"calltype\" may be \"local\" for calls handled by the same peer, \"forward\" for calls forwarded to another peer, or \"global\" for global rate limits.",
+}, []string{"calltype"})
 var getPeerRateLimitDurationMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 	Name: "baliedge_gubernator_duration",
 	Help: "Processing time for calls to getRateLimit within Gubernator.",
@@ -71,6 +74,9 @@ var funcTimeMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 	Objectives: map[float64]float64{
 		0.99: 0.001,
 	},
+}, []string{"name"})
+var asyncRequestsRetriesCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Name: "baliedge_asyncrequests_retries",
 }, []string{"name"})
 
 // NewV1Instance instantiate a single instance of a gubernator peer and registers this
@@ -179,6 +185,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 		// If our server instance is the owner of this rate limit
 		if peer.Info().IsOwner {
 			// Apply our rate limit algorithm to the request
+			getRateLimitCounter.WithLabelValues("local").Add(1)
 			resp.Responses[i], err = s.getRateLimit(req)
 			if err != nil {
 				resp.Responses[i] = &RateLimitResp{
@@ -236,6 +243,9 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 	var attempts int
 	var err error
 
+	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("asyncRequests"))
+	defer funcTimer.ObserveDuration()
+
 	resp := AsyncResp{
 		Idx: req.Idx,
 	}
@@ -255,6 +265,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 		// If we are attempting again, the owner of the this rate limit might have changed to us!
 		if attempts != 0 {
 			if req.Peer.Info().IsOwner {
+				getRateLimitCounter.WithLabelValues("local").Add(1)
 				resp.Resp, err = s.getRateLimit(req.Req)
 				if err != nil {
 					logrus.
@@ -270,10 +281,12 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 		}
 
 		// Make an RPC call to the peer that owns this rate limit
+		getRateLimitCounter.WithLabelValues("forward").Add(1)
 		r, err := req.Peer.GetPeerRateLimit(ctx, req.Req)
 		if err != nil {
 			if IsNotReady(err) {
 				attempts++
+				asyncRequestsRetriesCounter.WithLabelValues(req.Req.Name).Add(1)
 				req.Peer, err = s.GetPeer(req.Key)
 				if err != nil {
 					logrus.
@@ -309,9 +322,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 // getGlobalRateLimit handles rate limits that are marked as `Behavior = GLOBAL`. Rate limit responses
 // are returned from the local cache and the hits are queued to be sent to the owning peer.
 func (s *V1Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, error) {
-	funcTimer := prometheus.NewTimer(
-		funcTimeMetric.With(prometheus.Labels{"name": "getGlobalRateLimit"}),
-	)
+	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("getGlobalRateLimit"))
 	defer funcTimer.ObserveDuration()
 	// Queue the hit for async update after we have prepared our response.
 	// NOTE: The defer here avoids a race condition where we queue the req to
@@ -334,6 +345,7 @@ func (s *V1Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, erro
 	cpy := proto.Clone(req).(*RateLimitReq)
 	cpy.Behavior = Behavior_NO_BATCHING
 	// Process the rate limit like we own it
+	getRateLimitCounter.WithLabelValues("global").Add(1)
 	resp, err := s.getRateLimit(cpy)
 	return resp, err
 }
@@ -357,22 +369,6 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 
 // GetPeerRateLimits is called by other peers to get the rate limits owned by this peer.
 func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
-	// Log warning if request runs too long.
-	ctx2, cancel := context.WithCancel(ctx)
-	defer cancel()
-	go func() {
-		select {
-		case <-ctx2.Done():
-			return
-		case <-time.After(80 * time.Millisecond):
-			logrus.
-				WithFields(logrus.Fields{
-					"request": r,
-				}).
-				Warn("GetPeerRateLimits() long run warning")
-		}
-	}()
-
 	var resp GetPeerRateLimitsResp
 
 	if len(r.Requests) > maxBatchSize {
@@ -436,13 +432,9 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*Healt
 }
 
 func (s *V1Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
-	requestTimer := prometheus.NewTimer(
-		getPeerRateLimitDurationMetric.With(prometheus.Labels{"name": r.Name}),
-	)
+	requestTimer := prometheus.NewTimer(getPeerRateLimitDurationMetric.WithLabelValues(r.Name))
 	defer requestTimer.ObserveDuration()
-	lockTimer := prometheus.NewTimer(
-		getPeerRateLimitLockDurationMetric.With(prometheus.Labels{"name": r.Name}),
-	)
+	lockTimer := prometheus.NewTimer(getPeerRateLimitLockDurationMetric.WithLabelValues(r.Name))
 
 	s.conf.Cache.Lock()
 	lockTimer.ObserveDuration()
@@ -458,15 +450,11 @@ func (s *V1Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
 
 	switch r.Algorithm {
 	case Algorithm_TOKEN_BUCKET:
-		tokenBucketTimer := prometheus.NewTimer(
-			funcTimeMetric.With(prometheus.Labels{"name": "getRateLimit_tokenBucket"}),
-		)
+		tokenBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("getRateLimit_tokenBucket"))
 		defer tokenBucketTimer.ObserveDuration()
 		return tokenBucket(s.conf.Store, s.conf.Cache, r)
 	case Algorithm_LEAKY_BUCKET:
-		leakyBucketTimer := prometheus.NewTimer(
-			funcTimeMetric.With(prometheus.Labels{"name": "getRateLimit_leakyBucket"}),
-		)
+		leakyBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("getRateLimit_leakyBucket"))
 		defer leakyBucketTimer.ObserveDuration()
 		return leakyBucket(s.conf.Store, s.conf.Cache, r)
 	}
@@ -584,18 +572,22 @@ func (s *V1Instance) GetRegionPickers() map[string]PeerPicker {
 func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
 	ch <- s.global.asyncMetrics.Desc()
 	ch <- s.global.broadcastMetrics.Desc()
+	getRateLimitCounter.Describe(ch)
 	getPeerRateLimitDurationMetric.Describe(ch)
 	getPeerRateLimitLockDurationMetric.Describe(ch)
 	funcTimeMetric.Describe(ch)
+	asyncRequestsRetriesCounter.Describe(ch)
 }
 
 // Collect fetches metrics from the server for use by prometheus
 func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
 	ch <- s.global.asyncMetrics
 	ch <- s.global.broadcastMetrics
+	getRateLimitCounter.Collect(ch)
 	getPeerRateLimitDurationMetric.Collect(ch)
 	getPeerRateLimitLockDurationMetric.Collect(ch)
 	funcTimeMetric.Collect(ch)
+	asyncRequestsRetriesCounter.Collect(ch)
 }
 
 // HasBehavior returns true if the provided behavior is set

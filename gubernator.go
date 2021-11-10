@@ -72,6 +72,7 @@ var funcTimeMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 		0.99: 0.001,
 	},
 }, []string{"name"})
+
 // NewV1Instance instantiate a single instance of a gubernator peer and registers this
 // instance with the provided GRPCServer.
 func NewV1Instance(conf Config) (*V1Instance, error) {
@@ -457,8 +458,16 @@ func (s *V1Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
 
 	switch r.Algorithm {
 	case Algorithm_TOKEN_BUCKET:
+		tokenBucketTimer := prometheus.NewTimer(
+			funcTimeMetric.With(prometheus.Labels{"name": "getRateLimit_tokenBucket"}),
+		)
+		defer tokenBucketTimer.ObserveDuration()
 		return tokenBucket(s.conf.Store, s.conf.Cache, r)
 	case Algorithm_LEAKY_BUCKET:
+		leakyBucketTimer := prometheus.NewTimer(
+			funcTimeMetric.With(prometheus.Labels{"name": "getRateLimit_leakyBucket"}),
+		)
+		defer leakyBucketTimer.ObserveDuration()
 		return leakyBucket(s.conf.Store, s.conf.Cache, r)
 	}
 	return nil, errors.Errorf("invalid rate limit algorithm '%d'", r.Algorithm)
@@ -577,6 +586,7 @@ func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
 	ch <- s.global.broadcastMetrics.Desc()
 	getPeerRateLimitDurationMetric.Describe(ch)
 	getPeerRateLimitLockDurationMetric.Describe(ch)
+	funcTimeMetric.Describe(ch)
 }
 
 // Collect fetches metrics from the server for use by prometheus
@@ -585,6 +595,7 @@ func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
 	ch <- s.global.broadcastMetrics
 	getPeerRateLimitDurationMetric.Collect(ch)
 	getPeerRateLimitLockDurationMetric.Collect(ch)
+	funcTimeMetric.Collect(ch)
 }
 
 // HasBehavior returns true if the provided behavior is set

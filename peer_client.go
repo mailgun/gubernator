@@ -86,8 +86,6 @@ func NewPeerClient(conf PeerConfig) *PeerClient {
 
 // Connect establishes a GRPC connection to a peer
 func (c *PeerClient) connect() error {
-	logrus.Infof("PeerClient.connect() to %s", c.conf.Info.GRPCAddress)
-
 	// NOTE: To future self, this mutex is used here because we need to know if the peer is disconnecting and
 	// handle ErrClosing. Since this mutex MUST be here we take this opportunity to also see if we are connected.
 	// Doing this here encapsulates managing the connected state to the PeerClient struct. Previously a PeerClient

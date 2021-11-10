@@ -66,7 +66,12 @@ var getPeerRateLimitLockDurationMetric = prometheus.NewSummaryVec(prometheus.Sum
 		0.99: 0.001,
 	},
 }, []string{"name"})
-
+var funcTimeMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+	Name: "baliedge_func_duration",
+	Objectives: map[float64]float64{
+		0.99: 0.001,
+	},
+}, []string{"name"})
 // NewV1Instance instantiate a single instance of a gubernator peer and registers this
 // instance with the provided GRPCServer.
 func NewV1Instance(conf Config) (*V1Instance, error) {
@@ -303,6 +308,10 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 // getGlobalRateLimit handles rate limits that are marked as `Behavior = GLOBAL`. Rate limit responses
 // are returned from the local cache and the hits are queued to be sent to the owning peer.
 func (s *V1Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, error) {
+	funcTimer := prometheus.NewTimer(
+		funcTimeMetric.With(prometheus.Labels{"name": "getGlobalRateLimit"}),
+	)
+	defer funcTimer.ObserveDuration()
 	// Queue the hit for async update after we have prepared our response.
 	// NOTE: The defer here avoids a race condition where we queue the req to
 	// be forwarded to the owning peer in a separate goroutine but simultaneously

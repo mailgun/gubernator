@@ -75,9 +75,6 @@ var funcTimeMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 		0.99: 0.001,
 	},
 }, []string{"name"})
-var funcTimeCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
-	Name: "baliedge_func_duration2",
-}, []string{"name"})
 var asyncRequestsRetriesCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Name: "baliedge_asyncrequests_retries",
 }, []string{"name"})
@@ -190,12 +187,8 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 			// Apply our rate limit algorithm to the request
 			getRateLimitCounter.WithLabelValues("local").Add(1)
 			funcTimer1 := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit (local)"))
-			funcTimer2 := prometheus.NewTimer(prometheus.ObserverFunc(
-				funcTimeCounter.WithLabelValues("V1Instance.getRateLimit (local)").Add,
-			))
 			resp.Responses[i], err = s.getRateLimit(req)
 			funcTimer1.ObserveDuration()
-			funcTimer2.ObserveDuration()
 			if err != nil {
 				resp.Responses[i] = &RateLimitResp{
 					Error: fmt.Sprintf("while applying rate limit for '%s' - '%s'", key, err),
@@ -254,10 +247,6 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.asyncRequests"))
 	defer funcTimer.ObserveDuration()
-	funcTimer2 := prometheus.NewTimer(prometheus.ObserverFunc(
-		funcTimeCounter.WithLabelValues("V1Instance.asyncRequests").Add,
-	))
-	defer funcTimer2.ObserveDuration()
 
 	resp := AsyncResp{
 		Idx: req.Idx,
@@ -337,10 +326,6 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 func (s *V1Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, error) {
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getGlobalRateLimit"))
 	defer funcTimer.ObserveDuration()
-	funcTimer2 := prometheus.NewTimer(prometheus.ObserverFunc(
-		funcTimeCounter.WithLabelValues("V1Instance.getGlobalRateLimit").Add,
-	))
-	defer funcTimer2.ObserveDuration()
 	// Queue the hit for async update after we have prepared our response.
 	// NOTE: The defer here avoids a race condition where we queue the req to
 	// be forwarded to the owning peer in a separate goroutine but simultaneously
@@ -469,18 +454,10 @@ func (s *V1Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
 	case Algorithm_TOKEN_BUCKET:
 		tokenBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit_tokenBucket"))
 		defer tokenBucketTimer.ObserveDuration()
-		tokenBucketTimer2 := prometheus.NewTimer(prometheus.ObserverFunc(
-			funcTimeCounter.WithLabelValues("V1Instance.getRateLimit_tokenBucket").Add,
-		))
-		defer tokenBucketTimer2.ObserveDuration()
 		return tokenBucket(s.conf.Store, s.conf.Cache, r)
 	case Algorithm_LEAKY_BUCKET:
 		leakyBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit_leakyBucket"))
 		defer leakyBucketTimer.ObserveDuration()
-		leakyBucketTimer2 := prometheus.NewTimer(prometheus.ObserverFunc(
-			funcTimeCounter.WithLabelValues("V1Instance.getRateLimit_leakyBucket").Add,
-		))
-		defer leakyBucketTimer2.ObserveDuration()
 		return leakyBucket(s.conf.Store, s.conf.Cache, r)
 	}
 	return nil, errors.Errorf("invalid rate limit algorithm '%d'", r.Algorithm)
@@ -573,18 +550,10 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 func (s *V1Instance) GetPeer(key string) (*PeerClient, error) {
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.GetPeer"))
 	defer funcTimer.ObserveDuration()
-	funcTimer2 := prometheus.NewTimer(prometheus.ObserverFunc(
-		funcTimeCounter.WithLabelValues("V1Instance.GetPeer").Add,
-	))
-	defer funcTimer2.ObserveDuration()
 	lockTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.GetPeer_RLock"))
-	lockTimer2 := prometheus.NewTimer(prometheus.ObserverFunc(
-		funcTimeCounter.WithLabelValues("V1Instance.GetPeer_RLock").Add,
-	))
 
 	s.peerMutex.RLock()
 	lockTimer.ObserveDuration()
-	lockTimer2.ObserveDuration()
 	peer, err := s.conf.LocalPicker.Get(key)
 	if err != nil {
 		s.peerMutex.RUnlock()
@@ -614,7 +583,6 @@ func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
 	getPeerRateLimitDurationMetric.Describe(ch)
 	getPeerRateLimitLockDurationMetric.Describe(ch)
 	funcTimeMetric.Describe(ch)
-	funcTimeCounter.Describe(ch)
 	asyncRequestsRetriesCounter.Describe(ch)
 }
 
@@ -626,7 +594,6 @@ func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
 	getPeerRateLimitDurationMetric.Collect(ch)
 	getPeerRateLimitLockDurationMetric.Collect(ch)
 	funcTimeMetric.Collect(ch)
-	funcTimeCounter.Collect(ch)
 	asyncRequestsRetriesCounter.Collect(ch)
 }
 

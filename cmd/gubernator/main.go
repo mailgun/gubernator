@@ -54,7 +54,7 @@ func main() {
 	conf, err := gubernator.SetupDaemonConfig(logrus.StandardLogger(), configFile)
 	checkErr(err, "while getting config")
 
-	ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
+	ctx, cancel := gubernator.DecoratedContextWithTimeout(context.Background(), clock.Second*10)
 	defer cancel()
 
 	// Start the daemon

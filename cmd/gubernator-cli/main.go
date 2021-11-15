@@ -25,6 +25,7 @@ import (
 	"os"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/mailgun/gubernator/v2"
 	guber "github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/setter"
@@ -90,7 +91,7 @@ func main() {
 		for _, rateLimit := range rateLimits {
 			fan.Run(func(obj interface{}) error {
 				r := obj.(*guber.RateLimitReq)
-				ctx, cancel := context.WithTimeout(context.Background(), clock.Millisecond*500)
+				ctx, cancel := gubernator.DecoratedContextWithTimeout(context.Background(), clock.Millisecond*500)
 				// Now hit our cluster with the rate limits
 				resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
 					Requests: []*guber.RateLimitReq{r},

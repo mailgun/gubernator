@@ -146,7 +146,7 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 
 	// Send the rate limit requests to their respective owning peers.
 	for _, p := range peerRequests {
-		ctx, cancel := context.WithTimeout(context.Background(), gm.conf.GlobalTimeout)
+		ctx, cancel := DecoratedContextWithTimeout(context.Background(), gm.conf.GlobalTimeout)
 		_, err := p.client.GetPeerRateLimits(ctx, &p.req)
 		cancel()
 
@@ -226,7 +226,7 @@ func (gm *globalManager) broadcastPeers(updates map[string]*RateLimitReq) {
 			continue
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), gm.conf.GlobalTimeout)
+		ctx, cancel := DecoratedContextWithTimeout(context.Background(), gm.conf.GlobalTimeout)
 		_, err := peer.UpdatePeerGlobals(ctx, &req)
 		cancel()
 

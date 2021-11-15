@@ -165,6 +165,7 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 			WithFields(logrus.Fields{
 				"request": r,
 				"peerAddr": c.conf.Info.GRPCAddress,
+				"deadlines": ctx.Value(DEADLINE_MAP_KEY),
 			}).
 			Error("Error in getPeerRateLimitsBatch")
 		return nil, errors.Wrap(err, "Error in getPeerRateLimitsBatch")
@@ -349,7 +350,7 @@ func (c *PeerClient) sendQueue(queue []*request) {
 		req.Requests = append(req.Requests, r.request)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), c.conf.Behavior.BatchTimeout)
+	ctx, cancel := DecoratedContextWithTimeout(context.Background(), c.conf.Behavior.BatchTimeout)
 	resp, err := c.client.GetPeerRateLimits(ctx, &req)
 	cancel()
 

@@ -506,7 +506,7 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 	s.log.WithField("peers", peerInfo).Debug("peers updated")
 
 	// Shutdown any old peers we no longer need
-	ctx, cancel := context.WithTimeout(context.Background(), s.conf.Behaviors.BatchTimeout)
+	ctx, cancel := DecoratedContextWithTimeout(context.Background(), s.conf.Behaviors.BatchTimeout)
 	defer cancel()
 
 	var shutdownPeers []*PeerClient

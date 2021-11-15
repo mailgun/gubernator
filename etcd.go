@@ -138,7 +138,7 @@ func (e *EtcdPool) watchPeers() error {
 }
 
 func (e *EtcdPool) collectPeers(revision *int64) error {
-	ctx, cancel := context.WithTimeout(e.ctx, etcdTimeout)
+	ctx, cancel := DecoratedContextWithTimeout(e.ctx, etcdTimeout)
 	defer cancel()
 
 	resp, err := e.conf.Client.Get(ctx, e.conf.KeyPrefix, etcd.WithPrefix())
@@ -231,7 +231,7 @@ func (e *EtcdPool) register(peer PeerInfo) error {
 	var lease *etcd.LeaseGrantResponse
 
 	register := func() error {
-		ctx, cancel := context.WithTimeout(e.ctx, etcdTimeout)
+		ctx, cancel := DecoratedContextWithTimeout(e.ctx, etcdTimeout)
 		defer cancel()
 		var err error
 
@@ -295,7 +295,7 @@ func (e *EtcdPool) register(peer PeerInfo) error {
 			}
 			lastKeepAlive = clock.Now()
 		case <-done:
-			ctx, cancel := context.WithTimeout(context.Background(), etcdTimeout)
+			ctx, cancel := DecoratedContextWithTimeout(context.Background(), etcdTimeout)
 			if _, err := e.conf.Client.Delete(ctx, instanceKey); err != nil {
 				e.log.WithError(err).
 					Warn("during etcd delete")

@@ -146,6 +146,9 @@ func (s *V1Instance) Close() error {
 // rate limit `Name` and `UniqueKey` is not owned by this instance then we forward the request to the
 // peer that does.
 func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*GetRateLimitsResp, error) {
+	span, ctx := StartSpan(ctx)
+	defer span.Finish()
+
 	if len(r.Requests) > maxBatchSize {
 		return nil, status.Errorf(codes.OutOfRange,
 			"Requests.RateLimits list too large; max size is '%d'", maxBatchSize)
@@ -187,7 +190,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 			// Apply our rate limit algorithm to the request
 			getRateLimitCounter.WithLabelValues("local").Add(1)
 			funcTimer1 := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit (local)"))
-			resp.Responses[i], err = s.getRateLimit(req)
+			resp.Responses[i], err = s.getRateLimit(ctx, req)
 			funcTimer1.ObserveDuration()
 			if err != nil {
 				resp.Responses[i] = &RateLimitResp{
@@ -196,7 +199,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 			}
 		} else {
 			if HasBehavior(req.Behavior, Behavior_GLOBAL) {
-				resp.Responses[i], err = s.getGlobalRateLimit(req)
+				resp.Responses[i], err = s.getGlobalRateLimit(ctx, req)
 				if err != nil {
 					resp.Responses[i] = &RateLimitResp{Error: err.Error()}
 				}
@@ -245,6 +248,9 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 	var attempts int
 	var err error
 
+	span, ctx := StartSpan(ctx)
+	defer span.Finish()
+
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.asyncRequests"))
 	defer funcTimer.ObserveDuration()
 
@@ -268,7 +274,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 		if attempts != 0 {
 			if req.Peer.Info().IsOwner {
 				getRateLimitCounter.WithLabelValues("local").Add(1)
-				resp.Resp, err = s.getRateLimit(req.Req)
+				resp.Resp, err = s.getRateLimit(ctx, req.Req)
 				if err != nil {
 					logrus.
 						WithError(errors.WithStack(err)).
@@ -323,7 +329,10 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 
 // getGlobalRateLimit handles rate limits that are marked as `Behavior = GLOBAL`. Rate limit responses
 // are returned from the local cache and the hits are queued to be sent to the owning peer.
-func (s *V1Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, error) {
+func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) (*RateLimitResp, error) {
+	span, ctx := StartSpan(ctx)
+	defer span.Finish()
+
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getGlobalRateLimit"))
 	defer funcTimer.ObserveDuration()
 	// Queue the hit for async update after we have prepared our response.
@@ -348,13 +357,16 @@ func (s *V1Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, erro
 	cpy.Behavior = Behavior_NO_BATCHING
 	// Process the rate limit like we own it
 	getRateLimitCounter.WithLabelValues("global").Add(1)
-	resp, err := s.getRateLimit(cpy)
+	resp, err := s.getRateLimit(ctx, cpy)
 	return resp, err
 }
 
 // UpdatePeerGlobals updates the local cache with a list of global rate limits. This method should only
 // be called by a peer who is the owner of a global rate limit.
 func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
+	span, ctx := StartSpan(ctx)
+	defer span.Finish()
+
 	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
 
@@ -371,6 +383,9 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 
 // GetPeerRateLimits is called by other peers to get the rate limits owned by this peer.
 func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
+	span, ctx := StartSpan(ctx)
+	defer span.Finish()
+
 	var resp GetPeerRateLimitsResp
 
 	if len(r.Requests) > maxBatchSize {
@@ -379,7 +394,7 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	}
 
 	for _, req := range r.Requests {
-		rl, err := s.getRateLimit(req)
+		rl, err := s.getRateLimit(ctx, req)
 		if err != nil {
 			// Return the error for this request
 			rl = &RateLimitResp{Error: err.Error()}
@@ -391,6 +406,9 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 
 // HealthCheck Returns the health of our instance.
 func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*HealthCheckResp, error) {
+	span, ctx := StartSpan(ctx)
+	defer span.Finish()
+
 	var errs []string
 
 	s.peerMutex.RLock()
@@ -433,7 +451,10 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*Healt
 	return &health, nil
 }
 
-func (s *V1Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
+func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
+	span, ctx := StartSpan(ctx)
+	defer span.Finish()
+
 	requestTimer := prometheus.NewTimer(getPeerRateLimitDurationMetric.WithLabelValues(r.Name))
 	defer requestTimer.ObserveDuration()
 	lockTimer := prometheus.NewTimer(getPeerRateLimitLockDurationMetric.WithLabelValues(r.Name))

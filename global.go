@@ -165,13 +165,15 @@ func (gm *globalManager) runBroadcasts() {
 	updates := make(map[string]*RateLimitReq)
 
 	gm.wg.Until(func(done chan struct{}) bool {
+		ctx := context.Background()
+
 		select {
 		case r := <-gm.broadcastQueue:
 			updates[r.HashKey()] = r
 
 			// Send the hits if we reached our batch limit
 			if len(updates) == gm.conf.GlobalBatchLimit {
-				gm.broadcastPeers(updates)
+				gm.broadcastPeers(ctx, updates)
 				updates = make(map[string]*RateLimitReq)
 				return true
 			}
@@ -184,7 +186,7 @@ func (gm *globalManager) runBroadcasts() {
 
 		case <-interval.C:
 			if len(updates) != 0 {
-				gm.broadcastPeers(updates)
+				gm.broadcastPeers(ctx, updates)
 				updates = make(map[string]*RateLimitReq)
 			}
 		case <-done:
@@ -195,7 +197,7 @@ func (gm *globalManager) runBroadcasts() {
 }
 
 // broadcastPeers broadcasts global rate limit statuses to all other peers
-func (gm *globalManager) broadcastPeers(updates map[string]*RateLimitReq) {
+func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]*RateLimitReq) {
 	var req UpdatePeerGlobalsReq
 	start := clock.Now()
 
@@ -207,7 +209,7 @@ func (gm *globalManager) broadcastPeers(updates map[string]*RateLimitReq) {
 		SetBehavior(&rl.Behavior, Behavior_GLOBAL, false)
 		rl.Hits = 0
 
-		status, err := gm.instance.getRateLimit(rl)
+		status, err := gm.instance.getRateLimit(ctx, rl)
 		if err != nil {
 			gm.log.WithError(err).Errorf("while broadcasting update to peers for: '%s'", rl.HashKey())
 			continue

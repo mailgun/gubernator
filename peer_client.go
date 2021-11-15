@@ -86,7 +86,7 @@ func NewPeerClient(conf PeerConfig) *PeerClient {
 }
 
 // Connect establishes a GRPC connection to a peer
-func (c *PeerClient) connect() error {
+func (c *PeerClient) connect(ctx context.Context) error {
 	// NOTE: To future self, this mutex is used here because we need to know if the peer is disconnecting and
 	// handle ErrClosing. Since this mutex MUST be here we take this opportunity to also see if we are connected.
 	// Doing this here encapsulates managing the connected state to the PeerClient struct. Previously a PeerClient
@@ -131,7 +131,7 @@ func (c *PeerClient) connect() error {
 		}
 		c.client = NewPeersV1Client(c.conn)
 		c.status = peerConnected
-		go c.run()
+		go c.run(ctx)
 		return nil
 	}
 	c.mutex.RUnlock()
@@ -146,6 +146,9 @@ func (c *PeerClient) Info() PeerInfo {
 // GetPeerRateLimit forwards a rate limit request to a peer. If the rate limit has `behavior == BATCHING` configured
 // this method will attempt to batch the rate limits
 func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
+	span, ctx := StartSpan(ctx)
+	defer span.Finish()
+
 	// If config asked for no batching
 	if HasBehavior(r.Behavior, Behavior_NO_BATCHING) {
 		// Send a single low latency rate limit request
@@ -176,7 +179,10 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 
 // GetPeerRateLimits requests a list of rate limit statuses from a peer
 func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
-	if err := c.connect(); err != nil {
+	span, ctx := StartSpan(ctx)
+	defer span.Finish()
+
+	if err := c.connect(ctx); err != nil {
 		return nil, errors.Wrap(err, "Error in connect")
 	}
 
@@ -204,7 +210,10 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 
 // UpdatePeerGlobals sends global rate limit status updates to a peer
 func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
-	if err := c.connect(); err != nil {
+	span, ctx := StartSpan(ctx)
+	defer span.Finish()
+
+	if err := c.connect(ctx); err != nil {
 		return nil, err
 	}
 
@@ -256,10 +265,13 @@ func (c *PeerClient) GetLastErr() []string {
 }
 
 func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
+	span, ctx := StartSpan(ctx)
+	defer span.Finish()
+
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("PeerClient.getPeerRateLimitsBatch"))
 	defer funcTimer.ObserveDuration()
 
-	if err := c.connect(); err != nil {
+	if err := c.connect(ctx); err != nil {
 		return nil, errors.Wrap(err, "Error in connect")
 	}
 
@@ -293,7 +305,10 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 
 // run waits for requests to be queued, when either c.batchWait time
 // has elapsed or the queue reaches c.batchLimit. Send what is in the queue.
-func (c *PeerClient) run() {
+func (c *PeerClient) run(ctx context.Context) {
+	span, ctx := StartSpan(ctx)
+	defer span.Finish()
+
 	var interval = NewInterval(c.conf.Behavior.BatchWait)
 	defer interval.Stop()
 
@@ -305,7 +320,7 @@ func (c *PeerClient) run() {
 			// If the queue has shutdown, we need to send the rest of the queue
 			if !ok {
 				if len(queue) > 0 {
-					c.sendQueue(queue)
+					c.sendQueue(ctx, queue)
 				}
 				return
 			}
@@ -318,7 +333,7 @@ func (c *PeerClient) run() {
 					"queueLen": len(queue),
 					"batchLimit": c.conf.Behavior.BatchLimit,
 				}).Info("run() reached batch limit")
-				c.sendQueue(queue)
+				c.sendQueue(ctx, queue)
 				queue = nil
 				continue
 			}
@@ -331,7 +346,7 @@ func (c *PeerClient) run() {
 
 		case <-interval.C:
 			if len(queue) != 0 {
-				c.sendQueue(queue)
+				c.sendQueue(ctx, queue)
 				queue = nil
 			}
 
@@ -341,7 +356,10 @@ func (c *PeerClient) run() {
 
 // sendQueue sends the queue provided and returns the responses to
 // waiting go routines
-func (c *PeerClient) sendQueue(queue []*request) {
+func (c *PeerClient) sendQueue(ctx context.Context, queue []*request) {
+	span, ctx := StartSpan(ctx)
+	defer span.Finish()
+
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("PeerClient.sendQueue"))
 	defer funcTimer.ObserveDuration()
 

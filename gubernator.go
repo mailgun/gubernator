@@ -255,9 +255,9 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 	span, ctx := StartSpan(ctx)
 	defer span.Finish()
 	if requestStr, err := json.Marshal(req.Req); err == nil {
-		span.SetTag("request", requestStr)
+		span.SetTag("request", string(requestStr))
 	}
-	span.SetTag("peer.grpcAddress", req.Peer.conf.Info.GRPCAddress)
+	span.SetTag("peer.grpcAddress", req.Peer.Info().GRPCAddress)
 
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.asyncRequests"))
 	defer funcTimer.ObserveDuration()
@@ -464,7 +464,7 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 	span, ctx := StartSpan(ctx)
 	defer span.Finish()
 	if requestStr, err := json.Marshal(r); err == nil {
-		span.SetTag("request", requestStr)
+		span.SetTag("request", string(requestStr))
 	}
 
 	requestTimer := prometheus.NewTimer(getPeerRateLimitDurationMetric.WithLabelValues(r.Name))

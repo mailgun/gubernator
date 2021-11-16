@@ -472,8 +472,9 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 	lockTimer := prometheus.NewTimer(getPeerRateLimitLockDurationMetric.WithLabelValues(r.Name))
 
 	s.conf.Cache.Lock()
-	lockTimer.ObserveDuration()
 	defer s.conf.Cache.Unlock()
+	lockTimer.ObserveDuration()
+	span.LogKV("info", "Cache.Lock()")
 
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
 		s.global.QueueUpdate(r)
@@ -487,10 +488,12 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 	case Algorithm_TOKEN_BUCKET:
 		tokenBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit_tokenBucket"))
 		defer tokenBucketTimer.ObserveDuration()
+		span.LogKV("info", "tokenBucket()")
 		return tokenBucket(s.conf.Store, s.conf.Cache, r)
 	case Algorithm_LEAKY_BUCKET:
 		leakyBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit_leakyBucket"))
 		defer leakyBucketTimer.ObserveDuration()
+		span.LogKV("info", "leakyBucket()")
 		return leakyBucket(s.conf.Store, s.conf.Cache, r)
 	}
 	return nil, errors.Errorf("invalid rate limit algorithm '%d'", r.Algorithm)

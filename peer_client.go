@@ -25,6 +25,8 @@ import (
 
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/collections"
+	otgrpc "github.com/opentracing-contrib/go-grpc"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
@@ -123,10 +125,17 @@ func (c *PeerClient) connect(ctx context.Context) error {
 			return nil
 		}
 
+		// Setup Opentracing interceptor to propagate spans.
+		tracer := opentracing.GlobalTracer()
+		tracingInterceptor := otgrpc.OpenTracingClientInterceptor(tracer)
+
 		var err error
 		opts := []grpc.DialOption{grpc.WithInsecure()}
 		if c.conf.TLS != nil {
-			opts = []grpc.DialOption{grpc.WithTransportCredentials(credentials.NewTLS(c.conf.TLS))}
+			opts = []grpc.DialOption{
+				grpc.WithTransportCredentials(credentials.NewTLS(c.conf.TLS)),
+				grpc.WithUnaryInterceptor(tracingInterceptor),
+			}
 		}
 
 		c.conn, err = grpc.Dial(c.conf.Info.GRPCAddress, opts...)
@@ -188,6 +197,7 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
 	span, ctx := StartSpan(ctx)
 	defer span.Finish()
+	span.SetTag("numRequests", len(r.Requests))
 
 	if err := c.connect(ctx); err != nil {
 		return nil, errors.Wrap(err, "Error in connect")

@@ -87,6 +87,9 @@ func NewPeerClient(conf PeerConfig) *PeerClient {
 
 // Connect establishes a GRPC connection to a peer
 func (c *PeerClient) connect(ctx context.Context) error {
+	span, ctx := StartSpan(ctx)
+	defer span.Finish()
+
 	// NOTE: To future self, this mutex is used here because we need to know if the peer is disconnecting and
 	// handle ErrClosing. Since this mutex MUST be here we take this opportunity to also see if we are connected.
 	// Doing this here encapsulates managing the connected state to the PeerClient struct. Previously a PeerClient
@@ -283,7 +286,9 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	req := request{request: r, resp: make(chan *response, 1)}
 
 	// Enqueue the request to be sent
+	span2, _ := StartNamedSpan(ctx, "Enqueue request")
 	c.queue <- &req
+	span2.Finish()
 
 	c.wg.Add(1)
 	defer func() {
@@ -292,14 +297,17 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	}()
 
 	// Wait for a response or context cancel
+	span3, ctx2 := StartNamedSpan(ctx, "Wait for response")
+	defer span3.Finish()
+
 	select {
 	case resp := <-req.resp:
 		if resp.err != nil {
 			return nil, errors.Wrap(c.setLastErr(resp.err), "Request error")
 		}
 		return resp.rl, nil
-	case <-ctx.Done():
-		return nil, c.setLastErr(ctx.Err())
+	case <-ctx2.Done():
+		return nil, c.setLastErr(ctx2.Err())
 	}
 }
 

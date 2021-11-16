@@ -162,7 +162,7 @@ func (c *PeerClient) Info() PeerInfo {
 func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
 	span, ctx := StartSpan(ctx)
 	defer span.Finish()
-	if requestStr, err := json.Marshal(r); err != nil {
+	if requestStr, err := json.Marshal(r); err == nil {
 		span.SetTag("request", string(requestStr))
 	}
 
@@ -285,7 +285,7 @@ func (c *PeerClient) GetLastErr() []string {
 func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
 	span, ctx := StartSpan(ctx)
 	defer span.Finish()
-	if requestStr, err := json.Marshal(r); err != nil {
+	if requestStr, err := json.Marshal(r); err == nil {
 		span.SetTag("request", string(requestStr))
 	}
 

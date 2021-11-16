@@ -254,7 +254,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 
 	span, ctx := StartSpan(ctx)
 	defer span.Finish()
-	if requestStr, err := json.Marshal(req.Req); err != nil {
+	if requestStr, err := json.Marshal(req.Req); err == nil {
 		span.SetTag("request", requestStr)
 	}
 	span.SetTag("peer.grpcAddress", req.Peer.conf.Info.GRPCAddress)
@@ -463,7 +463,7 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*Healt
 func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
 	span, ctx := StartSpan(ctx)
 	defer span.Finish()
-	if requestStr, err := json.Marshal(r); err != nil {
+	if requestStr, err := json.Marshal(r); err == nil {
 		span.SetTag("request", requestStr)
 	}
 

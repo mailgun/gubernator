@@ -71,6 +71,7 @@ type response struct {
 type request struct {
 	request *RateLimitReq
 	resp    chan *response
+	ctx     context.Context
 }
 
 type PeerConfig struct {
@@ -300,7 +301,11 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	if c.status == peerClosing {
 		return nil, &PeerErr{err: errors.New("already disconnecting")}
 	}
-	req := request{request: r, resp: make(chan *response, 1)}
+	req := request{
+		request: r,
+		resp: make(chan *response, 1),
+		ctx: ctx,
+	}
 
 	// Enqueue the request to be sent
 	span2, _ := StartNamedSpan(ctx, "Enqueue request")
@@ -350,24 +355,30 @@ func (c *PeerClient) run(ctx context.Context) {
 				return
 			}
 
-			queue = append(queue, r)
+			func() {
+				// Use context of the request for opentracing span.
+				reqSpan, reqCtx := StartSpan(r.ctx)
+				defer reqSpan.Finish()
 
-			// Send the queue if we reached our batch limit
-			if len(queue) == c.conf.Behavior.BatchLimit {
-				logrus.WithFields(logrus.Fields{
-					"queueLen": len(queue),
-					"batchLimit": c.conf.Behavior.BatchLimit,
-				}).Info("run() reached batch limit")
-				c.sendQueue(ctx, queue)
-				queue = nil
-				continue
-			}
+				queue = append(queue, r)
 
-			// If this is our first queued item since last send
-			// queue the next interval
-			if len(queue) == 1 {
-				interval.Next()
-			}
+				// Send the queue if we reached our batch limit
+				if len(queue) == c.conf.Behavior.BatchLimit {
+					logrus.WithFields(logrus.Fields{
+						"queueLen": len(queue),
+						"batchLimit": c.conf.Behavior.BatchLimit,
+					}).Info("run() reached batch limit")
+					c.sendQueue(reqCtx, queue)
+					queue = nil
+					return
+				}
+
+				// If this is our first queued item since last send
+				// queue the next interval
+				if len(queue) == 1 {
+					interval.Next()
+				}
+			}()
 
 		case <-interval.C:
 			if len(queue) != 0 {

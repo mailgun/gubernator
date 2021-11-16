@@ -79,6 +79,9 @@ func (gm *globalManager) runAsyncHits() {
 	hits := make(map[string]*RateLimitReq)
 
 	gm.wg.Until(func(done chan struct{}) bool {
+		span, ctx := StartSpan(context.Background())
+		defer span.Finish()
+
 		select {
 		case r := <-gm.asyncQueue:
 			// Aggregate the hits into a single request
@@ -92,7 +95,7 @@ func (gm *globalManager) runAsyncHits() {
 
 			// Send the hits if we reached our batch limit
 			if len(hits) == gm.conf.GlobalBatchLimit {
-				gm.sendHits(hits)
+				gm.sendHits(ctx, hits)
 				hits = make(map[string]*RateLimitReq)
 				return true
 			}
@@ -105,7 +108,7 @@ func (gm *globalManager) runAsyncHits() {
 
 		case <-interval.C:
 			if len(hits) != 0 {
-				gm.sendHits(hits)
+				gm.sendHits(ctx, hits)
 				hits = make(map[string]*RateLimitReq)
 			}
 		case <-done:
@@ -117,7 +120,7 @@ func (gm *globalManager) runAsyncHits() {
 
 // sendHits takes the hits collected by runAsyncHits and sends them to their
 // owning peers
-func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
+func (gm *globalManager) sendHits(ctx context.Context, hits map[string]*RateLimitReq) {
 	type pair struct {
 		client *PeerClient
 		req    GetPeerRateLimitsReq
@@ -127,7 +130,7 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 
 	// Assign each request to a peer
 	for _, r := range hits {
-		peer, err := gm.instance.GetPeer(r.HashKey())
+		peer, err := gm.instance.GetPeer(ctx, r.HashKey())
 		if err != nil {
 			gm.log.WithError(err).Errorf("while getting peer for hash key '%s'", r.HashKey())
 			continue
@@ -165,7 +168,8 @@ func (gm *globalManager) runBroadcasts() {
 	updates := make(map[string]*RateLimitReq)
 
 	gm.wg.Until(func(done chan struct{}) bool {
-		ctx := context.Background()
+		span, ctx := StartSpan(context.Background())
+		defer span.Finish()
 
 		select {
 		case r := <-gm.broadcastQueue:

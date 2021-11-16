@@ -19,6 +19,7 @@ package gubernator
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -151,6 +152,9 @@ func (c *PeerClient) Info() PeerInfo {
 func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
 	span, ctx := StartSpan(ctx)
 	defer span.Finish()
+	if requestStr, err := json.Marshal(r); err != nil {
+		span.SetTag("request", string(requestStr))
+	}
 
 	// If config asked for no batching
 	if HasBehavior(r.Behavior, Behavior_NO_BATCHING) {
@@ -270,6 +274,9 @@ func (c *PeerClient) GetLastErr() []string {
 func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
 	span, ctx := StartSpan(ctx)
 	defer span.Finish()
+	if requestStr, err := json.Marshal(r); err != nil {
+		span.SetTag("request", string(requestStr))
+	}
 
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("PeerClient.getPeerRateLimitsBatch"))
 	defer funcTimer.ObserveDuration()

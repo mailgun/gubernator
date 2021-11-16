@@ -177,7 +177,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 			continue
 		}
 
-		peer, err = s.GetPeer(key)
+		peer, err = s.GetPeer(ctx, key)
 		if err != nil {
 			resp.Responses[i] = &RateLimitResp{
 				Error: fmt.Sprintf("while finding peer that owns rate limit '%s' - '%s'", key, err),
@@ -221,7 +221,10 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 	}
 
 	// Wait for any async responses if any
+	span2, _ := StartNamedSpan(ctx, "Wait for responses")
 	wg.Wait()
+	span2.Finish()
+
 	close(asyncCh)
 	for a := range asyncCh {
 		resp.Responses[a.Idx] = a.Resp
@@ -295,7 +298,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 			if IsNotReady(err) {
 				attempts++
 				asyncRequestsRetriesCounter.WithLabelValues(req.Req.Name).Add(1)
-				req.Peer, err = s.GetPeer(req.Key)
+				req.Peer, err = s.GetPeer(ctx, req.Key)
 				if err != nil {
 					logrus.
 						WithError(errors.WithStack(err)).
@@ -568,7 +571,10 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 }
 
 // GetPeer returns a peer client for the hash key provided
-func (s *V1Instance) GetPeer(key string) (*PeerClient, error) {
+func (s *V1Instance) GetPeer(ctx context.Context, key string) (*PeerClient, error) {
+	span, _ := StartSpan(ctx)
+	defer span.Finish()
+
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.GetPeer"))
 	defer funcTimer.ObserveDuration()
 	lockTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.GetPeer_RLock"))

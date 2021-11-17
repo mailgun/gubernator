@@ -27,6 +27,7 @@ import (
 	"github.com/mailgun/holster/v4/collections"
 	otgrpc "github.com/opentracing-contrib/go-grpc"
 	"github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
@@ -162,6 +163,7 @@ func (c *PeerClient) Info() PeerInfo {
 func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
 	span, ctx := StartSpan(ctx)
 	defer span.Finish()
+
 	if requestStr, err := json.Marshal(r); err == nil {
 		span.SetTag("request", string(requestStr))
 	}
@@ -173,13 +175,17 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 			Requests: []*RateLimitReq{r},
 		})
 		if err != nil {
-			return nil, errors.Wrap(c.setLastErr(err), "Error in GetPeerRateLimits")
+			errMsg := "Error in GetPeerRateLimits"
+			span.LogKV("error", fmt.Sprintf("%s: %s", errMsg, err))
+			ext.Error.Set(span, true)
+			return nil, errors.Wrap(c.setLastErr(err), errMsg)
 		}
 		return resp.RateLimits[0], nil
 	}
 
 	rateLimitResp, err := c.getPeerRateLimitsBatch(ctx, r)
 	if err != nil {
+		errMsg := "Error in getPeerRateLimitsBatch"
 		logrus.
 			WithError(errors.WithStack(err)).
 			WithFields(logrus.Fields{
@@ -188,8 +194,10 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 				"hasDeadlines": ctx.Value(DEADLINE_MAP_KEY) != nil,
 				"deadlines": ctx.Value(DEADLINE_MAP_KEY),
 			}).
-			Error("Error in getPeerRateLimitsBatch")
-		return nil, errors.Wrap(err, "Error in getPeerRateLimitsBatch")
+			Error(errMsg)
+		span.LogKV("error", fmt.Sprintf("%s: %s", errMsg, err))
+		ext.Error.Set(span, true)
+		return nil, errors.Wrap(err, errMsg)
 	}
 
 	return rateLimitResp, nil
@@ -202,7 +210,10 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	span.SetTag("numRequests", len(r.Requests))
 
 	if err := c.connect(ctx); err != nil {
-		return nil, errors.Wrap(err, "Error in connect")
+		errMsg := "Error in connect"
+		span.LogKV("error", fmt.Sprintf("%s: %s", errMsg, err))
+		ext.Error.Set(span, true)
+		return nil, errors.Wrap(err, errMsg)
 	}
 
 	// NOTE: This must be done within the RLock since calling Wait() in Shutdown() causes
@@ -217,12 +228,18 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 
 	resp, err := c.client.GetPeerRateLimits(ctx, r)
 	if err != nil {
-		return nil, errors.Wrap(c.setLastErr(err), "Error in client.GetPeerRateLimits")
+		errMsg := "Error in client.GetPeerRateLimits"
+		span.LogKV("error", fmt.Sprintf("%s: %s", errMsg, err))
+		ext.Error.Set(span, true)
+		return nil, errors.Wrap(c.setLastErr(err), errMsg)
 	}
 
 	// Unlikely, but this avoids a panic if something wonky happens
 	if len(resp.RateLimits) != len(r.Requests) {
-		return nil, errors.New("number of rate limits in peer response does not match request")
+		errMsg := "number of rate limits in peer response does not match request"
+		span.LogKV("error", errMsg)
+		ext.Error.Set(span, true)
+		return nil, errors.New(errMsg)
 	}
 	return resp, nil
 }

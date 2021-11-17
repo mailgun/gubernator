@@ -145,7 +145,7 @@ func (c *PeerClient) connect(ctx context.Context) error {
 		}
 		c.client = NewPeersV1Client(c.conn)
 		c.status = peerConnected
-		go c.run(ctx)
+		go c.run()
 		return nil
 	}
 	c.mutex.RUnlock()
@@ -335,13 +335,15 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 
 // run waits for requests to be queued, when either c.batchWait time
 // has elapsed or the queue reaches c.batchLimit. Send what is in the queue.
-func (c *PeerClient) run(ctx context.Context) {
+func (c *PeerClient) run() {
 	var interval = NewInterval(c.conf.Behavior.BatchWait)
 	defer interval.Stop()
 
 	var queue []*request
 
 	for {
+		ctx := context.Background()
+
 		select {
 		case r, ok := <-c.queue:
 			// If the queue has shutdown, we need to send the rest of the queue
@@ -380,6 +382,8 @@ func (c *PeerClient) run(ctx context.Context) {
 		case <-interval.C:
 			if len(queue) != 0 {
 				intervalSpan, ctx2 := StartSpan(ctx)
+				intervalSpan.SetTag("queueLen", len(queue))
+				intervalSpan.SetTag("batchWait", c.conf.Behavior.BatchWait.String())
 
 				c.sendQueue(ctx2, queue)
 				queue = nil

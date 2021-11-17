@@ -400,6 +400,7 @@ func (c *PeerClient) run() {
 func (c *PeerClient) sendQueue(ctx context.Context, queue []*request) {
 	span, ctx := StartSpan(ctx)
 	defer span.Finish()
+	span.SetTag("queueLen", len(queue))
 
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("PeerClient.sendQueue"))
 	defer funcTimer.ObserveDuration()
@@ -409,15 +410,18 @@ func (c *PeerClient) sendQueue(ctx context.Context, queue []*request) {
 		req.Requests = append(req.Requests, r.request)
 	}
 
-	ctx, cancel := DecoratedContextWithTimeout(context.Background(), c.conf.Behavior.BatchTimeout)
-	resp, err := c.client.GetPeerRateLimits(ctx, &req)
-	cancel()
+	ctx2, cancel2 := DecoratedContextWithTimeout(ctx, c.conf.Behavior.BatchTimeout)
+	resp, err := c.client.GetPeerRateLimits(ctx2, &req)
+	cancel2()
 
 	// An error here indicates the entire request failed
 	if err != nil {
 		logrus.
 			WithError(err).
-			WithField("queueLen", len(queue)).
+			WithFields(logrus.Fields{
+				"queueLen": len(queue),
+				"batchTimeout": c.conf.Behavior.BatchTimeout.String(),
+			}).
 			Error("Error in client.GetPeerRateLimits")
 		c.setLastErr(err)
 		for _, r := range queue {

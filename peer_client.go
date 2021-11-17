@@ -175,17 +175,17 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 			Requests: []*RateLimitReq{r},
 		})
 		if err != nil {
-			errMsg := "Error in GetPeerRateLimits"
-			span.LogKV("error", fmt.Sprintf("%s: %s", errMsg, err))
+			errPart := "Error in GetPeerRateLimits"
+			span.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
 			ext.Error.Set(span, true)
-			return nil, errors.Wrap(c.setLastErr(err), errMsg)
+			return nil, errors.Wrap(c.setLastErr(err), errPart)
 		}
 		return resp.RateLimits[0], nil
 	}
 
 	rateLimitResp, err := c.getPeerRateLimitsBatch(ctx, r)
 	if err != nil {
-		errMsg := "Error in getPeerRateLimitsBatch"
+		errPart := "Error in getPeerRateLimitsBatch"
 		logrus.
 			WithError(errors.WithStack(err)).
 			WithFields(logrus.Fields{
@@ -194,10 +194,10 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 				"hasDeadlines": ctx.Value(DEADLINE_MAP_KEY) != nil,
 				"deadlines": ctx.Value(DEADLINE_MAP_KEY),
 			}).
-			Error(errMsg)
-		span.LogKV("error", fmt.Sprintf("%s: %s", errMsg, err))
+			Error(errPart)
+		span.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
 		ext.Error.Set(span, true)
-		return nil, errors.Wrap(err, errMsg)
+		return nil, errors.Wrap(err, errPart)
 	}
 
 	return rateLimitResp, nil
@@ -210,10 +210,10 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	span.SetTag("numRequests", len(r.Requests))
 
 	if err := c.connect(ctx); err != nil {
-		errMsg := "Error in connect"
-		span.LogKV("error", fmt.Sprintf("%s: %s", errMsg, err))
+		errPart := "Error in connect"
+		span.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
 		ext.Error.Set(span, true)
-		return nil, errors.Wrap(err, errMsg)
+		return nil, errors.Wrap(err, errPart)
 	}
 
 	// NOTE: This must be done within the RLock since calling Wait() in Shutdown() causes
@@ -228,10 +228,10 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 
 	resp, err := c.client.GetPeerRateLimits(ctx, r)
 	if err != nil {
-		errMsg := "Error in client.GetPeerRateLimits"
-		span.LogKV("error", fmt.Sprintf("%s: %s", errMsg, err))
+		errPart := "Error in client.GetPeerRateLimits"
+		span.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
 		ext.Error.Set(span, true)
-		return nil, errors.Wrap(c.setLastErr(err), errMsg)
+		return nil, errors.Wrap(c.setLastErr(err), errPart)
 	}
 
 	// Unlikely, but this avoids a panic if something wonky happens

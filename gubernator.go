@@ -199,11 +199,11 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 				resp.Responses[i], err = s.getRateLimit(ctx2, req)
 				funcTimer1.ObserveDuration()
 				if err != nil {
-					errMsg := fmt.Sprintf("Error while apply rate limit for '%s'", key)
-					span2.LogKV("error", fmt.Sprintf("%s: %s", errMsg, err))
+					errPart := fmt.Sprintf("Error while apply rate limit for '%s'", key)
+					span2.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
 					ext.Error.Set(span2, true)
 					resp.Responses[i] = &RateLimitResp{
-						Error: fmt.Sprintf("%s: %s", errMsg, err),
+						Error: fmt.Sprintf("%s: %s", errPart, err),
 					}
 				}
 			} else {
@@ -314,30 +314,30 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 				asyncRequestsRetriesCounter.WithLabelValues(req.Req.Name).Add(1)
 				req.Peer, err = s.GetPeer(ctx, req.Key)
 				if err != nil {
-					errMsg := fmt.Sprintf("Error finding peer that owns rate limit '%s'", req.Key)
+					errPart := fmt.Sprintf("Error finding peer that owns rate limit '%s'", req.Key)
 					logrus.
 						WithError(errors.WithStack(err)).
 						WithField("key", req.Key).
-						Error(errMsg)
-					span.LogKV("error", fmt.Sprintf("%s: %s", errMsg, err))
+						Error(errPart)
+					span.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
 					ext.Error.Set(span, true)
 					resp.Resp = &RateLimitResp{
-						Error: fmt.Sprintf("%s: %s", errMsg, err),
+						Error: fmt.Sprintf("%s: %s", errPart, err),
 					}
 					break
 				}
 				continue
 			}
 
-			errMsg := fmt.Sprintf("Error while fetching rate limit '%s' from peer", req.Key)
+			errPart := fmt.Sprintf("Error while fetching rate limit '%s' from peer", req.Key)
 			logrus.
 				WithError(errors.WithStack(err)).
 				WithField("key", req.Key).
 				Error("Error fetching rate limit from peer")
-			span.LogKV("error", fmt.Sprintf("%s: %s", errMsg, err))
+			span.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
 			ext.Error.Set(span, true)
 			resp.Resp = &RateLimitResp{
-				Error: fmt.Sprintf("%s: %s", errMsg, err),
+				Error: fmt.Sprintf("%s: %s", errPart, err),
 			}
 			break
 		}
@@ -384,10 +384,10 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 	resp, err := s.getRateLimit(ctx, cpy)
 
 	if err != nil {
-		errMsg := "Error in getRateLimit"
-		span.LogKV("error", fmt.Sprintf("%s: %s", errMsg, err))
+		errPart := "Error in getRateLimit"
+		span.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
 		ext.Error.Set(span, true)
-		return nil, errors.Wrap(err, errMsg)
+		return nil, errors.Wrap(err, errPart)
 	}
 
 	return resp, nil
@@ -434,10 +434,10 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 		rl, err := s.getRateLimit(ctx, req)
 		if err != nil {
 			// Return the error for this request
-			errMsg := "Error in getRateLimit"
-			span.LogKV("error", fmt.Sprintf("%s: %s", errMsg, err))
+			errPart := "Error in getRateLimit"
+			span.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
 			ext.Error.Set(span, true)
-			rl = &RateLimitResp{Error: fmt.Sprintf("%s: %s", errMsg, err)}
+			rl = &RateLimitResp{Error: fmt.Sprintf("%s: %s", errPart, err)}
 		}
 		resp.RateLimits = append(resp.RateLimits, rl)
 	}

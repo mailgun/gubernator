@@ -199,11 +199,10 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 				resp.Responses[i], err = s.getRateLimit(ctx2, req)
 				funcTimer1.ObserveDuration()
 				if err != nil {
-					errPart := fmt.Sprintf("Error while apply rate limit for '%s'", key)
-					span2.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
-					ext.Error.Set(span2, true)
+					err2 := errors.Wrapf(err, "Error while apply rate limit for '%s'", key)
+					ext.LogError(span2, err2)
 					resp.Responses[i] = &RateLimitResp{
-						Error: fmt.Sprintf("%s: %s", errPart, err),
+						Error: err2.Error(),
 					}
 				}
 			} else {
@@ -315,14 +314,14 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 				req.Peer, err = s.GetPeer(ctx, req.Key)
 				if err != nil {
 					errPart := fmt.Sprintf("Error finding peer that owns rate limit '%s'", req.Key)
+					err2 := errors.Wrap(err, errPart)
 					logrus.
 						WithError(errors.WithStack(err)).
 						WithField("key", req.Key).
 						Error(errPart)
-					span.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
-					ext.Error.Set(span, true)
+					ext.LogError(span, err2)
 					resp.Resp = &RateLimitResp{
-						Error: fmt.Sprintf("%s: %s", errPart, err),
+						Error: err2.Error(),
 					}
 					break
 				}
@@ -330,14 +329,14 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 			}
 
 			errPart := fmt.Sprintf("Error while fetching rate limit '%s' from peer", req.Key)
+			err2 := errors.Wrap(err, errPart)
 			logrus.
 				WithError(errors.WithStack(err)).
 				WithField("key", req.Key).
 				Error("Error fetching rate limit from peer")
-			span.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
-			ext.Error.Set(span, true)
+			ext.LogError(span, err2)
 			resp.Resp = &RateLimitResp{
-				Error: fmt.Sprintf("%s: %s", errPart, err),
+				Error: err2.Error(),
 			}
 			break
 		}
@@ -384,10 +383,9 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 	resp, err := s.getRateLimit(ctx, cpy)
 
 	if err != nil {
-		errPart := "Error in getRateLimit"
-		span.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
-		ext.Error.Set(span, true)
-		return nil, errors.Wrap(err, errPart)
+		err2 := errors.Wrap(err, "Error in getRateLimit")
+		ext.LogError(span, err2)
+		return nil, err2
 	}
 
 	return resp, nil
@@ -424,20 +422,18 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	var resp GetPeerRateLimitsResp
 
 	if len(r.Requests) > maxBatchSize {
-		errMsg := fmt.Sprintf("'PeerRequest.rate_limits' list too large; max size is '%d'", maxBatchSize)
-		span.LogKV("error", errMsg)
-		ext.Error.Set(span, true)
-		return nil, status.Error(codes.OutOfRange, errMsg)
+		err2 := fmt.Errorf("'PeerRequest.rate_limits' list too large; max size is '%d'", maxBatchSize)
+		ext.LogError(span, err2)
+		return nil, status.Error(codes.OutOfRange, err2.Error())
 	}
 
 	for _, req := range r.Requests {
 		rl, err := s.getRateLimit(ctx, req)
 		if err != nil {
 			// Return the error for this request
-			errPart := "Error in getRateLimit"
-			span.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
-			ext.Error.Set(span, true)
-			rl = &RateLimitResp{Error: fmt.Sprintf("%s: %s", errPart, err)}
+			err2 := errors.Wrap(err, "Error in getRateLimit")
+			ext.LogError(span, err2)
+			rl = &RateLimitResp{Error: err2.Error()}
 		}
 		resp.RateLimits = append(resp.RateLimits, rl)
 	}
@@ -461,10 +457,9 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*Healt
 
 		if lastErr != nil {
 			for _, err := range lastErr {
-				errMsg := fmt.Sprintf("Error returned from local peer.GetLastErr: %s", err)
-				span.LogKV("error", errMsg)
-				ext.Error.Set(span, true)
-				errs = append(errs, err)
+				err2 := fmt.Errorf("Error returned from local peer.GetLastErr: %s", err)
+				ext.LogError(span, err2)
+				errs = append(errs, err2.Error())
 			}
 		}
 	}
@@ -476,10 +471,9 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*Healt
 
 		if lastErr != nil {
 			for _, err := range lastErr {
-				errMsg := fmt.Sprintf("Error returned from region peer.GetLastErr: %s", err)
-				span.LogKV("error", errMsg)
-				ext.Error.Set(span, true)
-				errs = append(errs, err)
+				err2 := fmt.Errorf("Error returned from region peer.GetLastErr: %s", err)
+				ext.LogError(span, err2)
+				errs = append(errs, err2.Error())
 			}
 		}
 	}
@@ -533,10 +527,9 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 		span.LogKV("info", "tokenBucket()")
 		resp, err := tokenBucket(s.conf.Store, s.conf.Cache, r)
 		if err != nil {
-			errPart := "Error in tokenBucket"
-			span.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
-			ext.Error.Set(span, true)
-			return nil, errors.Wrap(err, errPart)
+			err2 := errors.Wrap(err, "Error in tokenBucket")
+			ext.LogError(span, err2)
+			return nil, err2
 		}
 		return resp, nil
 
@@ -546,18 +539,16 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 		span.LogKV("info", "leakyBucket()")
 		resp, err := leakyBucket(s.conf.Store, s.conf.Cache, r)
 		if err != nil {
-			errPart := "Error in leakyBucket"
-			span.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
-			ext.Error.Set(span, true)
-			return nil, errors.Wrap(err, errPart)
+			err2 := errors.Wrap(err, "Error in leakyBucket")
+			ext.LogError(span, err2)
+			return nil, err2
 		}
 		return resp, nil
 	}
 
-	errMsg := fmt.Sprintf("Invalid rate limit algorithm '%d'", r.Algorithm)
-	span.LogKV("error", errMsg)
-	ext.Error.Set(span, true)
-	return nil, errors.New(errMsg)
+	err := fmt.Errorf("Invalid rate limit algorithm '%d'", r.Algorithm)
+	ext.LogError(span, err)
+	return nil, err
 }
 
 // SetPeers is called by the implementor to indicate the pool of peers has changed
@@ -660,10 +651,9 @@ func (s *V1Instance) GetPeer(ctx context.Context, key string) (*PeerClient, erro
 	peer, err := s.conf.LocalPicker.Get(key)
 	if err != nil {
 		s.peerMutex.RUnlock()
-		errPart := "Error in conf.LocalPicker.Get"
-		span.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
-		ext.Error.Set(span, true)
-		return nil, errors.Wrap(err, errPart)
+		err2 := errors.Wrap(err, "Error in conf.LocalPicker.Get")
+		ext.LogError(span, err2)
+		return nil, err2
 	}
 	s.peerMutex.RUnlock()
 	return peer, nil

@@ -175,10 +175,9 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 			Requests: []*RateLimitReq{r},
 		})
 		if err != nil {
-			errPart := "Error in GetPeerRateLimits"
-			span.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
-			ext.Error.Set(span, true)
-			return nil, errors.Wrap(c.setLastErr(err), errPart)
+			err2 := errors.Wrap(err, "Error in GetPeerRateLimits")
+			ext.LogError(span, err2)
+			return nil, err2
 		}
 		return resp.RateLimits[0], nil
 	}
@@ -195,9 +194,9 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 				"deadlines": ctx.Value(DEADLINE_MAP_KEY),
 			}).
 			Error(errPart)
-		span.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
-		ext.Error.Set(span, true)
-		return nil, errors.Wrap(err, errPart)
+		err2 := errors.Wrap(err, errPart)
+		ext.LogError(span, err2)
+		return nil, err2
 	}
 
 	return rateLimitResp, nil
@@ -210,10 +209,9 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	span.SetTag("numRequests", len(r.Requests))
 
 	if err := c.connect(ctx); err != nil {
-		errPart := "Error in connect"
-		span.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
-		ext.Error.Set(span, true)
-		return nil, errors.Wrap(err, errPart)
+		err2 := errors.Wrap(err, "Error in connect")
+		ext.LogError(span, err2)
+		return nil, err2
 	}
 
 	// NOTE: This must be done within the RLock since calling Wait() in Shutdown() causes
@@ -228,18 +226,16 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 
 	resp, err := c.client.GetPeerRateLimits(ctx, r)
 	if err != nil {
-		errPart := "Error in client.GetPeerRateLimits"
-		span.LogKV("error", fmt.Sprintf("%s: %s", errPart, err))
-		ext.Error.Set(span, true)
-		return nil, errors.Wrap(c.setLastErr(err), errPart)
+		err2 := errors.Wrap(err, "Error in client.GetPeerRateLimits")
+		ext.LogError(span, err2)
+		return nil, err2
 	}
 
 	// Unlikely, but this avoids a panic if something wonky happens
 	if len(resp.RateLimits) != len(r.Requests) {
-		errMsg := "number of rate limits in peer response does not match request"
-		span.LogKV("error", errMsg)
-		ext.Error.Set(span, true)
-		return nil, errors.New(errMsg)
+		err = errors.New("number of rate limits in peer response does not match request")
+		ext.LogError(span, err)
+		return nil, err
 	}
 	return resp, nil
 }

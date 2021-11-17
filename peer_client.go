@@ -336,9 +336,6 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 // run waits for requests to be queued, when either c.batchWait time
 // has elapsed or the queue reaches c.batchLimit. Send what is in the queue.
 func (c *PeerClient) run(ctx context.Context) {
-	span, ctx := StartSpan(ctx)
-	defer span.Finish()
-
 	var interval = NewInterval(c.conf.Behavior.BatchWait)
 	defer interval.Stop()
 
@@ -382,10 +379,13 @@ func (c *PeerClient) run(ctx context.Context) {
 
 		case <-interval.C:
 			if len(queue) != 0 {
-				c.sendQueue(ctx, queue)
-				queue = nil
-			}
+				intervalSpan, ctx2 := StartSpan(ctx)
 
+				c.sendQueue(ctx2, queue)
+				queue = nil
+
+				intervalSpan.Finish()
+			}
 		}
 	}
 }

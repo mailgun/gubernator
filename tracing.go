@@ -44,3 +44,16 @@ func getCallerInfoForTracing(stackIndex int) (string, string) {
 
 	return operationName, fileTag
 }
+
+// Log a message to span.
+// Optionally pass additional key/value pairs.
+func LogSpan(span opentracing.Span, level string, message string, keyValues ...interface{}) {
+	args := append(
+		[]interface{}{
+			"event", level,
+			"event.message", message,
+		},
+		keyValues...,
+	)
+	span.LogKV(args...)
+}

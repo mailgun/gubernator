@@ -399,7 +399,7 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 
 	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
-	span.LogKV("info", "conf.Cache.Lock()")
+	LogSpan(span, "info", "conf.Cache.Lock()")
 
 	for _, g := range r.Globals {
 		s.conf.Cache.Add(&CacheItem{
@@ -448,7 +448,7 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*Healt
 	var errs []string
 
 	s.peerMutex.RLock()
-	span.LogKV("info", "peerMutex.RLock()")
+	LogSpan(span, "info", "peerMutex.RLock()")
 
 	// Iterate through local peers and get their last errors
 	localPeers := s.conf.LocalPicker.Peers()
@@ -510,7 +510,7 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
 	lockTimer.ObserveDuration()
-	span.LogKV("info", "conf.Cache.Lock()")
+	LogSpan(span, "info", "conf.Cache.Lock()")
 
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
 		s.global.QueueUpdate(r)
@@ -524,7 +524,7 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 	case Algorithm_TOKEN_BUCKET:
 		tokenBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit_tokenBucket"))
 		defer tokenBucketTimer.ObserveDuration()
-		span.LogKV("info", "tokenBucket()")
+		LogSpan(span, "info", "tokenBucket()")
 		resp, err := tokenBucket(s.conf.Store, s.conf.Cache, r)
 		if err != nil {
 			err2 := errors.Wrap(err, "Error in tokenBucket")
@@ -536,7 +536,7 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 	case Algorithm_LEAKY_BUCKET:
 		leakyBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit_leakyBucket"))
 		defer leakyBucketTimer.ObserveDuration()
-		span.LogKV("info", "leakyBucket()")
+		LogSpan(span, "info", "leakyBucket()")
 		resp, err := leakyBucket(s.conf.Store, s.conf.Cache, r)
 		if err != nil {
 			err2 := errors.Wrap(err, "Error in leakyBucket")
@@ -646,7 +646,7 @@ func (s *V1Instance) GetPeer(ctx context.Context, key string) (*PeerClient, erro
 
 	s.peerMutex.RLock()
 	lockTimer.ObserveDuration()
-	span.LogKV("info", "peerMutex.RLock()")
+	LogSpan(span, "info", "peerMutex.RLock()")
 
 	peer, err := s.conf.LocalPicker.Get(key)
 	if err != nil {

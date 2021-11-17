@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"runtime"
 	"time"
+
+	"github.com/opentracing/opentracing-go"
 )
 
 type DeadlineMap map[string]time.Time
@@ -24,6 +26,10 @@ func DecoratedContextWithTimeout(ctx context.Context, duration time.Duration) (c
 		deadlineMap = DeadlineMap{}
 	}
 	deadlineMap[deadlineName] = deadline
+
+	if span := opentracing.SpanFromContext(ctx); span != nil {
+		span.LogKV("info", "Set context deadline at %s for %s.", deadlineName, deadline.String())
+	}
 
 	ctx2 := context.WithValue(ctx, DEADLINE_MAP_KEY, deadlineMap)
 	return context.WithTimeout(ctx2, duration)

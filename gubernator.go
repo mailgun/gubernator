@@ -18,7 +18,6 @@ package gubernator
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -262,9 +261,10 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 
 	span, ctx := StartSpan(ctx)
 	defer span.Finish()
-	if requestStr, err := json.Marshal(req.Req); err == nil {
-		span.SetTag("request", string(requestStr))
-	}
+	span.SetTag("request.name", req.Req.Name)
+	span.SetTag("request.key", req.Req.UniqueKey)
+	span.SetTag("request.limit", req.Req.Limit)
+	span.SetTag("request.duration", req.Req.Duration)
 	span.SetTag("peer.grpcAddress", req.Peer.Info().GRPCAddress)
 
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.asyncRequests"))
@@ -498,10 +498,10 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*Healt
 func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
 	span, ctx := StartSpan(ctx)
 	defer span.Finish()
-
-	if requestStr, err := json.Marshal(r); err == nil {
-		span.SetTag("request", string(requestStr))
-	}
+	span.SetTag("request.name", r.Name)
+	span.SetTag("request.key", r.UniqueKey)
+	span.SetTag("request.limit", r.Limit)
+	span.SetTag("request.duration", r.Duration)
 
 	requestTimer := prometheus.NewTimer(getPeerRateLimitDurationMetric.WithLabelValues(r.Name))
 	defer requestTimer.ObserveDuration()

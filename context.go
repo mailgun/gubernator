@@ -17,6 +17,7 @@ var DEADLINE_MAP_KEY = struct{}{}
 // Do context.WithTimeout with added decoration for tracking 1 or more deadlines.
 func DecoratedContextWithTimeout(ctx context.Context, duration time.Duration) (context.Context, context.CancelFunc) {
 	deadline := time.Now().Add(duration)
+	deadlineStr := deadline.Format(time.RFC3339)
 	_, fn, line, _ := runtime.Caller(1)
 	deadlineName := fmt.Sprintf("%s:%d", fn, line)
 
@@ -28,7 +29,10 @@ func DecoratedContextWithTimeout(ctx context.Context, duration time.Duration) (c
 	deadlineMap[deadlineName] = deadline
 
 	if span := opentracing.SpanFromContext(ctx); span != nil {
-		span.LogKV("info", "Set context deadline at %s for %s.", deadlineName, deadline.String())
+		LogSpan(span, "info", "Set context deadline",
+			"deadline", deadlineStr,
+			"source", deadlineName,
+		)
 	}
 
 	ctx2 := context.WithValue(ctx, DEADLINE_MAP_KEY, deadlineMap)

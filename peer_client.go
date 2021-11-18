@@ -132,13 +132,15 @@ func (c *PeerClient) connect(ctx context.Context) error {
 		tracingStreamInterceptor := otgrpc.OpenTracingStreamClientInterceptor(tracer)
 
 		var err error
-		opts := []grpc.DialOption{grpc.WithInsecure()}
+		opts := []grpc.DialOption{
+			grpc.WithUnaryInterceptor(tracingUnaryInterceptor),
+			grpc.WithStreamInterceptor(tracingStreamInterceptor),
+		}
+
 		if c.conf.TLS != nil {
-			opts = []grpc.DialOption{
-				grpc.WithTransportCredentials(credentials.NewTLS(c.conf.TLS)),
-				grpc.WithUnaryInterceptor(tracingUnaryInterceptor),
-				grpc.WithStreamInterceptor(tracingStreamInterceptor),
-			}
+			opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(c.conf.TLS)))
+		} else {
+			opts = append(opts, grpc.WithInsecure())
 		}
 
 		c.conn, err = grpc.Dial(c.conf.Info.GRPCAddress, opts...)

@@ -28,6 +28,8 @@ import (
 	"github.com/mailgun/holster/v4/etcdutil"
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
+	otgrpc "github.com/opentracing-contrib/go-grpc"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -101,9 +103,19 @@ func (s *Daemon) Start(ctx context.Context) error {
 		return err
 	}
 
+	// Opentracing on gRPC endpoints.
+	tracer := opentracing.GlobalTracer()
+	tracingUnaryInterceptor := otgrpc.OpenTracingServerInterceptor(tracer)
+	tracingStreamInterceptor := otgrpc.OpenTracingStreamServerInterceptor(tracer)
+	opts = append(opts,
+		grpc.UnaryInterceptor(tracingUnaryInterceptor),
+		grpc.StreamInterceptor(tracingStreamInterceptor),
+	)
+
 	if s.conf.ServerTLS() != nil {
 		// Create two GRPC server instances, one for TLS and the other for the API Gateway
-		s.grpcSrvs = append(s.grpcSrvs, grpc.NewServer(append(opts, grpc.Creds(credentials.NewTLS(s.conf.ServerTLS())))...))
+		opts2 := append(opts, grpc.Creds(credentials.NewTLS(s.conf.ServerTLS())))
+		s.grpcSrvs = append(s.grpcSrvs, grpc.NewServer(opts2...))
 	}
 	s.grpcSrvs = append(s.grpcSrvs, grpc.NewServer(opts...))
 

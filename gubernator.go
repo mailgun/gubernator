@@ -22,6 +22,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/mailgun/gubernator/v2/tracing"
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/opentracing/opentracing-go/ext"
@@ -147,7 +148,7 @@ func (s *V1Instance) Close() error {
 // rate limit `Name` and `UniqueKey` is not owned by this instance then we forward the request to the
 // peer that does.
 func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*GetRateLimitsResp, error) {
-	span, ctx := StartSpan(ctx)
+	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
 	if len(r.Requests) > maxBatchSize {
@@ -164,7 +165,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 
 	// For each item in the request body
 	for i, req := range r.Requests {
-		span2, ctx2 := StartNamedSpan(ctx, "Loop requests")
+		span2, ctx2 := tracing.StartNamedSpan(ctx, "Loop requests")
 
 		func() {
 			defer span2.Finish()
@@ -229,7 +230,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 	}
 
 	// Wait for any async responses if any
-	span3, _ := StartNamedSpan(ctx, "Wait for responses")
+	span3, _ := tracing.StartNamedSpan(ctx, "Wait for responses")
 	wg.Wait()
 	span3.Finish()
 
@@ -259,7 +260,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 	var attempts int
 	var err error
 
-	span, ctx := StartSpan(ctx)
+	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 	span.SetTag("request.name", req.Req.Name)
 	span.SetTag("request.key", req.Req.UniqueKey)
@@ -353,7 +354,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 // getGlobalRateLimit handles rate limits that are marked as `Behavior = GLOBAL`. Rate limit responses
 // are returned from the local cache and the hits are queued to be sent to the owning peer.
 func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) (*RateLimitResp, error) {
-	span, ctx := StartSpan(ctx)
+	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getGlobalRateLimit"))
@@ -365,7 +366,7 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 	defer s.global.QueueHit(req)
 
 	s.conf.Cache.Lock()
-	LogSpan(span, "info", "conf.Cache.Lock()")
+	tracing.LogInfo(span, "info", "conf.Cache.Lock()")
 	item, ok := s.conf.Cache.GetItem(req.HashKey())
 	s.conf.Cache.Unlock()
 	if ok {
@@ -395,12 +396,12 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 // UpdatePeerGlobals updates the local cache with a list of global rate limits. This method should only
 // be called by a peer who is the owner of a global rate limit.
 func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
-	span, ctx := StartSpan(ctx)
+	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
 	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
-	LogSpan(span, "info", "conf.Cache.Lock()")
+	tracing.LogInfo(span, "info", "conf.Cache.Lock()")
 
 	for _, g := range r.Globals {
 		s.conf.Cache.Add(&CacheItem{
@@ -415,7 +416,7 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 
 // GetPeerRateLimits is called by other peers to get the rate limits owned by this peer.
 func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
-	span, ctx := StartSpan(ctx)
+	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
 	span.SetTag("numRequests", len(r.Requests))
@@ -443,13 +444,13 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 
 // HealthCheck Returns the health of our instance.
 func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*HealthCheckResp, error) {
-	span, ctx := StartSpan(ctx)
+	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
 	var errs []string
 
 	s.peerMutex.RLock()
-	LogSpan(span, "info", "peerMutex.RLock()")
+	tracing.LogInfo(span, "info", "peerMutex.RLock()")
 
 	// Iterate through local peers and get their last errors
 	localPeers := s.conf.LocalPicker.Peers()
@@ -497,7 +498,7 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*Healt
 }
 
 func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
-	span, ctx := StartSpan(ctx)
+	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 	span.SetTag("request.name", r.Name)
 	span.SetTag("request.key", r.UniqueKey)
@@ -511,7 +512,7 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
 	lockTimer.ObserveDuration()
-	LogSpan(span, "info", "conf.Cache.Lock()")
+	tracing.LogInfo(span, "info", "conf.Cache.Lock()")
 
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
 		s.global.QueueUpdate(r)
@@ -525,7 +526,6 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 	case Algorithm_TOKEN_BUCKET:
 		tokenBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit_tokenBucket"))
 		defer tokenBucketTimer.ObserveDuration()
-		LogSpan(span, "info", "tokenBucket()")
 		resp, err := tokenBucket(s.conf.Store, s.conf.Cache, r)
 		if err != nil {
 			err2 := errors.Wrap(err, "Error in tokenBucket")
@@ -537,7 +537,6 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 	case Algorithm_LEAKY_BUCKET:
 		leakyBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit_leakyBucket"))
 		defer leakyBucketTimer.ObserveDuration()
-		LogSpan(span, "info", "leakyBucket()")
 		resp, err := leakyBucket(s.conf.Store, s.conf.Cache, r)
 		if err != nil {
 			err2 := errors.Wrap(err, "Error in leakyBucket")
@@ -596,7 +595,7 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 	s.log.WithField("peers", peerInfo).Debug("peers updated")
 
 	// Shutdown any old peers we no longer need
-	ctx, cancel := DecoratedContextWithTimeout(context.Background(), s.conf.Behaviors.BatchTimeout)
+	ctx, cancel := tracing.ContextWithTimeout(context.Background(), s.conf.Behaviors.BatchTimeout)
 	defer cancel()
 
 	var shutdownPeers []*PeerClient
@@ -638,7 +637,7 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 
 // GetPeer returns a peer client for the hash key provided
 func (s *V1Instance) GetPeer(ctx context.Context, key string) (*PeerClient, error) {
-	span, _ := StartSpan(ctx)
+	span, _ := tracing.StartSpan(ctx)
 	defer span.Finish()
 
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.GetPeer"))
@@ -647,7 +646,7 @@ func (s *V1Instance) GetPeer(ctx context.Context, key string) (*PeerClient, erro
 
 	s.peerMutex.RLock()
 	lockTimer.ObserveDuration()
-	LogSpan(span, "info", "peerMutex.RLock()")
+	tracing.LogInfo(span, "info", "peerMutex.RLock()")
 
 	peer, err := s.conf.LocalPicker.Get(key)
 	if err != nil {

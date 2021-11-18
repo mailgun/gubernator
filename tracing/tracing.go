@@ -1,11 +1,13 @@
-package gubernator
+package tracing
 
 // General purpose Opentracing functions.
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"strconv"
+	"time"
 
 	"github.com/opentracing/opentracing-go"
 )
@@ -47,13 +49,28 @@ func getCallerInfoForTracing(stackIndex int) (string, string) {
 
 // Log a message to span.
 // Optionally pass additional key/value pairs.
-func LogSpan(span opentracing.Span, level string, message string, keyValues ...interface{}) {
+func LogInfo(span opentracing.Span, message string, keyValues ...interface{}) {
 	args := append(
 		[]interface{}{
-			"event", level,
+			"event", "info",
 			"event.message", message,
 		},
 		keyValues...,
 	)
 	span.LogKV(args...)
+}
+
+// Do context.WithTimeout and log details of the deadline origin.
+func ContextWithTimeout(ctx context.Context, duration time.Duration) (context.Context, context.CancelFunc) {
+	deadline := time.Now().Add(duration)
+	_, fn, line, _ := runtime.Caller(1)
+
+	if span := opentracing.SpanFromContext(ctx); span != nil {
+		LogInfo(span, "info", "Set context deadline",
+			"deadline", deadline.Format(time.RFC3339),
+			"source", fmt.Sprintf("%s:%d", fn, line),
+		)
+	}
+
+	return context.WithTimeout(ctx, duration)
 }

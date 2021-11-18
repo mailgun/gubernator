@@ -25,6 +25,7 @@ import (
 	"syscall"
 
 	"github.com/mailgun/gubernator/v2"
+	"github.com/mailgun/gubernator/v2/tracing"
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/sirupsen/logrus"
 	"k8s.io/klog"
@@ -54,7 +55,7 @@ func main() {
 	conf, err := gubernator.SetupDaemonConfig(logrus.StandardLogger(), configFile)
 	checkErr(err, "while getting config")
 
-	ctx, cancel := gubernator.DecoratedContextWithTimeout(context.Background(), clock.Second*10)
+	ctx, cancel := tracing.ContextWithTimeout(context.Background(), clock.Second*10)
 	defer cancel()
 
 	// Start the daemon

@@ -27,6 +27,15 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// // Reference implementation: LRUCache in github.com/mailgun/holster/v4/collections
+// type GCache interface {
+// 	Add(*CacheItem) bool
+// 	UpdateExpiration(key interface{}, expireAt int64) bool
+// 	GetItem(key interface{}) (value *CacheItem, ok bool)
+// 	Each() chan *CacheItem
+// 	Remove(key interface{})
+// }
+
 // So algorithms can interface with different cache implementations
 type Cache interface {
 	// Access methods

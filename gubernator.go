@@ -110,6 +110,7 @@ func NewV1Instance(conf Config) (*V1Instance, error) {
 		return &s, nil
 	}
 
+	// Load the cache.
 	ch, err := s.conf.Loader.Load()
 	if err != nil {
 		return nil, errors.Wrap(err, "while loading persistent from store")
@@ -133,6 +134,7 @@ func (s *V1Instance) Close() error {
 	s.global.Close()
 	s.mutliRegion.Close()
 
+	// Write cache to store.
 	out := make(chan *CacheItem, 500)
 	go func() {
 		for item := range s.conf.Cache.Each() {
@@ -526,7 +528,7 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 	case Algorithm_TOKEN_BUCKET:
 		tokenBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit_tokenBucket"))
 		defer tokenBucketTimer.ObserveDuration()
-		resp, err := tokenBucket(s.conf.Store, s.conf.Cache, r)
+		resp, err := tokenBucket(ctx, s.conf.Store, s.conf.Cache, r)
 		if err != nil {
 			err2 := errors.Wrap(err, "Error in tokenBucket")
 			ext.LogError(span, err2)
@@ -537,7 +539,7 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 	case Algorithm_LEAKY_BUCKET:
 		leakyBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit_leakyBucket"))
 		defer leakyBucketTimer.ObserveDuration()
-		resp, err := leakyBucket(s.conf.Store, s.conf.Cache, r)
+		resp, err := leakyBucket(ctx, s.conf.Store, s.conf.Cache, r)
 		if err != nil {
 			err2 := errors.Wrap(err, "Error in leakyBucket")
 			ext.LogError(span, err2)

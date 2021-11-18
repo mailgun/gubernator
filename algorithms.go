@@ -17,18 +17,26 @@ limitations under the License.
 package gubernator
 
 import (
+	"context"
+
+	"github.com/mailgun/gubernator/v2/tracing"
 	"github.com/mailgun/holster/v4/clock"
 )
 
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket
-func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+	span, ctx := tracing.StartSpan(ctx)
+	defer span.Finish()
+
 	item, ok := c.GetItem(r.HashKey())
 	if s != nil {
 		if !ok {
 			// Check our store for the item
+			span2, _ := tracing.StartNamedSpan(ctx, "Check store for the item")
 			if item, ok = s.Get(r); ok {
 				c.Add(item)
 			}
+			span2.Finish()
 		}
 	}
 
@@ -36,7 +44,9 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
 			c.Remove(r.HashKey())
 			if s != nil {
+				span2, _ := tracing.StartNamedSpan(ctx, "s.Remove()")
 				s.Remove(r.HashKey())
+				span2.Finish()
 			}
 			return &RateLimitResp{
 				Status:    Status_UNDER_LIMIT,
@@ -56,14 +66,18 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 			// Client switched algorithms; perhaps due to a migration?
 			c.Remove(r.HashKey())
 			if s != nil {
+				span2, _ := tracing.StartNamedSpan(ctx, "s.Remove()")
 				s.Remove(r.HashKey())
+				span2.Finish()
 			}
-			return tokenBucket(s, c, r)
+			return tokenBucket(ctx, s, c, r)
 		}
 
 		if s != nil {
 			defer func() {
+				span2, _ := tracing.StartNamedSpan(ctx, "s.OnChange()")
 				s.OnChange(r, item)
+				span2.Finish()
 			}()
 		}
 
@@ -98,7 +112,7 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 				// Update this so s.OnChange() will get the new expire change
 				item.ExpireAt = expire
 				c.Remove(item.Key)
-				return tokenBucket(s, c, r)
+				return tokenBucket(ctx, s, c, r)
 			}
 			item.ExpireAt = expire
 			rl.ResetTime = expire
@@ -174,13 +188,18 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 
 	c.Add(item)
 	if s != nil {
+		span2, _ := tracing.StartNamedSpan(ctx, "s.OnChange()")
 		s.OnChange(r, item)
+		span2.Finish()
 	}
 	return rl, nil
 }
 
 // Implements leaky bucket algorithm for rate limiting https://en.wikipedia.org/wiki/Leaky_bucket
-func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+	span, ctx := tracing.StartSpan(ctx)
+	defer span.Finish()
+
 	if r.Burst == 0 {
 		r.Burst = r.Limit
 	}
@@ -190,9 +209,11 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 	if s != nil {
 		if !ok {
 			// Check our store for the item
+			span2, _ := tracing.StartNamedSpan(ctx, "Check our store for the item")
 			if item, ok = s.Get(r); ok {
 				c.Add(item)
 			}
+			span2.Finish()
 		}
 	}
 
@@ -202,9 +223,11 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 			// Client switched algorithms; perhaps due to a migration?
 			c.Remove(r.HashKey())
 			if s != nil {
+				span2, _ := tracing.StartNamedSpan(ctx, "s.Remove()")
 				s.Remove(r.HashKey())
+				span2.Finish()
 			}
-			return leakyBucket(s, c, r)
+			return leakyBucket(ctx, s, c, r)
 		}
 
 		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
@@ -264,7 +287,9 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 
 		if s != nil {
 			defer func() {
+				span2, _ := tracing.StartNamedSpan(ctx, "s.OnChange()")
 				s.OnChange(r, item)
+				span2.Finish()
 			}()
 		}
 
@@ -346,7 +371,9 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 	}
 	c.Add(item)
 	if s != nil {
+		span2, _ := tracing.StartNamedSpan(ctx, "s.OnChange()")
 		s.OnChange(r, item)
+		span2.Finish()
 	}
 	return &rl, nil
 }

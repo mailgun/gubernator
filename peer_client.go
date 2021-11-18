@@ -128,14 +128,16 @@ func (c *PeerClient) connect(ctx context.Context) error {
 
 		// Setup Opentracing interceptor to propagate spans.
 		tracer := opentracing.GlobalTracer()
-		tracingInterceptor := otgrpc.OpenTracingClientInterceptor(tracer)
+		tracingUnaryInterceptor := otgrpc.OpenTracingClientInterceptor(tracer)
+		tracingStreamInterceptor := otgrpc.OpenTracingStreamClientInterceptor(tracer)
 
 		var err error
 		opts := []grpc.DialOption{grpc.WithInsecure()}
 		if c.conf.TLS != nil {
 			opts = []grpc.DialOption{
 				grpc.WithTransportCredentials(credentials.NewTLS(c.conf.TLS)),
-				grpc.WithUnaryInterceptor(tracingInterceptor),
+				grpc.WithUnaryInterceptor(tracingUnaryInterceptor),
+				grpc.WithStreamInterceptor(tracingStreamInterceptor),
 			}
 		}
 

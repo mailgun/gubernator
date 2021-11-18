@@ -19,7 +19,6 @@ package gubernator
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -163,10 +162,10 @@ func (c *PeerClient) Info() PeerInfo {
 func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
 	span, ctx := StartSpan(ctx)
 	defer span.Finish()
-
-	if requestStr, err := json.Marshal(r); err == nil {
-		span.SetTag("request", string(requestStr))
-	}
+	span.SetTag("request.name", r.Name)
+	span.SetTag("request.key", r.UniqueKey)
+	span.SetTag("request.limit", r.Limit)
+	span.SetTag("request.duration", r.Duration)
 
 	// If config asked for no batching
 	if HasBehavior(r.Behavior, Behavior_NO_BATCHING) {
@@ -299,21 +298,26 @@ func (c *PeerClient) GetLastErr() []string {
 func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
 	span, ctx := StartSpan(ctx)
 	defer span.Finish()
-	if requestStr, err := json.Marshal(r); err == nil {
-		span.SetTag("request", string(requestStr))
-	}
+	span.SetTag("request.name", r.Name)
+	span.SetTag("request.key", r.UniqueKey)
+	span.SetTag("request.limit", r.Limit)
+	span.SetTag("request.duration", r.Duration)
 
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("PeerClient.getPeerRateLimitsBatch"))
 	defer funcTimer.ObserveDuration()
 
 	if err := c.connect(ctx); err != nil {
-		return nil, errors.Wrap(err, "Error in connect")
+		err2 := errors.Wrap(err, "Error in connect")
+		ext.LogError(span, err2)
+		return nil, err2
 	}
 
 	// See NOTE above about RLock and wg.Add(1)
 	c.mutex.RLock()
 	if c.status == peerClosing {
-		return nil, &PeerErr{err: errors.New("already disconnecting")}
+		err2 := &PeerErr{err: errors.New("already disconnecting")}
+		ext.LogError(span, err2)
+		return nil, err2
 	}
 	req := request{
 		request: r,
@@ -339,11 +343,15 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	select {
 	case resp := <-req.resp:
 		if resp.err != nil {
-			return nil, errors.Wrap(c.setLastErr(resp.err), "Request error")
+			err2 := errors.Wrap(c.setLastErr(resp.err), "Request error")
+			ext.LogError(span, err2)
+			return nil, err2
 		}
 		return resp.rl, nil
 	case <-ctx2.Done():
-		return nil, c.setLastErr(ctx2.Err())
+		err2 := c.setLastErr(ctx2.Err())
+		ext.LogError(span, err2)
+		return nil, err2
 	}
 }
 
@@ -377,10 +385,13 @@ func (c *PeerClient) run() {
 
 				// Send the queue if we reached our batch limit
 				if len(queue) == c.conf.Behavior.BatchLimit {
+					logMsg := "run() reached batch limit"
 					logrus.WithFields(logrus.Fields{
 						"queueLen": len(queue),
 						"batchLimit": c.conf.Behavior.BatchLimit,
-					}).Info("run() reached batch limit")
+					}).Info(logMsg)
+					LogSpan(reqSpan, "info", logMsg)
+
 					c.sendQueue(reqCtx, queue)
 					queue = nil
 					return
@@ -429,14 +440,18 @@ func (c *PeerClient) sendQueue(ctx context.Context, queue []*request) {
 
 	// An error here indicates the entire request failed
 	if err != nil {
+		logPart := "Error in client.GetPeerRateLimits"
+		err2 := errors.Wrap(err, logPart)
 		logrus.
 			WithError(err).
 			WithFields(logrus.Fields{
 				"queueLen": len(queue),
 				"batchTimeout": c.conf.Behavior.BatchTimeout.String(),
 			}).
-			Error("Error in client.GetPeerRateLimits")
-		c.setLastErr(err)
+			Error(logPart)
+		ext.LogError(span, err2)
+		c.setLastErr(err2)
+
 		for _, r := range queue {
 			r.resp <- &response{err: err}
 		}
@@ -446,6 +461,8 @@ func (c *PeerClient) sendQueue(ctx context.Context, queue []*request) {
 	// Unlikely, but this avoids a panic if something wonky happens
 	if len(resp.RateLimits) != len(queue) {
 		err = errors.New("server responded with incorrect rate limit list size")
+		ext.LogError(span, err)
+
 		for _, r := range queue {
 			r.resp <- &response{err: err}
 		}

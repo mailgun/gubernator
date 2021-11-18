@@ -365,6 +365,7 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 	defer s.global.QueueHit(req)
 
 	s.conf.Cache.Lock()
+	LogSpan(span, "info", "conf.Cache.Lock()")
 	item, ok := s.conf.Cache.GetItem(req.HashKey())
 	s.conf.Cache.Unlock()
 	if ok {

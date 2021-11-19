@@ -107,7 +107,7 @@ func (c *PeerClient) connect(ctx context.Context) error {
 
 	c.mutex.RLock()
 	lockTimer.ObserveDuration()
-	tracing.LogInfo(span, "info", "mutex.RLock()")
+	tracing.LogInfo(span, "mutex.RLock()")
 
 	if c.status == peerClosing {
 		c.mutex.RUnlock()
@@ -123,7 +123,7 @@ func (c *PeerClient) connect(ctx context.Context) error {
 		c.mutex.RUnlock()
 		c.mutex.Lock()
 		defer c.mutex.Unlock()
-		tracing.LogInfo(span, "info", "mutex.Lock()")
+		tracing.LogInfo(span, "mutex.Lock()")
 
 		// Now that we have the RW lock, ensure no else got here ahead of us.
 		if c.status == peerConnected {
@@ -223,7 +223,7 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	// a race condition if called within a separate go routine if the internal wg is `0`
 	// when Wait() is called then Add(1) is called concurrently.
 	c.mutex.RLock()
-	tracing.LogInfo(span, "info", "mutex.RLock()")
+	tracing.LogInfo(span, "mutex.RLock()")
 	c.wg.Add(1)
 	defer func() {
 		c.mutex.RUnlock()
@@ -257,7 +257,7 @@ func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 
 	// See NOTE above about RLock and wg.Add(1)
 	c.mutex.RLock()
-	tracing.LogInfo(span, "info", "mutex.RLock()")
+	tracing.LogInfo(span, "mutex.RLock()")
 	c.wg.Add(1)
 	defer func() {
 		c.mutex.RUnlock()
@@ -322,7 +322,7 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 
 	// See NOTE above about RLock and wg.Add(1)
 	c.mutex.RLock()
-	tracing.LogInfo(span, "info", "mutex.RLock()")
+	tracing.LogInfo(span, "mutex.RLock()")
 	if c.status == peerClosing {
 		err2 := &PeerErr{err: errors.New("already disconnecting")}
 		ext.LogError(span, err2)
@@ -399,7 +399,7 @@ func (c *PeerClient) run() {
 						"queueLen": len(queue),
 						"batchLimit": c.conf.Behavior.BatchLimit,
 					}).Info(logMsg)
-					tracing.LogInfo(reqSpan, "info", logMsg)
+					tracing.LogInfo(reqSpan, logMsg)
 
 					c.sendQueue(reqCtx, queue)
 					queue = nil

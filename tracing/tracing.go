@@ -66,7 +66,7 @@ func ContextWithTimeout(ctx context.Context, duration time.Duration) (context.Co
 	_, fn, line, _ := runtime.Caller(1)
 
 	if span := opentracing.SpanFromContext(ctx); span != nil {
-		LogInfo(span, "info", "Set context deadline",
+		LogInfo(span, "Set context deadline",
 			"deadline", deadline.Format(time.RFC3339),
 			"source", fmt.Sprintf("%s:%d", fn, line),
 		)

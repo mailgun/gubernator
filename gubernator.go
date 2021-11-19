@@ -368,7 +368,7 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 	defer s.global.QueueHit(req)
 
 	s.conf.Cache.Lock()
-	tracing.LogInfo(span, "info", "conf.Cache.Lock()")
+	tracing.LogInfo(span, "conf.Cache.Lock()")
 	item, ok := s.conf.Cache.GetItem(req.HashKey())
 	s.conf.Cache.Unlock()
 	if ok {
@@ -403,7 +403,7 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 
 	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
-	tracing.LogInfo(span, "info", "conf.Cache.Lock()")
+	tracing.LogInfo(span, "conf.Cache.Lock()")
 
 	for _, g := range r.Globals {
 		s.conf.Cache.Add(&CacheItem{
@@ -452,7 +452,7 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*Healt
 	var errs []string
 
 	s.peerMutex.RLock()
-	tracing.LogInfo(span, "info", "peerMutex.RLock()")
+	tracing.LogInfo(span, "peerMutex.RLock()")
 
 	// Iterate through local peers and get their last errors
 	localPeers := s.conf.LocalPicker.Peers()
@@ -514,7 +514,7 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
 	lockTimer.ObserveDuration()
-	tracing.LogInfo(span, "info", "conf.Cache.Lock()")
+	tracing.LogInfo(span, "conf.Cache.Lock()")
 
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
 		s.global.QueueUpdate(r)
@@ -648,7 +648,7 @@ func (s *V1Instance) GetPeer(ctx context.Context, key string) (*PeerClient, erro
 
 	s.peerMutex.RLock()
 	lockTimer.ObserveDuration()
-	tracing.LogInfo(span, "info", "peerMutex.RLock()")
+	tracing.LogInfo(span, "peerMutex.RLock()")
 
 	peer, err := s.conf.LocalPicker.Get(key)
 	if err != nil {

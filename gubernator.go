@@ -44,12 +44,13 @@ const (
 type V1Instance struct {
 	UnimplementedV1Server
 	UnimplementedPeersV1Server
-	global      *globalManager
-	mutliRegion *mutliRegionManager
-	peerMutex   sync.RWMutex
-	log         logrus.FieldLogger
-	conf        Config
-	isClosed    bool
+	global               *globalManager
+	mutliRegion          *mutliRegionManager
+	peerMutex            sync.RWMutex
+	log                  logrus.FieldLogger
+	conf                 Config
+	isClosed             bool
+	getRateLimitsCounter int64
 }
 
 var getRateLimitCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -91,6 +92,13 @@ var queueLengthMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 var lockCounterMetric = prometheus.NewSummary(prometheus.SummaryOpts{
 	Name: "baliedge_lock_counter",
 	Help: "Number of concurrently attempted locks within getRateLimit().",
+	Objectives: map[float64]float64{
+		0.99: 0.001,
+	},
+})
+var concurrentCounterMetric = prometheus.NewSummary(prometheus.SummaryOpts{
+	Name: "baliedge_getratelimits_concurrent_counter",
+	Help: "Number of concurrent GetRateLimits calls.",
 	Objectives: map[float64]float64{
 		0.99: 0.001,
 	},
@@ -170,6 +178,11 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.GetRateLimits"))
 	defer funcTimer.ObserveDuration()
+
+	concurrentCounter := atomic.AddInt64(&s.getRateLimitsCounter, 1)
+	defer atomic.AddInt64(&s.getRateLimitsCounter, -1)
+	span.SetTag("concurrentCounter", concurrentCounter)
+	concurrentCounterMetric.Observe(float64(concurrentCounter))
 
 	if len(r.Requests) > maxBatchSize {
 		return nil, status.Errorf(codes.OutOfRange,
@@ -705,6 +718,7 @@ func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
 	asyncRequestsRetriesCounter.Describe(ch)
 	queueLengthMetric.Describe(ch)
 	lockCounterMetric.Describe(ch)
+	concurrentCounterMetric.Describe(ch)
 }
 
 // Collect fetches metrics from the server for use by prometheus
@@ -718,6 +732,7 @@ func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
 	asyncRequestsRetriesCounter.Collect(ch)
 	queueLengthMetric.Collect(ch)
 	lockCounterMetric.Collect(ch)
+	concurrentCounterMetric.Collect(ch)
 }
 
 // HasBehavior returns true if the provided behavior is set

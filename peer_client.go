@@ -195,7 +195,7 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 		logrus.
 			WithError(errors.WithStack(err)).
 			WithFields(logrus.Fields{
-				"request": r,
+				"request":  r,
 				"peerAddr": c.conf.Info.GRPCAddress,
 			}).
 			Error(errPart)
@@ -330,12 +330,16 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	}
 	req := request{
 		request: r,
-		resp: make(chan *response, 1),
-		ctx: ctx,
+		resp:    make(chan *response, 1),
+		ctx:     ctx,
 	}
 
 	// Enqueue the request to be sent
 	span2, _ := tracing.StartNamedSpan(ctx, "Enqueue request")
+	span2.SetTag("queueLen", len(c.queue))
+	srcPeerAddr := c.Info().GRPCAddress
+	queueLengthMetric.WithLabelValues(srcPeerAddr).Observe(float64(len(c.queue)))
+
 	c.queue <- &req
 	span2.Finish()
 
@@ -396,7 +400,7 @@ func (c *PeerClient) run() {
 				if len(queue) == c.conf.Behavior.BatchLimit {
 					logMsg := "run() reached batch limit"
 					logrus.WithFields(logrus.Fields{
-						"queueLen": len(queue),
+						"queueLen":   len(queue),
 						"batchLimit": c.conf.Behavior.BatchLimit,
 					}).Info(logMsg)
 					tracing.LogInfo(reqSpan, logMsg)
@@ -454,7 +458,7 @@ func (c *PeerClient) sendQueue(ctx context.Context, queue []*request) {
 		logrus.
 			WithError(err).
 			WithFields(logrus.Fields{
-				"queueLen": len(queue),
+				"queueLen":     len(queue),
 				"batchTimeout": c.conf.Behavior.BatchTimeout.String(),
 			}).
 			Error(logPart)

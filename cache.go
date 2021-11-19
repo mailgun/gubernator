@@ -21,6 +21,7 @@ package gubernator
 import (
 	"container/list"
 	"sync"
+	"sync/atomic"
 
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/setter"
@@ -68,6 +69,9 @@ type LRUCache struct {
 	// Stats
 	sizeMetric   *prometheus.Desc
 	accessMetric *prometheus.Desc
+
+	LockCounter   uint64
+	UnlockCounter uint64
 }
 
 type CacheItem struct {
@@ -102,10 +106,12 @@ func NewLRUCache(maxSize int) *LRUCache {
 }
 
 func (c *LRUCache) Lock() {
+	atomic.AddUint64(&c.LockCounter, 1)
 	c.mutex.Lock()
 }
 
 func (c *LRUCache) Unlock() {
+	atomic.AddUint64(&c.UnlockCounter, 1)
 	c.mutex.Unlock()
 }
 

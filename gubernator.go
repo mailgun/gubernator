@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/mailgun/gubernator/v2/tracing"
 	"github.com/mailgun/holster/v4/setter"
@@ -80,6 +81,18 @@ var funcTimeMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 var asyncRequestsRetriesCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Name: "baliedge_asyncrequests_retries",
 }, []string{"name"})
+var queueLengthMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+	Name: "baliedge_queue_length",
+	Objectives: map[float64]float64{
+		0.99: 0.001,
+	},
+}, []string{"peerAddr"})
+var lockCounterMetric = prometheus.NewSummary(prometheus.SummaryOpts{
+	Name: "baliedge_lock_counter",
+	Objectives: map[float64]float64{
+		0.99: 0.001,
+	},
+})
 
 // NewV1Instance instantiate a single instance of a gubernator peer and registers this
 // instance with the provided GRPCServer.
@@ -514,7 +527,10 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
 	lockTimer.ObserveDuration()
-	tracing.LogInfo(span, "conf.Cache.Lock()")
+	lruCache := s.conf.Cache.(*LRUCache)
+	lockCounter := atomic.LoadUint64(&lruCache.LockCounter) - atomic.LoadUint64(&lruCache.UnlockCounter)
+	lockCounterMetric.Observe(float64(lockCounter))
+	tracing.LogInfo(span, "conf.Cache.Lock()", "lockCounter", lockCounter)
 
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
 		s.global.QueueUpdate(r)
@@ -682,6 +698,8 @@ func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
 	getPeerRateLimitLockDurationMetric.Describe(ch)
 	funcTimeMetric.Describe(ch)
 	asyncRequestsRetriesCounter.Describe(ch)
+	queueLengthMetric.Describe(ch)
+	lockCounterMetric.Describe(ch)
 }
 
 // Collect fetches metrics from the server for use by prometheus
@@ -693,6 +711,8 @@ func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
 	getPeerRateLimitLockDurationMetric.Collect(ch)
 	funcTimeMetric.Collect(ch)
 	asyncRequestsRetriesCounter.Collect(ch)
+	queueLengthMetric.Collect(ch)
+	lockCounterMetric.Collect(ch)
 }
 
 // HasBehavior returns true if the provided behavior is set

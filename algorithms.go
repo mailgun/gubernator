@@ -32,7 +32,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 	if s != nil {
 		if !ok {
 			// Check our store for the item
-			span2, _ := tracing.StartNamedSpan(ctx, "Check store for the item")
+			span2, _ := tracing.StartNamedSpan(ctx, "Check store for rate limit")
 			if item, ok = s.Get(r); ok {
 				c.Add(item)
 			}
@@ -41,8 +41,13 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 	}
 
 	if ok {
+		tracing.LogInfo(span, "Update existing rate limit")
+
 		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
+			span2, _ := tracing.StartNamedSpan(ctx, "c.Remove()")
 			c.Remove(r.HashKey())
+			span2.Finish()
+
 			if s != nil {
 				span2, _ := tracing.StartNamedSpan(ctx, "s.Remove()")
 				s.Remove(r.HashKey())
@@ -82,6 +87,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		}
 
 		// Update the limit if it changed
+		tracing.LogInfo(span, "Update the limit if changed")
 		if t.Limit != r.Limit {
 			// Add difference to remaining
 			t.Remaining += r.Limit - t.Limit
@@ -100,6 +106,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 		// If the duration config changed, update the new ExpireAt
 		if t.Duration != r.Duration {
+			tracing.LogInfo(span, "Duration config changed")
 			expire := t.CreatedAt + r.Duration
 			if HasBehavior(r.Behavior, Behavior_DURATION_IS_GREGORIAN) {
 				expire, err = GregorianExpiration(clock.Now(), r.Duration)
@@ -120,11 +127,13 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 		// Client is only interested in retrieving the current status or updating the rate limit config
 		if r.Hits == 0 {
+			tracing.LogInfo(span, "Return current status, apply no change")
 			return rl, nil
 		}
 
 		// If we are already at the limit
 		if rl.Remaining == 0 {
+			tracing.LogInfo(span, "Already over the limit")
 			rl.Status = Status_OVER_LIMIT
 			t.Status = rl.Status
 			return rl, nil
@@ -132,6 +141,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 		// If requested hits takes the remainder
 		if t.Remaining == r.Hits {
+			tracing.LogInfo(span, "At the limit")
 			t.Remaining = 0
 			rl.Remaining = 0
 			return rl, nil
@@ -139,16 +149,19 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 		// If requested is more than available, then return over the limit without updating the cache.
 		if r.Hits > t.Remaining {
+			tracing.LogInfo(span, "Over the limit")
 			rl.Status = Status_OVER_LIMIT
 			return rl, nil
 		}
 
+		tracing.LogInfo(span, "Under the limit")
 		t.Remaining -= r.Hits
 		rl.Remaining = t.Remaining
 		return rl, nil
 	}
 
 	// Add a new rate limit to the cache
+	tracing.LogInfo(span, "Add a new rate limit to the cache")
 	now := MillisecondNow()
 	expire := now + r.Duration
 	if HasBehavior(r.Behavior, Behavior_DURATION_IS_GREGORIAN) {
@@ -174,6 +187,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 	// Client could be requesting that we always return OVER_LIMIT
 	if r.Hits > r.Limit {
+		tracing.LogInfo(span, "Over the limit")
 		rl.Status = Status_OVER_LIMIT
 		rl.Remaining = r.Limit
 		t.Remaining = r.Limit

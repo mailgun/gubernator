@@ -83,12 +83,14 @@ var asyncRequestsRetriesCounter = prometheus.NewCounterVec(prometheus.CounterOpt
 }, []string{"name"})
 var queueLengthMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 	Name: "baliedge_queue_length",
+	Help: "Queue length in PeerClient.",
 	Objectives: map[float64]float64{
 		0.99: 0.001,
 	},
 }, []string{"peerAddr"})
 var lockCounterMetric = prometheus.NewSummary(prometheus.SummaryOpts{
 	Name: "baliedge_lock_counter",
+	Help: "Number of concurrently attempted locks within getRateLimit().",
 	Objectives: map[float64]float64{
 		0.99: 0.001,
 	},
@@ -165,6 +167,9 @@ func (s *V1Instance) Close() error {
 func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*GetRateLimitsResp, error) {
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
+
+	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.GetRateLimits"))
+	defer funcTimer.ObserveDuration()
 
 	if len(r.Requests) > maxBatchSize {
 		return nil, status.Errorf(codes.OutOfRange,
@@ -295,7 +300,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 			logrus.
 				WithError(errors.WithStack(err)).
 				WithField("key", req.Key).
-				Error("GetPeer() keeps returning peers that are not connected")
+				Error("GetPeer() returned peer that is not connected")
 			resp.Resp = &RateLimitResp{
 				Error: fmt.Sprintf("GetPeer() keeps returning peers that are not connected for '%s' - '%s'", req.Key, err),
 			}

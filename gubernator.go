@@ -57,22 +57,20 @@ var getRateLimitCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Name: "gubernator_getratelimit_counter",
 	Help: "Count of getRateLimit() calls.  Label \"calltype\" may be \"local\" for calls handled by the same peer, \"forward\" for calls forwarded to another peer, or \"global\" for global rate limits.",
 }, []string{"calltype"})
-var getPeerRateLimitDurationMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+var getPeerRateLimitDurationMetric = prometheus.NewSummary(prometheus.SummaryOpts{
 	Name: "baliedge_gubernator_duration",
 	Help: "Processing time for calls to getRateLimit within Gubernator.",
 	Objectives: map[float64]float64{
-		0.5:  0.05,
 		0.99: 0.001,
 	},
-}, []string{"name"})
-var getPeerRateLimitLockDurationMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+})
+var getPeerRateLimitLockDurationMetric = prometheus.NewSummary(prometheus.SummaryOpts{
 	Name: "baliedge_gubernator_lock_duration",
 	Help: "Lock wait time for calls to getRateLimit within Gubernator.",
 	Objectives: map[float64]float64{
-		0.5:  0.05,
 		0.99: 0.001,
 	},
-}, []string{"name"})
+})
 var funcTimeMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 	Name: "baliedge_func_duration",
 	Objectives: map[float64]float64{
@@ -89,19 +87,31 @@ var queueLengthMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 		0.99: 0.001,
 	},
 }, []string{"peerAddr"})
-var lockCounterMetric = prometheus.NewSummary(prometheus.SummaryOpts{
+var checkCounter = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "gubernator_check_counter",
+	Help: "The number of rate limits checked",
+})
+var checkLockCounter = prometheus.NewSummary(prometheus.SummaryOpts{
 	Name: "baliedge_lock_counter",
-	Help: "Number of concurrently attempted locks within getRateLimit().",
+	Help: "Number of concurrently attempted mutex locks within getRateLimit().",
 	Objectives: map[float64]float64{
 		0.99: 0.001,
 	},
 })
-var concurrentCounterMetric = prometheus.NewSummary(prometheus.SummaryOpts{
+var overLimitCounter = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "gubernator_over_limit_counter",
+	Help: "The number of rate limit checks that are over the limit",
+})
+var concurrentChecksCounter = prometheus.NewSummary(prometheus.SummaryOpts{
 	Name: "baliedge_getratelimits_concurrent_counter",
 	Help: "Number of concurrent GetRateLimits calls.",
 	Objectives: map[float64]float64{
 		0.99: 0.001,
 	},
+})
+var checkErrorCounter = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "gubernator_check_error_counter",
+	Help: "The number of errors while checking rate limits",
 })
 
 // NewV1Instance instantiate a single instance of a gubernator peer and registers this
@@ -182,7 +192,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 	concurrentCounter := atomic.AddInt64(&s.getRateLimitsCounter, 1)
 	defer atomic.AddInt64(&s.getRateLimitsCounter, -1)
 	span.SetTag("concurrentCounter", concurrentCounter)
-	concurrentCounterMetric.Observe(float64(concurrentCounter))
+	concurrentChecksCounter.Observe(float64(concurrentCounter))
 
 	if len(r.Requests) > maxBatchSize {
 		return nil, status.Errorf(codes.OutOfRange,
@@ -538,16 +548,17 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 	span.SetTag("request.limit", r.Limit)
 	span.SetTag("request.duration", r.Duration)
 
-	requestTimer := prometheus.NewTimer(getPeerRateLimitDurationMetric.WithLabelValues(r.Name))
+	requestTimer := prometheus.NewTimer(getPeerRateLimitDurationMetric)
 	defer requestTimer.ObserveDuration()
-	lockTimer := prometheus.NewTimer(getPeerRateLimitLockDurationMetric.WithLabelValues(r.Name))
+	checkCounter.Add(1)
+	lockTimer := prometheus.NewTimer(getPeerRateLimitLockDurationMetric)
 
 	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
 	lockTimer.ObserveDuration()
 	lruCache := s.conf.Cache.(*LRUCache)
 	lockCounter := atomic.LoadUint64(&lruCache.LockCounter) - atomic.LoadUint64(&lruCache.UnlockCounter)
-	lockCounterMetric.Observe(float64(lockCounter))
+	checkLockCounter.Observe(float64(lockCounter))
 	tracing.LogInfo(span, "conf.Cache.Lock()", "lockCounter", lockCounter)
 
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
@@ -717,8 +728,11 @@ func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
 	funcTimeMetric.Describe(ch)
 	asyncRequestsRetriesCounter.Describe(ch)
 	queueLengthMetric.Describe(ch)
-	lockCounterMetric.Describe(ch)
-	concurrentCounterMetric.Describe(ch)
+	checkLockCounter.Describe(ch)
+	concurrentChecksCounter.Describe(ch)
+	checkErrorCounter.Describe(ch)
+	overLimitCounter.Describe(ch)
+	checkCounter.Describe(ch)
 }
 
 // Collect fetches metrics from the server for use by prometheus
@@ -731,8 +745,11 @@ func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
 	funcTimeMetric.Collect(ch)
 	asyncRequestsRetriesCounter.Collect(ch)
 	queueLengthMetric.Collect(ch)
-	lockCounterMetric.Collect(ch)
-	concurrentCounterMetric.Collect(ch)
+	checkLockCounter.Collect(ch)
+	concurrentChecksCounter.Collect(ch)
+	checkErrorCounter.Collect(ch)
+	overLimitCounter.Collect(ch)
+	checkCounter.Collect(ch)
 }
 
 // HasBehavior returns true if the provided behavior is set

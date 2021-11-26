@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/mailgun/gubernator/v2/tracing"
 	"github.com/mailgun/holster/v4/etcdutil"
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
@@ -61,6 +62,9 @@ type Daemon struct {
 // This function will block until the daemon responds to connections as specified
 // by GRPCListenAddress and HTTPListenAddress
 func SpawnDaemon(ctx context.Context, conf DaemonConfig) (*Daemon, error) {
+	span, ctx := tracing.StartSpan(ctx)
+	defer span.Finish()
+
 	s := Daemon{
 		log:  conf.Logger,
 		conf: conf,
@@ -107,6 +111,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 	tracer := opentracing.GlobalTracer()
 	tracingUnaryInterceptor := otgrpc.OpenTracingServerInterceptor(tracer)
 	tracingStreamInterceptor := otgrpc.OpenTracingStreamServerInterceptor(tracer)
+
 	opts = append(opts,
 		grpc.UnaryInterceptor(tracingUnaryInterceptor),
 		grpc.StreamInterceptor(tracingStreamInterceptor),

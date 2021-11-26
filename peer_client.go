@@ -466,6 +466,7 @@ func (c *PeerClient) sendQueue(ctx context.Context, queue []*request) {
 		c.setLastErr(err2)
 
 		for _, r := range queue {
+			checkErrorCounter.Add(1)
 			r.resp <- &response{err: err}
 		}
 		return
@@ -477,6 +478,7 @@ func (c *PeerClient) sendQueue(ctx context.Context, queue []*request) {
 		ext.LogError(span, err)
 
 		for _, r := range queue {
+			checkErrorCounter.Add(1)
 			r.resp <- &response{err: err}
 		}
 		return

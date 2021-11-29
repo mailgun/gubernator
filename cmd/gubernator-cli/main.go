@@ -161,8 +161,19 @@ func sendRequest(ctx context.Context, client guber.V1Client, req *guber.GetRateL
 	if err != nil {
 		ext.LogError(span, errors.Wrap(err, "Error in client.GetRateLimits"))
 		log.WithError(err).Error("Error in client.GetRateLimits")
+		return
 	}
 	cancel()
+
+	// Sanity checks.
+	if resp == nil {
+		log.Error("Response object is unexpectedly nil")
+		return
+	}
+	if resp.Responses == nil {
+		log.Error("Responses array is unexpectedly nil")
+		return
+	}
 
 	// Check for overlimit response.
 	overlimit := false

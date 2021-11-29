@@ -31,6 +31,7 @@ import (
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	jaegerConfig "github.com/uber/jaeger-client-go/config"
@@ -151,18 +152,33 @@ func randInt(min, max int) int64 {
 }
 
 func sendRequest(ctx context.Context, client guber.V1Client, req *guber.GetRateLimitsReq) {
+	span, ctx := tracing.StartSpan(ctx)
+	defer span.Finish()
 	ctx, cancel := tracing.ContextWithTimeout(ctx, clock.Millisecond*500)
 
 	// Now hit our cluster with the rate limits
 	resp, err := client.GetRateLimits(ctx, req)
 	if err != nil {
+		ext.LogError(span, errors.Wrap(err, "Error in client.GetRateLimits"))
 		log.WithError(err).Error("Error in client.GetRateLimits")
 	}
 	cancel()
 
-	if !quiet && resp.Responses[0].Status == guber.Status_OVER_LIMIT {
-		log.WithField("quiet", quiet).Info("Overlimit!")
-		log.Info(spew.Sdump(resp))
+	// Check for overlimit response.
+	overlimit := false
+
+	for itemNum, resp := range resp.Responses {
+		if resp.Status == guber.Status_OVER_LIMIT {
+			overlimit = true
+			log.WithField("name", req.Requests[itemNum].Name).Info("Overlimit!")
+		}
+	}
+
+	if overlimit {
+		span.SetTag("overlimit", true)
+		if !quiet {
+			log.Info(spew.Sdump(resp))
+		}
 	}
 }
 

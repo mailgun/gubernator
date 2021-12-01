@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 
 	"github.com/mailgun/gubernator/v2/tracing"
+	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/opentracing/opentracing-go/ext"
@@ -183,6 +184,8 @@ func (s *V1Instance) Close() error {
 // rate limit `Name` and `UniqueKey` is not owned by this instance then we forward the request to the
 // peer that does.
 func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*GetRateLimitsResp, error) {
+	ctx, cancel := context.WithTimeout(ctx, 500*clock.Millisecond)
+	defer cancel()
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
@@ -459,6 +462,8 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 
 // GetPeerRateLimits is called by other peers to get the rate limits owned by this peer.
 func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
+	ctx, cancel := context.WithTimeout(ctx, 500*clock.Millisecond)
+	defer cancel()
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 

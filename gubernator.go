@@ -462,6 +462,14 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
+	// DEBUG: Find when the context cancels.
+	span2, _ := tracing.StartNamedSpan(ctx, "Context lifetime")
+	go func() {
+		<-ctx.Done()
+		span2.SetTag("context.error", ctx.Err().Error())
+		span2.Finish()
+	}()
+
 	span.SetTag("numRequests", len(r.Requests))
 
 	var resp GetPeerRateLimitsResp
@@ -553,7 +561,9 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 	checkCounter.Add(1)
 	lockTimer := prometheus.NewTimer(getPeerRateLimitLockDurationMetric)
 
+	lockSpan, _ := tracing.StartNamedSpan(ctx, "s.conf.Cache.Lock()")
 	s.conf.Cache.Lock()
+	lockSpan.Finish()
 	defer s.conf.Cache.Unlock()
 	lockTimer.ObserveDuration()
 	lruCache := s.conf.Cache.(*LRUCache)
@@ -563,10 +573,12 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
 		s.global.QueueUpdate(r)
+		tracing.LogInfo(span, "s.global.QueueUpdate(r)")
 	}
 
 	if HasBehavior(r.Behavior, Behavior_MULTI_REGION) {
 		s.mutliRegion.QueueHits(r)
+		tracing.LogInfo(span, "s.mutliRegion.QueueHits(r)")
 	}
 
 	switch r.Algorithm {
@@ -691,7 +703,9 @@ func (s *V1Instance) GetPeer(ctx context.Context, key string) (*PeerClient, erro
 	defer funcTimer.ObserveDuration()
 	lockTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.GetPeer_RLock"))
 
+	lockSpan, _ := tracing.StartNamedSpan(ctx, "s.peerMutex.RLock()")
 	s.peerMutex.RLock()
+	lockSpan.Finish()
 	lockTimer.ObserveDuration()
 	tracing.LogInfo(span, "peerMutex.RLock()")
 

@@ -28,15 +28,18 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
+	getSpan, _ := tracing.StartNamedSpan(ctx, "c.GetItem()")
 	item, ok := c.GetItem(r.HashKey())
+	getSpan.Finish()
+
 	if s != nil {
 		if !ok {
 			// Check our store for the item
-			span2, _ := tracing.StartNamedSpan(ctx, "Check store for rate limit")
 			if item, ok = s.Get(r); ok {
+				addSpan, _ := tracing.StartNamedSpan(ctx, "Check store for rate limit")
 				c.Add(item)
+				addSpan.Finish()
 			}
-			span2.Finish()
 		}
 	}
 
@@ -44,14 +47,14 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		tracing.LogInfo(span, "Update existing rate limit")
 
 		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
-			span2, _ := tracing.StartNamedSpan(ctx, "c.Remove()")
+			removeSpan, _ := tracing.StartNamedSpan(ctx, "c.Remove()")
 			c.Remove(r.HashKey())
-			span2.Finish()
+			removeSpan.Finish()
 
 			if s != nil {
-				span2, _ := tracing.StartNamedSpan(ctx, "s.Remove()")
+				removeSpan, _ := tracing.StartNamedSpan(ctx, "s.Remove()")
 				s.Remove(r.HashKey())
-				span2.Finish()
+				removeSpan.Finish()
 			}
 			return &RateLimitResp{
 				Status:    Status_UNDER_LIMIT,
@@ -69,20 +72,25 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		t, ok := item.Value.(*TokenBucketItem)
 		if !ok {
 			// Client switched algorithms; perhaps due to a migration?
+			tracing.LogInfo(span, "Client switched algorithms; perhaps due to a migration?")
+
+			removeSpan, _ := tracing.StartNamedSpan(ctx, "c.Remove()")
 			c.Remove(r.HashKey())
+			removeSpan.Finish()
+
 			if s != nil {
-				span2, _ := tracing.StartNamedSpan(ctx, "s.Remove()")
+				removeSpan, _ := tracing.StartNamedSpan(ctx, "s.Remove()")
 				s.Remove(r.HashKey())
-				span2.Finish()
+				removeSpan.Finish()
 			}
 			return tokenBucket(ctx, s, c, r)
 		}
 
 		if s != nil {
 			defer func() {
-				span2, _ := tracing.StartNamedSpan(ctx, "s.OnChange()")
+				onChangeSpan, _ := tracing.StartNamedSpan(ctx, "s.OnChange()")
 				s.OnChange(r, item)
-				span2.Finish()
+				onChangeSpan.Finish()
 			}()
 		}
 
@@ -118,7 +126,11 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			if expire < MillisecondNow() {
 				// Update this so s.OnChange() will get the new expire change
 				item.ExpireAt = expire
+
+				removeSpan, _ := tracing.StartNamedSpan(ctx, "c.Remove()")
 				c.Remove(item.Key)
+				removeSpan.Finish()
+
 				return tokenBucket(ctx, s, c, r)
 			}
 			item.ExpireAt = expire
@@ -203,11 +215,14 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		ExpireAt:  expire,
 	}
 
+	addSpan, _ := tracing.StartNamedSpan(ctx, "c.Add()")
 	c.Add(item)
+	addSpan.Finish()
+
 	if s != nil {
-		span2, _ := tracing.StartNamedSpan(ctx, "s.OnChange()")
+		onChangeSpan, _ := tracing.StartNamedSpan(ctx, "s.OnChange()")
 		s.OnChange(r, item)
-		span2.Finish()
+		onChangeSpan.Finish()
 	}
 	return rl, nil
 }

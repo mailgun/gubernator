@@ -28,15 +28,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// // Reference implementation: LRUCache in github.com/mailgun/holster/v4/collections
-// type GCache interface {
-// 	Add(*CacheItem) bool
-// 	UpdateExpiration(key interface{}, expireAt int64) bool
-// 	GetItem(key interface{}) (value *CacheItem, ok bool)
-// 	Each() chan *CacheItem
-// 	Remove(key interface{})
-// }
-
 // So algorithms can interface with different cache implementations
 type Cache interface {
 	// Access methods
@@ -79,7 +70,7 @@ type CacheItem struct {
 	Key       string
 	Value     interface{}
 
-	// Timestamp when rate limit expires
+	// Timestamp when rate limit expires in epoch milliseconds.
 	ExpireAt int64
 	// Timestamp when the cache should invalidate this rate limit. This is useful when used in conjunction with
 	// a persistent store to ensure our node has the most up to date info from the store. Ignored if set to `0`

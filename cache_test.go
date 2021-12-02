@@ -1,6 +1,7 @@
 package gubernator_test
 
 import (
+	"math/rand"
 	"strconv"
 	"sync"
 	"testing"
@@ -189,6 +190,94 @@ func TestLRUCache(t *testing.T) {
 					cache.Lock()
 					cache.Add(item)
 					cache.Unlock()
+				}
+			}()
+		}
+
+		// Wait for goroutines to finish.
+		launchWg.Done()
+		doneWg.Wait()
+	})
+
+	t.Run("Read stats during concurrent reads/writes", func(t *testing.T) {
+		cache := gubernator.NewLRUCache(0)
+		expireAt := clock.Now().Add(1 * time.Hour).UnixMilli()
+
+		// Populate cache.
+		for i := 0; i < iterations; i++ {
+			key := strconv.Itoa(i)
+			item := &gubernator.CacheItem{
+				Key: key,
+				Value: i,
+				ExpireAt: expireAt,
+			}
+			cache.Lock()
+			cache.Add(item)
+			cache.Unlock()
+		}
+
+		assert.Equal(t, iterations, cache.Size())
+		var launchWg, doneWg sync.WaitGroup
+		launchWg.Add(1)
+
+		for thread := 0; thread < concurrency; thread++ {
+			doneWg.Add(3)
+
+			go func() {
+				defer doneWg.Done()
+				launchWg.Wait()
+
+				for i := 0; i < iterations; i++ {
+					// Get, cache hit.
+					key := strconv.Itoa(i)
+					cache.Lock()
+					_, _ = cache.GetItem(key)
+					cache.Unlock()
+
+					// Get, cache miss.
+					key2 := strconv.Itoa(rand.Intn(1000) + 10000)
+					cache.Lock()
+					_, _ = cache.GetItem(key2)
+					cache.Unlock()
+				}
+			}()
+
+			go func() {
+				defer doneWg.Done()
+				launchWg.Wait()
+
+				for i := 0; i < iterations; i++ {
+					// Add existing.
+					key := strconv.Itoa(i)
+					item := &gubernator.CacheItem{
+						Key: key,
+						Value: i,
+						ExpireAt: expireAt,
+					}
+					cache.Lock()
+					cache.Add(item)
+					cache.Unlock()
+
+					// Add new.
+					key2 := strconv.Itoa(rand.Intn(1000) + 20000)
+					item2 := &gubernator.CacheItem{
+						Key: key2,
+						Value: i,
+						ExpireAt: expireAt,
+					}
+					cache.Lock()
+					cache.Add(item2)
+					cache.Unlock()
+				}
+			}()
+
+			go func() {
+				defer doneWg.Done()
+				launchWg.Wait()
+
+				for i := 0; i < iterations; i++ {
+					// Get stats.
+					cache.Stats(false)
 				}
 			}()
 		}

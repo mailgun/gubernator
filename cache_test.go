@@ -17,57 +17,84 @@ import (
 func TestLRUCache(t *testing.T) {
 	const iterations = 1000
 	const concurrency = 100
+	expireAt := clock.Now().Add(1 * time.Hour).UnixMilli()
 
 	t.Run("Happy path", func(t *testing.T) {
-       cache := gubernator.NewLRUCache(0)
-       expireAt := clock.Now().Add(1 * time.Hour).UnixMilli()
-
-       // Populate cache.
-       for i := 0; i < iterations; i++ {
-               key := strconv.Itoa(i)
-               item := &gubernator.CacheItem{
-                       Key: key,
-                       Value: i,
-                       ExpireAt: expireAt,
-               }
-			   cache.Lock()
-               exists := cache.Add(item)
-			   cache.Unlock()
-               assert.False(t, exists)
-       }
-
-       // Validate cache.
-       assert.Equal(t, iterations, cache.Size())
-
-       for i := 0; i < iterations; i++ {
-               key := strconv.Itoa(i)
-			   cache.Lock()
-               item, ok := cache.GetItem(key)
-			   cache.Unlock()
-               require.True(t, ok)
-               require.NotNil(t, item)
-               assert.Equal(t, item.Value, i)
-       }
-
-       // Clear cache.
-       for i := 0; i < iterations; i++ {
-               key := strconv.Itoa(i)
-			   cache.Lock()
-               cache.Remove(key)
-			   cache.Unlock()
-       }
-
-       assert.Zero(t, cache.Size())
-	})
-
-	t.Run("Concurrent reads", func(t *testing.T) {
 		cache := gubernator.NewLRUCache(0)
-		expireAt := clock.Now().Add(1 * time.Hour).UnixMilli()
 
 		// Populate cache.
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
-			item := &gubernator.CacheItem{
+			item := gubernator.CacheItem{
+				Key: key,
+				Value: i,
+				ExpireAt: expireAt,
+			}
+			cache.Lock()
+			exists := cache.Add(item)
+			cache.Unlock()
+			assert.False(t, exists)
+		}
+
+		// Validate cache.
+		assert.Equal(t, iterations, cache.Size())
+
+		for i := 0; i < iterations; i++ {
+			key := strconv.Itoa(i)
+			cache.Lock()
+			item, ok := cache.GetItem(key)
+			cache.Unlock()
+			require.True(t, ok)
+			require.NotNil(t, item)
+			assert.Equal(t, item.Value, i)
+		}
+
+		// Clear cache.
+		for i := 0; i < iterations; i++ {
+			key := strconv.Itoa(i)
+			cache.Lock()
+			cache.Remove(key)
+			cache.Unlock()
+		}
+
+		assert.Zero(t, cache.Size())
+	})
+
+	t.Run("Update an existing key", func(t *testing.T) {
+		cache := gubernator.NewLRUCache(0)
+		const key = "foobar"
+
+		// Add key.
+		item1 := gubernator.CacheItem{
+			Key: key,
+			Value: "initial value",
+			ExpireAt: expireAt,
+		}
+		exists1 := cache.Add(item1)
+		require.False(t, exists1)
+
+		// Update same key.
+		item2 := gubernator.CacheItem{
+			Key: key,
+			Value: "new value",
+			ExpireAt: expireAt,
+		}
+		exists2 := cache.Add(item2)
+		require.True(t, exists2)
+
+		// Verify.
+		verifyItem, ok := cache.GetItem(key)
+		require.True(t, ok)
+		assert.Equal(t, item2, verifyItem)
+	})
+
+	t.Run("Concurrent reads", func(t *testing.T) {
+		cache := gubernator.NewLRUCache(0)
+
+		// Populate cache.
+		for i := 0; i < iterations; i++ {
+			key := strconv.Itoa(i)
+			item := gubernator.CacheItem{
 				Key: key,
 				Value: i,
 				ExpireAt: expireAt,
@@ -119,7 +146,7 @@ func TestLRUCache(t *testing.T) {
 
 				for i := 0; i < iterations; i++ {
 					key := strconv.Itoa(i)
-					item := &gubernator.CacheItem{
+					item := gubernator.CacheItem{
 						Key: key,
 						Value: i,
 						ExpireAt: expireAt,
@@ -139,12 +166,11 @@ func TestLRUCache(t *testing.T) {
 
 	t.Run("Concurrent reads and writes", func(t *testing.T) {
 		cache := gubernator.NewLRUCache(0)
-		expireAt := clock.Now().Add(1 * time.Hour).UnixMilli()
 
 		// Populate cache.
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
-			item := &gubernator.CacheItem{
+			item := gubernator.CacheItem{
 				Key: key,
 				Value: i,
 				ExpireAt: expireAt,
@@ -183,7 +209,7 @@ func TestLRUCache(t *testing.T) {
 
 				for i := 0; i < iterations; i++ {
 					key := strconv.Itoa(i)
-					item := &gubernator.CacheItem{
+					item := gubernator.CacheItem{
 						Key: key,
 						Value: i,
 						ExpireAt: expireAt,
@@ -202,12 +228,11 @@ func TestLRUCache(t *testing.T) {
 
 	t.Run("Collect metrics during concurrent reads/writes", func(t *testing.T) {
 		cache := gubernator.NewLRUCache(0)
-		expireAt := clock.Now().Add(1 * time.Hour).UnixMilli()
 
 		// Populate cache.
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
-			item := &gubernator.CacheItem{
+			item := gubernator.CacheItem{
 				Key: key,
 				Value: i,
 				ExpireAt: expireAt,
@@ -250,7 +275,7 @@ func TestLRUCache(t *testing.T) {
 				for i := 0; i < iterations; i++ {
 					// Add existing.
 					key := strconv.Itoa(i)
-					item := &gubernator.CacheItem{
+					item := gubernator.CacheItem{
 						Key: key,
 						Value: i,
 						ExpireAt: expireAt,
@@ -261,7 +286,7 @@ func TestLRUCache(t *testing.T) {
 
 					// Add new.
 					key2 := strconv.Itoa(rand.Intn(1000) + 20000)
-					item2 := &gubernator.CacheItem{
+					item2 := gubernator.CacheItem{
 						Key: key2,
 						Value: i,
 						ExpireAt: expireAt,

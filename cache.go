@@ -31,10 +31,10 @@ import (
 // So algorithms can interface with different cache implementations
 type Cache interface {
 	// Access methods
-	Add(*CacheItem) bool
+	Add(item CacheItem) bool
 	UpdateExpiration(key string, expireAt int64) bool
-	GetItem(key string) (value *CacheItem, ok bool)
-	Each() chan *CacheItem
+	GetItem(key string) (value CacheItem, ok bool)
+	Each() chan CacheItem
 	Remove(key string)
 
 	// If the cache is exclusive, this will control access to the cache
@@ -99,11 +99,11 @@ func (c *LRUCache) Unlock() {
 	c.mutex.Unlock()
 }
 
-func (c *LRUCache) Each() chan *CacheItem {
-	out := make(chan *CacheItem)
+func (c *LRUCache) Each() chan CacheItem {
+	out := make(chan CacheItem)
 	go func() {
 		for _, ele := range c.cache {
-			out <- ele.Value.(*CacheItem)
+			out <- ele.Value.(CacheItem)
 		}
 		close(out)
 	}()
@@ -111,17 +111,16 @@ func (c *LRUCache) Each() chan *CacheItem {
 }
 
 // Adds a value to the cache.
-func (c *LRUCache) Add(record *CacheItem) bool {
+func (c *LRUCache) Add(item CacheItem) bool {
 	// If the key already exist, set the new value
-	if ee, ok := c.cache[record.Key]; ok {
+	if ee, ok := c.cache[item.Key]; ok {
 		c.ll.MoveToFront(ee)
-		temp := ee.Value.(*CacheItem)
-		*temp = *record
+		ee.Value = item
 		return true
 	}
 
-	ele := c.ll.PushFront(record)
-	c.cache[record.Key] = ele
+	ele := c.ll.PushFront(item)
+	c.cache[item.Key] = ele
 	if c.cacheSize != 0 && c.ll.Len() > c.cacheSize {
 		c.removeOldest()
 	}
@@ -134,9 +133,9 @@ func MillisecondNow() int64 {
 }
 
 // GetItem returns the item stored in the cache
-func (c *LRUCache) GetItem(key string) (item *CacheItem, ok bool) {
+func (c *LRUCache) GetItem(key string) (item CacheItem, ok bool) {
 	if ele, hit := c.cache[key]; hit {
-		entry := ele.Value.(*CacheItem)
+		entry := ele.Value.(CacheItem)
 
 		now := MillisecondNow()
 		// If the entry is invalidated
@@ -179,7 +178,7 @@ func (c *LRUCache) removeOldest() {
 
 func (c *LRUCache) removeElement(e *list.Element) {
 	c.ll.Remove(e)
-	kv := e.Value.(*CacheItem)
+	kv := e.Value.(CacheItem)
 	delete(c.cache, kv.Key)
 }
 
@@ -191,7 +190,7 @@ func (c *LRUCache) Size() int {
 // Update the expiration time for the key
 func (c *LRUCache) UpdateExpiration(key string, expireAt int64) bool {
 	if ele, hit := c.cache[key]; hit {
-		entry := ele.Value.(*CacheItem)
+		entry := ele.Value.(CacheItem)
 		entry.ExpireAt = expireAt
 		return true
 	}

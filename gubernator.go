@@ -169,7 +169,7 @@ func (s *V1Instance) Close() error {
 	s.mutliRegion.Close()
 
 	// Write cache to store.
-	out := make(chan *CacheItem, 500)
+	out := make(chan CacheItem, 500)
 	go func() {
 		for item := range s.conf.Cache.Each() {
 			out <- item
@@ -450,7 +450,7 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 	tracing.LogInfo(span, "conf.Cache.Lock()")
 
 	for _, g := range r.Globals {
-		s.conf.Cache.Add(&CacheItem{
+		s.conf.Cache.Add(CacheItem{
 			ExpireAt:  g.Status.ResetTime,
 			Algorithm: g.Algorithm,
 			Value:     g.Status,

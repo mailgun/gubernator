@@ -208,7 +208,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		t.Remaining = r.Limit
 	}
 
-	item = &CacheItem{
+	item = CacheItem{
 		Algorithm: r.Algorithm,
 		Key:       r.HashKey(),
 		Value:     t,
@@ -398,7 +398,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		b.Remaining = 0
 	}
 
-	item = &CacheItem{
+	item = CacheItem{
 		ExpireAt:  now + duration,
 		Algorithm: r.Algorithm,
 		Key:       r.HashKey(),

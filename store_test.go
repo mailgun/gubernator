@@ -155,7 +155,7 @@ func TestStore(t *testing.T) {
 				now := gubernator.MillisecondNow()
 				// Expire 1 second from now
 				expire := now + gubernator.Second
-				store.CacheItems[req.HashKey()] = &gubernator.CacheItem{
+				store.CacheItems[req.HashKey()] = gubernator.CacheItem{
 					Algorithm: gubernator.Algorithm_TOKEN_BUCKET,
 					ExpireAt:  expire,
 					Key:       req.HashKey(),
@@ -189,7 +189,7 @@ func TestStore(t *testing.T) {
 			testCase: func(req *gubernator.RateLimitReq, store *gubernator.MockStore) {
 				// Expire 1 second from now
 				expire := gubernator.MillisecondNow() + gubernator.Second
-				store.CacheItems[req.HashKey()] = &gubernator.CacheItem{
+				store.CacheItems[req.HashKey()] = gubernator.CacheItem{
 					Algorithm: gubernator.Algorithm_LEAKY_BUCKET,
 					ExpireAt:  expire,
 					Key:       req.HashKey(),
@@ -287,7 +287,7 @@ func TestStore(t *testing.T) {
 	}
 }
 
-func getRemaining(item *gubernator.CacheItem) int64 {
+func getRemaining(item gubernator.CacheItem) int64 {
 	switch item.Algorithm {
 	case gubernator.Algorithm_TOKEN_BUCKET:
 		return item.Value.(*gubernator.TokenBucketItem).Remaining

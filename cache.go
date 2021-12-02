@@ -32,10 +32,10 @@ import (
 type Cache interface {
 	// Access methods
 	Add(*CacheItem) bool
-	UpdateExpiration(key interface{}, expireAt int64) bool
-	GetItem(key interface{}) (value *CacheItem, ok bool)
+	UpdateExpiration(key string, expireAt int64) bool
+	GetItem(key string) (value *CacheItem, ok bool)
 	Each() chan *CacheItem
-	Remove(key interface{})
+	Remove(key string)
 
 	// If the cache is exclusive, this will control access to the cache
 	Unlock()
@@ -51,7 +51,7 @@ type cachStats struct {
 
 // Cache is an thread unsafe LRU cache that supports expiration
 type LRUCache struct {
-	cache     map[interface{}]*list.Element
+	cache     map[string]*list.Element
 	mutex     sync.Mutex
 	ll        *list.List
 	stats     cachStats
@@ -86,7 +86,7 @@ func NewLRUCache(maxSize int) *LRUCache {
 	setter.SetDefault(&maxSize, 50_000)
 
 	return &LRUCache{
-		cache:     make(map[interface{}]*list.Element),
+		cache:     make(map[string]*list.Element),
 		ll:        list.New(),
 		cacheSize: maxSize,
 		sizeMetric: prometheus.NewDesc("gubernator_cache_size",
@@ -141,8 +141,7 @@ func MillisecondNow() int64 {
 }
 
 // GetItem returns the item stored in the cache
-func (c *LRUCache) GetItem(key interface{}) (item *CacheItem, ok bool) {
-
+func (c *LRUCache) GetItem(key string) (item *CacheItem, ok bool) {
 	if ele, hit := c.cache[key]; hit {
 		entry := ele.Value.(*CacheItem)
 
@@ -169,7 +168,7 @@ func (c *LRUCache) GetItem(key interface{}) (item *CacheItem, ok bool) {
 }
 
 // Remove removes the provided key from the cache.
-func (c *LRUCache) Remove(key interface{}) {
+func (c *LRUCache) Remove(key string) {
 	if ele, hit := c.cache[key]; hit {
 		c.removeElement(ele)
 	}
@@ -199,7 +198,7 @@ func (c *LRUCache) Stats(_ bool) cachStats {
 }
 
 // Update the expiration time for the key
-func (c *LRUCache) UpdateExpiration(key interface{}, expireAt int64) bool {
+func (c *LRUCache) UpdateExpiration(key string, expireAt int64) bool {
 	if ele, hit := c.cache[key]; hit {
 		entry := ele.Value.(*CacheItem)
 		entry.ExpireAt = expireAt

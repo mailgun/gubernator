@@ -340,7 +340,16 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	peerAddr := c.Info().GRPCAddress
 	queueLengthMetric.WithLabelValues(peerAddr).Observe(float64(len(c.queue)))
 
-	c.queue <- &req
+	select {
+	case c.queue <- &req:
+		// Successfully enqueued request.
+	case <-ctx.Done():
+		err := errors.Wrap(ctx.Err(), "Error while enqueuing request")
+		ext.LogError(span2, err)
+		span2.Finish()
+		return nil, err
+	}
+
 	span2.Finish()
 
 	c.wg.Add(1)

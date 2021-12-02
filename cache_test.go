@@ -1,6 +1,7 @@
 package gubernator_test
 
 import (
+	"context"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -17,6 +18,7 @@ import (
 func TestLRUCache(t *testing.T) {
 	const iterations = 1000
 	const concurrency = 100
+	ctx := context.Background()
 	expireAt := clock.Now().Add(1 * time.Hour).UnixMilli()
 
 	t.Run("Happy path", func(t *testing.T) {
@@ -30,7 +32,7 @@ func TestLRUCache(t *testing.T) {
 				Value: i,
 				ExpireAt: expireAt,
 			}
-			cache.Lock()
+			cache.Lock(ctx)
 			exists := cache.Add(item)
 			cache.Unlock()
 			assert.False(t, exists)
@@ -41,7 +43,7 @@ func TestLRUCache(t *testing.T) {
 
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
-			cache.Lock()
+			cache.Lock(ctx)
 			item, ok := cache.GetItem(key)
 			cache.Unlock()
 			require.True(t, ok)
@@ -52,7 +54,7 @@ func TestLRUCache(t *testing.T) {
 		// Clear cache.
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
-			cache.Lock()
+			cache.Lock(ctx)
 			cache.Remove(key)
 			cache.Unlock()
 		}
@@ -116,7 +118,7 @@ func TestLRUCache(t *testing.T) {
 
 				for i := 0; i < iterations; i++ {
 					key := strconv.Itoa(i)
-					cache.Lock()
+					cache.Lock(ctx)
 					item, ok := cache.GetItem(key)
 					cache.Unlock()
 					assert.True(t, ok)
@@ -151,7 +153,7 @@ func TestLRUCache(t *testing.T) {
 						Value: i,
 						ExpireAt: expireAt,
 					}
-					cache.Lock()
+					cache.Lock(ctx)
 					cache.Add(item)
 					cache.Unlock()
 				}
@@ -175,7 +177,7 @@ func TestLRUCache(t *testing.T) {
 				Value: i,
 				ExpireAt: expireAt,
 			}
-			cache.Lock()
+			cache.Lock(ctx)
 			exists := cache.Add(item)
 			cache.Unlock()
 			assert.False(t, exists)
@@ -194,7 +196,7 @@ func TestLRUCache(t *testing.T) {
 
 				for i := 0; i < iterations; i++ {
 					key := strconv.Itoa(i)
-					cache.Lock()
+					cache.Lock(ctx)
 					item, ok := cache.GetItem(key)
 					cache.Unlock()
 					assert.True(t, ok)
@@ -214,7 +216,7 @@ func TestLRUCache(t *testing.T) {
 						Value: i,
 						ExpireAt: expireAt,
 					}
-					cache.Lock()
+					cache.Lock(ctx)
 					cache.Add(item)
 					cache.Unlock()
 				}
@@ -237,7 +239,7 @@ func TestLRUCache(t *testing.T) {
 				Value: i,
 				ExpireAt: expireAt,
 			}
-			cache.Lock()
+			cache.Lock(ctx)
 			cache.Add(item)
 			cache.Unlock()
 		}
@@ -256,13 +258,13 @@ func TestLRUCache(t *testing.T) {
 				for i := 0; i < iterations; i++ {
 					// Get, cache hit.
 					key := strconv.Itoa(i)
-					cache.Lock()
+					cache.Lock(ctx)
 					_, _ = cache.GetItem(key)
 					cache.Unlock()
 
 					// Get, cache miss.
 					key2 := strconv.Itoa(rand.Intn(1000) + 10000)
-					cache.Lock()
+					cache.Lock(ctx)
 					_, _ = cache.GetItem(key2)
 					cache.Unlock()
 				}
@@ -280,7 +282,7 @@ func TestLRUCache(t *testing.T) {
 						Value: i,
 						ExpireAt: expireAt,
 					}
-					cache.Lock()
+					cache.Lock(ctx)
 					cache.Add(item)
 					cache.Unlock()
 
@@ -291,7 +293,7 @@ func TestLRUCache(t *testing.T) {
 						Value: i,
 						ExpireAt: expireAt,
 					}
-					cache.Lock()
+					cache.Lock(ctx)
 					cache.Add(item2)
 					cache.Unlock()
 				}

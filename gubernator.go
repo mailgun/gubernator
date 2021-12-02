@@ -24,7 +24,6 @@ import (
 	"sync/atomic"
 
 	"github.com/mailgun/gubernator/v2/tracing"
-	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/opentracing/opentracing-go/ext"
@@ -184,8 +183,6 @@ func (s *V1Instance) Close() error {
 // rate limit `Name` and `UniqueKey` is not owned by this instance then we forward the request to the
 // peer that does.
 func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*GetRateLimitsResp, error) {
-	ctx, cancel := context.WithTimeout(ctx, 500*clock.Millisecond)
-	defer cancel()
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
@@ -411,7 +408,13 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 	// access and possibly copy the req in this method.
 	defer s.global.QueueHit(req)
 
-	s.conf.Cache.Lock()
+	err := s.conf.Cache.Lock(ctx)
+	if err != nil {
+		err2 := errors.Wrap(err, "Error in conf.Cache.Lock()")
+		ext.LogError(span, err2)
+		span.Finish()
+		return nil, err2
+	}
 	tracing.LogInfo(span, "conf.Cache.Lock()")
 	item, ok := s.conf.Cache.GetItem(req.HashKey())
 	s.conf.Cache.Unlock()
@@ -445,7 +448,13 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
-	s.conf.Cache.Lock()
+	err := s.conf.Cache.Lock(ctx)
+	if err != nil {
+		err2 := errors.Wrap(err, "Error in conf.Cache.Lock()")
+		ext.LogError(span, err2)
+		span.Finish()
+		return nil, err2
+	}
 	defer s.conf.Cache.Unlock()
 	tracing.LogInfo(span, "conf.Cache.Lock()")
 
@@ -462,8 +471,6 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 
 // GetPeerRateLimits is called by other peers to get the rate limits owned by this peer.
 func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error) {
-	ctx, cancel := context.WithTimeout(ctx, 500*clock.Millisecond)
-	defer cancel()
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
@@ -567,14 +574,17 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 	lockTimer := prometheus.NewTimer(getPeerRateLimitLockDurationMetric)
 
 	lockSpan, _ := tracing.StartNamedSpan(ctx, "s.conf.Cache.Lock()")
-	s.conf.Cache.Lock()
+	err := s.conf.Cache.Lock(ctx)
+	if err != nil {
+		err2 := errors.Wrap(err, "Error in conf.Cache.Lock()")
+		ext.LogError(lockSpan, err2)
+		lockSpan.Finish()
+		return nil, err2
+	}
+
 	lockSpan.Finish()
 	defer s.conf.Cache.Unlock()
 	lockTimer.ObserveDuration()
-	lruCache := s.conf.Cache.(*LRUCache)
-	lockCounter := atomic.LoadUint64(&lruCache.LockCounter) - atomic.LoadUint64(&lruCache.UnlockCounter)
-	checkLockCounter.Observe(float64(lockCounter))
-	tracing.LogInfo(span, "conf.Cache.Lock()", "lockCounter", lockCounter)
 
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
 		s.global.QueueUpdate(r)
@@ -610,7 +620,7 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 		return resp, nil
 	}
 
-	err := fmt.Errorf("Invalid rate limit algorithm '%d'", r.Algorithm)
+	err = fmt.Errorf("Invalid rate limit algorithm '%d'", r.Algorithm)
 	ext.LogError(span, err)
 	return nil, err
 }
@@ -756,6 +766,10 @@ func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect fetches metrics from the server for use by prometheus
 func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
+	lruCache := s.conf.Cache.(*LRUCache)
+	lockCounter := atomic.LoadInt64(&lruCache.LockCounter) - atomic.LoadInt64(&lruCache.UnlockCounter)
+	checkLockCounter.Observe(float64(lockCounter))
+
 	ch <- s.global.asyncMetrics
 	ch <- s.global.broadcastMetrics
 	getRateLimitCounter.Collect(ch)

@@ -20,8 +20,9 @@ package gubernator
 
 import (
 	"container/list"
-	"sync"
+	"context"
 	"sync/atomic"
+	"time"
 
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/setter"
@@ -39,18 +40,18 @@ type Cache interface {
 
 	// If the cache is exclusive, this will control access to the cache
 	Unlock()
-	Lock()
+	Lock(ctx context.Context) error
 }
 
 // Cache is an thread unsafe LRU cache that supports expiration
 type LRUCache struct {
 	cache     map[string]*list.Element
-	mutex     sync.Mutex
 	ll        *list.List
 	cacheSize int
 
-	LockCounter   uint64
-	UnlockCounter uint64
+	LockCounter   int64
+	UnlockCounter int64
+	mutexCh       chan struct{}
 }
 
 type CacheItem struct {
@@ -81,22 +82,31 @@ var accessMetric = prometheus.NewCounterVec(prometheus.CounterOpts{
 // New creates a new Cache with a maximum size
 func NewLRUCache(maxSize int) *LRUCache {
 	setter.SetDefault(&maxSize, 50_000)
+	mutexCh := make(chan struct{}, 1)
+	mutexCh <- struct{}{}
 
 	return &LRUCache{
 		cache:     make(map[string]*list.Element),
 		ll:        list.New(),
 		cacheSize: maxSize,
+		mutexCh:   mutexCh,
 	}
 }
 
-func (c *LRUCache) Lock() {
-	atomic.AddUint64(&c.LockCounter, 1)
-	c.mutex.Lock()
+func (c *LRUCache) Lock(ctx context.Context) error {
+	atomic.AddInt64(&c.LockCounter, 1)
+	select {
+	case <-c.mutexCh:
+		return nil
+	case <-ctx.Done():
+		atomic.AddInt64(&c.LockCounter, -1)
+		return ctx.Err();
+	}
 }
 
 func (c *LRUCache) Unlock() {
-	atomic.AddUint64(&c.UnlockCounter, 1)
-	c.mutex.Unlock()
+	atomic.AddInt64(&c.UnlockCounter, 1)
+	c.mutexCh <- struct{}{}
 }
 
 func (c *LRUCache) Each() chan CacheItem {
@@ -205,8 +215,13 @@ func (c *LRUCache) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect fetches metric counts and gauges from the cache
 func (c *LRUCache) Collect(ch chan<- prometheus.Metric) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 500 * time.Millisecond)
+	defer cancel()
+	err := c.Lock(ctx)
+	if err != nil {
+		return
+	}
+	defer c.Unlock()
 
 	sizeMetric.Set(float64(len(c.cache)))
 	sizeMetric.Collect(ch)

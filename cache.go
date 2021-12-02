@@ -42,24 +42,12 @@ type Cache interface {
 	Lock()
 }
 
-// Holds stats collected about the cache
-type cachStats struct {
-	Size int64
-	Miss int64
-	Hit  int64
-}
-
 // Cache is an thread unsafe LRU cache that supports expiration
 type LRUCache struct {
 	cache     map[string]*list.Element
 	mutex     sync.Mutex
 	ll        *list.List
-	stats     cachStats
 	cacheSize int
-
-	// Stats
-	sizeMetric   *prometheus.Desc
-	accessMetric *prometheus.Desc
 
 	LockCounter   uint64
 	UnlockCounter uint64
@@ -81,6 +69,15 @@ type CacheItem struct {
 
 var _ Cache = &LRUCache{}
 
+var sizeMetric = prometheus.NewGauge(prometheus.GaugeOpts{
+	Name: "gubernator_cache_size",
+	Help: "The number of items in LRU Cache which holds the rate limits.",
+})
+var accessMetric = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Name: "gubernator_cache_access_count",
+	Help: "Cache access counts.  Label \"type\" = hit|miss.",
+}, []string{"type"})
+
 // New creates a new Cache with a maximum size
 func NewLRUCache(maxSize int) *LRUCache {
 	setter.SetDefault(&maxSize, 50_000)
@@ -89,10 +86,6 @@ func NewLRUCache(maxSize int) *LRUCache {
 		cache:     make(map[string]*list.Element),
 		ll:        list.New(),
 		cacheSize: maxSize,
-		sizeMetric: prometheus.NewDesc("gubernator_cache_size",
-			"The number of items in LRU Cache which holds the rate limits.", nil, nil),
-		accessMetric: prometheus.NewDesc("gubernator_cache_access_count",
-			"Cache access counts.", []string{"type"}, nil),
 	}
 }
 
@@ -149,21 +142,23 @@ func (c *LRUCache) GetItem(key string) (item *CacheItem, ok bool) {
 		// If the entry is invalidated
 		if entry.InvalidAt != 0 && entry.InvalidAt < now {
 			c.removeElement(ele)
-			c.stats.Miss++
+			accessMetric.WithLabelValues("miss").Add(1)
 			return
 		}
 
 		// If the entry has expired, remove it from the cache
 		if entry.ExpireAt < now {
 			c.removeElement(ele)
-			c.stats.Miss++
+			accessMetric.WithLabelValues("miss").Add(1)
 			return
 		}
-		c.stats.Hit++
+
+		accessMetric.WithLabelValues("hit").Add(1)
 		c.ll.MoveToFront(ele)
 		return entry, true
 	}
-	c.stats.Miss++
+
+	accessMetric.WithLabelValues("miss").Add(1)
 	return
 }
 
@@ -193,10 +188,6 @@ func (c *LRUCache) Size() int {
 	return c.ll.Len()
 }
 
-func (c *LRUCache) Stats(_ bool) cachStats {
-	return c.stats
-}
-
 // Update the expiration time for the key
 func (c *LRUCache) UpdateExpiration(key string, expireAt int64) bool {
 	if ele, hit := c.cache[key]; hit {
@@ -209,15 +200,16 @@ func (c *LRUCache) UpdateExpiration(key string, expireAt int64) bool {
 
 // Describe fetches prometheus metrics to be registered
 func (c *LRUCache) Describe(ch chan<- *prometheus.Desc) {
-	ch <- c.sizeMetric
-	ch <- c.accessMetric
+	sizeMetric.Describe(ch)
+	accessMetric.Describe(ch)
 }
 
 // Collect fetches metric counts and gauges from the cache
 func (c *LRUCache) Collect(ch chan<- prometheus.Metric) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	ch <- prometheus.MustNewConstMetric(c.accessMetric, prometheus.CounterValue, float64(c.stats.Hit), "hit")
-	ch <- prometheus.MustNewConstMetric(c.accessMetric, prometheus.CounterValue, float64(c.stats.Miss), "miss")
-	ch <- prometheus.MustNewConstMetric(c.sizeMetric, prometheus.GaugeValue, float64(len(c.cache)))
+
+	sizeMetric.Set(float64(len(c.cache)))
+	sizeMetric.Collect(ch)
+	accessMetric.Collect(ch)
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/holster/v4/clock"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -199,7 +200,7 @@ func TestLRUCache(t *testing.T) {
 		doneWg.Wait()
 	})
 
-	t.Run("Read stats during concurrent reads/writes", func(t *testing.T) {
+	t.Run("Collect metrics during concurrent reads/writes", func(t *testing.T) {
 		cache := gubernator.NewLRUCache(0)
 		expireAt := clock.Now().Add(1 * time.Hour).UnixMilli()
 
@@ -276,8 +277,9 @@ func TestLRUCache(t *testing.T) {
 				launchWg.Wait()
 
 				for i := 0; i < iterations; i++ {
-					// Get stats.
-					cache.Stats(false)
+					// Get metrics.
+					ch := make(chan prometheus.Metric, 10)
+					cache.Collect(ch)
 				}
 			}()
 		}

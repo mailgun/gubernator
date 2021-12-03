@@ -711,7 +711,7 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 
 // GetPeer returns a peer client for the hash key provided
 func (s *V1Instance) GetPeer(ctx context.Context, key string) (*PeerClient, error) {
-	span, _ := tracing.StartSpan(ctx)
+	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.GetPeer"))
@@ -720,18 +720,17 @@ func (s *V1Instance) GetPeer(ctx context.Context, key string) (*PeerClient, erro
 
 	lockSpan, _ := tracing.StartNamedSpan(ctx, "s.peerMutex.RLock()")
 	s.peerMutex.RLock()
+	defer s.peerMutex.RUnlock()
 	lockSpan.Finish()
 	lockTimer.ObserveDuration()
-	tracing.LogInfo(span, "peerMutex.RLock()")
 
 	peer, err := s.conf.LocalPicker.Get(key)
 	if err != nil {
-		s.peerMutex.RUnlock()
 		err2 := errors.Wrap(err, "Error in conf.LocalPicker.Get")
 		ext.LogError(span, err2)
 		return nil, err2
 	}
-	s.peerMutex.RUnlock()
+
 	return peer, nil
 }
 

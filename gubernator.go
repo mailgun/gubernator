@@ -109,10 +109,10 @@ var concurrentChecksCounter = prometheus.NewSummary(prometheus.SummaryOpts{
 		0.99: 0.001,
 	},
 })
-var checkErrorCounter = prometheus.NewCounter(prometheus.CounterOpts{
+var checkErrorCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Name: "gubernator_check_error_counter",
 	Help: "The number of errors while checking rate limits",
-})
+}, []string{"error"})
 
 // NewV1Instance instantiate a single instance of a gubernator peer and registers this
 // instance with the provided GRPCServer.
@@ -195,6 +195,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 	concurrentChecksCounter.Observe(float64(concurrentCounter))
 
 	if len(r.Requests) > maxBatchSize {
+		checkErrorCounter.WithLabelValues("Request too large").Add(1)
 		return nil, status.Errorf(codes.OutOfRange,
 			"Requests.RateLimits list too large; max size is '%d'", maxBatchSize)
 	}
@@ -228,6 +229,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 
 			peer, err = s.GetPeer(ctx2, key)
 			if err != nil {
+				checkErrorCounter.WithLabelValues("Peer not found").Add(1)
 				resp.Responses[i] = &RateLimitResp{
 					Error: fmt.Sprintf("while finding peer that owns rate limit '%s' - '%s'", key, err),
 				}
@@ -474,14 +476,6 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
-	// DEBUG: Find when the context cancels.
-	span2, _ := tracing.StartNamedSpan(ctx, "Context lifetime")
-	go func() {
-		<-ctx.Done()
-		span2.SetTag("context.error", ctx.Err().Error())
-		span2.Finish()
-	}()
-
 	span.SetTag("numRequests", len(r.Requests))
 
 	var resp GetPeerRateLimitsResp
@@ -489,6 +483,7 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	if len(r.Requests) > maxBatchSize {
 		err2 := fmt.Errorf("'PeerRequest.rate_limits' list too large; max size is '%d'", maxBatchSize)
 		ext.LogError(span, err2)
+		checkErrorCounter.WithLabelValues("Request too large").Add(1)
 		return nil, status.Error(codes.OutOfRange, err2.Error())
 	}
 
@@ -499,6 +494,7 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 			err2 := errors.Wrap(err, "Error in getRateLimit")
 			ext.LogError(span, err2)
 			rl = &RateLimitResp{Error: err2.Error()}
+			// checkErrorCounter is updated within getRateLimit().
 		}
 		resp.RateLimits = append(resp.RateLimits, rl)
 	}
@@ -576,9 +572,11 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 	lockSpan, _ := tracing.StartNamedSpan(ctx, "s.conf.Cache.Lock()")
 	err := s.conf.Cache.Lock(ctx)
 	if err != nil {
-		err2 := errors.Wrap(err, "Error in conf.Cache.Lock()")
+		msg := "Error in conf.Cache.Lock()"
+		err2 := errors.Wrap(err, msg)
 		ext.LogError(lockSpan, err2)
 		lockSpan.Finish()
+		countCheckError(err, err2.Error())
 		return nil, err2
 	}
 
@@ -602,8 +600,10 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 		defer tokenBucketTimer.ObserveDuration()
 		resp, err := tokenBucket(ctx, s.conf.Store, s.conf.Cache, r)
 		if err != nil {
-			err2 := errors.Wrap(err, "Error in tokenBucket")
+			msg := "Error in tokenBucket"
+			err2 := errors.Wrap(err, msg)
 			ext.LogError(span, err2)
+			countCheckError(err, msg)
 			return nil, err2
 		}
 		return resp, nil
@@ -613,8 +613,10 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 		defer leakyBucketTimer.ObserveDuration()
 		resp, err := leakyBucket(ctx, s.conf.Store, s.conf.Cache, r)
 		if err != nil {
-			err2 := errors.Wrap(err, "Error in leakyBucket")
+			msg := "Error in leakyBucket"
+			err2 := errors.Wrap(err, msg)
 			ext.LogError(span, err2)
+			countCheckError(err, msg)
 			return nil, err2
 		}
 		return resp, nil
@@ -622,6 +624,7 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 
 	err = fmt.Errorf("Invalid rate limit algorithm '%d'", r.Algorithm)
 	ext.LogError(span, err)
+	checkErrorCounter.WithLabelValues("Invalid algorithm").Add(1)
 	return nil, err
 }
 
@@ -797,4 +800,13 @@ func SetBehavior(b *Behavior, flag Behavior, set bool) {
 		mask := *b ^ flag
 		*b &= mask
 	}
+}
+
+// Count an error type in the checkErrorCounter metric.
+func countCheckError(err error, defaultType string) {
+	errorType := defaultType
+	if errors.Is(err, context.DeadlineExceeded) {
+		errorType = "Timeout"
+	}
+	checkErrorCounter.WithLabelValues(errorType).Add(1)
 }

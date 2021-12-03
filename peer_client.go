@@ -216,6 +216,7 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	if err := c.connect(ctx); err != nil {
 		err2 := errors.Wrap(err, "Error in connect")
 		ext.LogError(span, err2)
+		checkErrorCounter.WithLabelValues("Connect error").Add(1)
 		return nil, err2
 	}
 
@@ -234,6 +235,7 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	if err != nil {
 		err2 := errors.Wrap(err, "Error in client.GetPeerRateLimits")
 		ext.LogError(span, err2)
+		// checkErrorCounter is updated within client.GetPeerRateLimits().
 		return nil, err2
 	}
 
@@ -241,6 +243,7 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	if len(resp.RateLimits) != len(r.Requests) {
 		err = errors.New("number of rate limits in peer response does not match request")
 		ext.LogError(span, err)
+		checkErrorCounter.WithLabelValues("Item mismatch").Add(1)
 		return nil, err
 	}
 	return resp, nil
@@ -473,9 +476,9 @@ func (c *PeerClient) sendQueue(ctx context.Context, queue []*request) {
 			Error(logPart)
 		ext.LogError(span, err2)
 		c.setLastErr(err2)
+		// checkErrorCounter is updated within client.GetPeerRateLimits().
 
 		for _, r := range queue {
-			checkErrorCounter.Add(1)
 			r.resp <- &response{err: err}
 		}
 		return
@@ -487,7 +490,7 @@ func (c *PeerClient) sendQueue(ctx context.Context, queue []*request) {
 		ext.LogError(span, err)
 
 		for _, r := range queue {
-			checkErrorCounter.Add(1)
+			checkErrorCounter.WithLabelValues("Item mismatch").Add(1)
 			r.resp <- &response{err: err}
 		}
 		return

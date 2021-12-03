@@ -410,13 +410,7 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 	// access and possibly copy the req in this method.
 	defer s.global.QueueHit(req)
 
-	err := s.conf.Cache.Lock(ctx)
-	if err != nil {
-		err2 := errors.Wrap(err, "Error in conf.Cache.Lock()")
-		ext.LogError(span, err2)
-		span.Finish()
-		return nil, err2
-	}
+	s.conf.Cache.Lock()
 	tracing.LogInfo(span, "conf.Cache.Lock()")
 	item, ok := s.conf.Cache.GetItem(req.HashKey())
 	s.conf.Cache.Unlock()
@@ -450,13 +444,7 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
-	err := s.conf.Cache.Lock(ctx)
-	if err != nil {
-		err2 := errors.Wrap(err, "Error in conf.Cache.Lock()")
-		ext.LogError(span, err2)
-		span.Finish()
-		return nil, err2
-	}
+	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
 	tracing.LogInfo(span, "conf.Cache.Lock()")
 
@@ -567,22 +555,9 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 	requestTimer := prometheus.NewTimer(getPeerRateLimitDurationMetric)
 	defer requestTimer.ObserveDuration()
 	checkCounter.Add(1)
-	lockTimer := prometheus.NewTimer(getPeerRateLimitLockDurationMetric)
 
-	lockSpan, _ := tracing.StartNamedSpan(ctx, "s.conf.Cache.Lock()")
-	err := s.conf.Cache.Lock(ctx)
-	if err != nil {
-		msg := "Error in conf.Cache.Lock()"
-		err2 := errors.Wrap(err, msg)
-		ext.LogError(lockSpan, err2)
-		lockSpan.Finish()
-		countCheckError(err, err2.Error())
-		return nil, err2
-	}
-
-	lockSpan.Finish()
+	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
-	lockTimer.ObserveDuration()
 
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
 		s.global.QueueUpdate(r)
@@ -622,7 +597,7 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 		return resp, nil
 	}
 
-	err = fmt.Errorf("Invalid rate limit algorithm '%d'", r.Algorithm)
+	err := fmt.Errorf("Invalid rate limit algorithm '%d'", r.Algorithm)
 	ext.LogError(span, err)
 	checkErrorCounter.WithLabelValues("Invalid algorithm").Add(1)
 	return nil, err
@@ -759,7 +734,6 @@ func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
 	funcTimeMetric.Describe(ch)
 	asyncRequestsRetriesCounter.Describe(ch)
 	queueLengthMetric.Describe(ch)
-	checkLockCounter.Describe(ch)
 	concurrentChecksCounter.Describe(ch)
 	checkErrorCounter.Describe(ch)
 	overLimitCounter.Describe(ch)
@@ -768,10 +742,6 @@ func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect fetches metrics from the server for use by prometheus
 func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
-	lruCache := s.conf.Cache.(*LRUCache)
-	lockCounter := atomic.LoadInt64(&lruCache.LockCounter) - atomic.LoadInt64(&lruCache.UnlockCounter)
-	checkLockCounter.Observe(float64(lockCounter))
-
 	ch <- s.global.asyncMetrics
 	ch <- s.global.broadcastMetrics
 	getRateLimitCounter.Collect(ch)
@@ -780,7 +750,6 @@ func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
 	funcTimeMetric.Collect(ch)
 	asyncRequestsRetriesCounter.Collect(ch)
 	queueLengthMetric.Collect(ch)
-	checkLockCounter.Collect(ch)
 	concurrentChecksCounter.Collect(ch)
 	checkErrorCounter.Collect(ch)
 	overLimitCounter.Collect(ch)

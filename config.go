@@ -119,7 +119,10 @@ func (c *Config) SetDefaults() error {
 
 	setter.SetDefault(&c.LocalPicker, NewReplicatedConsistentHash(nil, defaultReplicas))
 	setter.SetDefault(&c.RegionPicker, NewRegionPicker(nil))
-	setter.SetDefault(&c.Cache, NewLRUCache(0))
+
+	if c.Cache == nil {
+		c.Cache = NewLRUCache(0)
+	}
 
 	if c.Behaviors.BatchLimit > maxBatchSize {
 		return fmt.Errorf("Behaviors.BatchLimit cannot exceed '%d'", maxBatchSize)
@@ -131,6 +134,19 @@ func (c *Config) SetDefaults() error {
 	}
 
 	return nil
+}
+
+func (c *Config) Close() error {
+	var err error
+
+	if c.Cache != nil {
+		if err2 := c.Cache.Close(); err2 != nil {
+			logrus.WithError(err2).Warn("Error in Cache.Close()")
+			err = err2
+		}
+	}
+
+	return err
 }
 
 type PeerInfo struct {

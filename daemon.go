@@ -56,6 +56,7 @@ type Daemon struct {
 	statsHandler *GRPCStatsHandler
 	promRegister *prometheus.Registry
 	gwCancel     context.CancelFunc
+	gubeConfig   Config
 }
 
 // SpawnDaemon starts a new gubernator daemon according to the provided DaemonConfig.
@@ -81,7 +82,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 	var err error
 
 	// The LRU cache we store rate limits in
-	cache := NewLRUCache(s.conf.CacheSize)
+	cache := NewSyncLRUCache(s.conf.CacheSize)
 
 	// cache also implements prometheus.Collector interface
 	s.promRegister = prometheus.NewRegistry()
@@ -125,14 +126,15 @@ func (s *Daemon) Start(ctx context.Context) error {
 	s.grpcSrvs = append(s.grpcSrvs, grpc.NewServer(opts...))
 
 	// Registers a new gubernator instance with the GRPC server
-	s.V1Server, err = NewV1Instance(Config{
+	s.gubeConfig = Config{
 		PeerTLS:     s.conf.ClientTLS(),
 		DataCenter:  s.conf.DataCenter,
 		LocalPicker: s.conf.Picker,
 		GRPCServers: s.grpcSrvs,
 		Logger:      s.log,
 		Cache:       cache,
-	})
+	}
+	s.V1Server, err = NewV1Instance(s.gubeConfig)
 	if err != nil {
 		return errors.Wrap(err, "while creating new gubernator instance")
 	}
@@ -325,6 +327,7 @@ func (s *Daemon) Close() {
 	s.wg.Stop()
 	s.statsHandler.Close()
 	s.gwCancel()
+	_ = s.gubeConfig.Close()
 	s.httpSrv = nil
 	s.grpcSrvs = nil
 }

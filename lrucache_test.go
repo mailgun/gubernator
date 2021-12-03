@@ -1,7 +1,6 @@
 package gubernator_test
 
 import (
-	"context"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -18,8 +17,8 @@ import (
 func TestLRUCache(t *testing.T) {
 	const iterations = 1000
 	const concurrency = 100
-	ctx := context.Background()
 	expireAt := clock.Now().Add(1 * time.Hour).UnixMilli()
+	var mutex sync.Mutex
 
 	t.Run("Happy path", func(t *testing.T) {
 		cache := gubernator.NewLRUCache(0)
@@ -32,9 +31,9 @@ func TestLRUCache(t *testing.T) {
 				Value: i,
 				ExpireAt: expireAt,
 			}
-			cache.Lock(ctx)
+			mutex.Lock()
 			exists := cache.Add(item)
-			cache.Unlock()
+			mutex.Unlock()
 			assert.False(t, exists)
 		}
 
@@ -43,9 +42,9 @@ func TestLRUCache(t *testing.T) {
 
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
-			cache.Lock(ctx)
+			mutex.Lock()
 			item, ok := cache.GetItem(key)
-			cache.Unlock()
+			mutex.Unlock()
 			require.True(t, ok)
 			require.NotNil(t, item)
 			assert.Equal(t, item.Value, i)
@@ -54,9 +53,9 @@ func TestLRUCache(t *testing.T) {
 		// Clear cache.
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
-			cache.Lock(ctx)
+			mutex.Lock()
 			cache.Remove(key)
-			cache.Unlock()
+			mutex.Unlock()
 		}
 
 		assert.Zero(t, cache.Size())
@@ -118,9 +117,9 @@ func TestLRUCache(t *testing.T) {
 
 				for i := 0; i < iterations; i++ {
 					key := strconv.Itoa(i)
-					cache.Lock(ctx)
+					mutex.Lock()
 					item, ok := cache.GetItem(key)
-					cache.Unlock()
+					mutex.Unlock()
 					assert.True(t, ok)
 					require.NotNil(t, item)
 					assert.Equal(t, item.Value, i)
@@ -153,9 +152,9 @@ func TestLRUCache(t *testing.T) {
 						Value: i,
 						ExpireAt: expireAt,
 					}
-					cache.Lock(ctx)
+					mutex.Lock()
 					cache.Add(item)
-					cache.Unlock()
+					mutex.Unlock()
 				}
 			}()
 		}
@@ -177,9 +176,9 @@ func TestLRUCache(t *testing.T) {
 				Value: i,
 				ExpireAt: expireAt,
 			}
-			cache.Lock(ctx)
+			mutex.Lock()
 			exists := cache.Add(item)
-			cache.Unlock()
+			mutex.Unlock()
 			assert.False(t, exists)
 		}
 
@@ -196,9 +195,9 @@ func TestLRUCache(t *testing.T) {
 
 				for i := 0; i < iterations; i++ {
 					key := strconv.Itoa(i)
-					cache.Lock(ctx)
+					mutex.Lock()
 					item, ok := cache.GetItem(key)
-					cache.Unlock()
+					mutex.Unlock()
 					assert.True(t, ok)
 					require.NotNil(t, item)
 					assert.Equal(t, item.Value, i)
@@ -216,9 +215,9 @@ func TestLRUCache(t *testing.T) {
 						Value: i,
 						ExpireAt: expireAt,
 					}
-					cache.Lock(ctx)
+					mutex.Lock()
 					cache.Add(item)
-					cache.Unlock()
+					mutex.Unlock()
 				}
 			}()
 		}
@@ -239,9 +238,9 @@ func TestLRUCache(t *testing.T) {
 				Value: i,
 				ExpireAt: expireAt,
 			}
-			cache.Lock(ctx)
+			mutex.Lock()
 			cache.Add(item)
-			cache.Unlock()
+			mutex.Unlock()
 		}
 
 		assert.Equal(t, iterations, cache.Size())
@@ -258,15 +257,15 @@ func TestLRUCache(t *testing.T) {
 				for i := 0; i < iterations; i++ {
 					// Get, cache hit.
 					key := strconv.Itoa(i)
-					cache.Lock(ctx)
+					mutex.Lock()
 					_, _ = cache.GetItem(key)
-					cache.Unlock()
+					mutex.Unlock()
 
 					// Get, cache miss.
 					key2 := strconv.Itoa(rand.Intn(1000) + 10000)
-					cache.Lock(ctx)
+					mutex.Lock()
 					_, _ = cache.GetItem(key2)
-					cache.Unlock()
+					mutex.Unlock()
 				}
 			}()
 
@@ -282,9 +281,9 @@ func TestLRUCache(t *testing.T) {
 						Value: i,
 						ExpireAt: expireAt,
 					}
-					cache.Lock(ctx)
+					mutex.Lock()
 					cache.Add(item)
-					cache.Unlock()
+					mutex.Unlock()
 
 					// Add new.
 					key2 := strconv.Itoa(rand.Intn(1000) + 20000)
@@ -293,9 +292,9 @@ func TestLRUCache(t *testing.T) {
 						Value: i,
 						ExpireAt: expireAt,
 					}
-					cache.Lock(ctx)
+					mutex.Lock()
 					cache.Add(item2)
-					cache.Unlock()
+					mutex.Unlock()
 				}
 			}()
 
@@ -312,6 +311,220 @@ func TestLRUCache(t *testing.T) {
 		}
 
 		// Wait for goroutines to finish.
+		launchWg.Done()
+		doneWg.Wait()
+	})
+}
+
+func BenchmarkLRUCache(b *testing.B) {
+	var mutex sync.Mutex
+
+	b.Run("Sequential reads", func(b *testing.B) {
+		cache := gubernator.NewLRUCache(b.N)
+		expireAt := clock.Now().Add(1 * time.Hour).UnixMilli()
+
+		// Populate cache.
+		for i := 0; i < b.N; i++ {
+			key := strconv.Itoa(i)
+			item := gubernator.CacheItem{
+				Key: key,
+				Value: i,
+				ExpireAt: expireAt,
+			}
+			exists := cache.Add(item)
+			assert.False(b, exists)
+		}
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			key := strconv.Itoa(i)
+			mutex.Lock()
+			_, _ = cache.GetItem(key)
+			mutex.Unlock()
+		}
+	})
+
+	b.Run("Sequential writes", func(b *testing.B) {
+		cache := gubernator.NewLRUCache(0)
+		expireAt := clock.Now().Add(1 * time.Hour).UnixMilli()
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			key := strconv.Itoa(i)
+			item := gubernator.CacheItem{
+				Key: key,
+				Value: i,
+				ExpireAt: expireAt,
+			}
+			mutex.Lock()
+			cache.Add(item)
+			mutex.Unlock()
+		}
+	})
+
+	b.Run("Concurrent reads", func(b *testing.B) {
+		cache := gubernator.NewLRUCache(b.N)
+		expireAt := clock.Now().Add(1 * time.Hour).UnixMilli()
+
+		// Populate cache.
+		for i := 0; i < b.N; i++ {
+			key := strconv.Itoa(i)
+			item := gubernator.CacheItem{
+				Key: key,
+				Value: i,
+				ExpireAt: expireAt,
+			}
+			exists := cache.Add(item)
+			assert.False(b, exists)
+		}
+
+		var launchWg, doneWg sync.WaitGroup
+		launchWg.Add(1)
+
+		for i := 0; i < b.N; i++ {
+			key := strconv.Itoa(i)
+			doneWg.Add(1)
+
+			go func() {
+				defer doneWg.Done()
+				launchWg.Wait()
+
+				mutex.Lock()
+				_, _ = cache.GetItem(key)
+				mutex.Unlock()
+			}()
+		}
+
+		b.ReportAllocs()
+		b.ResetTimer()
+		launchWg.Done()
+		doneWg.Wait()
+	})
+
+	b.Run("Concurrent writes", func(b *testing.B) {
+		cache := gubernator.NewLRUCache(0)
+		expireAt := clock.Now().Add(1 * time.Hour).UnixMilli()
+		var launchWg, doneWg sync.WaitGroup
+		launchWg.Add(1)
+
+		for i := 0; i < b.N; i++ {
+			key := strconv.Itoa(i)
+			doneWg.Add(1)
+
+			go func() {
+				defer doneWg.Done()
+				launchWg.Wait()
+
+				item := gubernator.CacheItem{
+					Key: key,
+					Value: i,
+					ExpireAt: expireAt,
+				}
+				mutex.Lock()
+				cache.Add(item)
+				mutex.Unlock()
+			}()
+		}
+
+		b.ReportAllocs()
+		b.ResetTimer()
+		launchWg.Done()
+		doneWg.Wait()
+	})
+
+	b.Run("Concurrent reads and writes of existing keys", func(b *testing.B) {
+		cache := gubernator.NewLRUCache(0)
+		expireAt := clock.Now().Add(1 * time.Hour).UnixMilli()
+		var launchWg, doneWg sync.WaitGroup
+		launchWg.Add(1)
+
+		// Populate cache.
+		for i := 0; i < b.N; i++ {
+			key := strconv.Itoa(i)
+			item := gubernator.CacheItem{
+				Key: key,
+				Value: i,
+				ExpireAt: expireAt,
+			}
+			exists := cache.Add(item)
+			assert.False(b, exists)
+		}
+
+		for i := 0; i < b.N; i++ {
+			key := strconv.Itoa(i)
+			doneWg.Add(2)
+
+			go func() {
+				defer doneWg.Done()
+				launchWg.Wait()
+
+				mutex.Lock()
+				_, _ = cache.GetItem(key)
+				mutex.Unlock()
+			}()
+
+			go func() {
+				defer doneWg.Done()
+				launchWg.Wait()
+
+				item := gubernator.CacheItem{
+					Key: key,
+					Value: i,
+					ExpireAt: expireAt,
+				}
+				mutex.Lock()
+				cache.Add(item)
+				mutex.Unlock()
+			}()
+		}
+
+		b.ReportAllocs()
+		b.ResetTimer()
+		launchWg.Done()
+		doneWg.Wait()
+	})
+
+	b.Run("Concurrent reads and writes of non-existent keys", func(b *testing.B) {
+		cache := gubernator.NewLRUCache(0)
+		expireAt := clock.Now().Add(1 * time.Hour).UnixMilli()
+		var launchWg, doneWg sync.WaitGroup
+		launchWg.Add(1)
+
+		for i := 0; i < b.N; i++ {
+			doneWg.Add(2)
+
+			go func() {
+				defer doneWg.Done()
+				launchWg.Wait()
+
+				key := strconv.Itoa(i)
+				mutex.Lock()
+				_, _ = cache.GetItem(key)
+				mutex.Unlock()
+			}()
+
+			go func() {
+				defer doneWg.Done()
+				launchWg.Wait()
+
+				key := "z" + strconv.Itoa(i)
+				item := gubernator.CacheItem{
+					Key: key,
+					Value: i,
+					ExpireAt: expireAt,
+				}
+				mutex.Lock()
+				cache.Add(item)
+				mutex.Unlock()
+			}()
+		}
+
+		b.ReportAllocs()
+		b.ResetTimer()
 		launchWg.Done()
 		doneWg.Wait()
 	})

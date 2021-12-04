@@ -19,6 +19,7 @@ package gubernator
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -41,6 +42,8 @@ const (
 type V1Instance struct {
 	UnimplementedV1Server
 	UnimplementedPeersV1Server
+
+	handler     *HandlerPool
 	global      *globalManager
 	mutliRegion *mutliRegionManager
 	peerMutex   sync.RWMutex
@@ -55,6 +58,7 @@ func NewV1Instance(conf Config) (*V1Instance, error) {
 	if conf.GRPCServers == nil {
 		return nil, errors.New("at least one GRPCServer instance is required")
 	}
+
 	if err := conf.SetDefaults(); err != nil {
 		return nil, err
 	}
@@ -65,6 +69,7 @@ func NewV1Instance(conf Config) (*V1Instance, error) {
 	}
 	setter.SetDefault(&s.log, logrus.WithField("category", "gubernator"))
 
+	s.handler = spawnHandlerPool(conf, runtime.NumCPU())
 	s.global = newGlobalManager(conf.Behaviors, &s)
 	s.mutliRegion = newMultiRegionManager(conf.Behaviors, &s)
 
@@ -269,6 +274,10 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 // getGlobalRateLimit handles rate limits that are marked as `Behavior = GLOBAL`. Rate limit responses
 // are returned from the local cache and the hits are queued to be sent to the owning peer.
 func (s *V1Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, error) {
+
+	// TODO: Move this code into HandlerPool go routine
+	//  This method should send the `req` to that go routine for it to handle this code
+
 	// Queue the hit for async update after we have prepared our response.
 	// NOTE: The defer here avoids a race condition where we queue the req to
 	// be forwarded to the owning peer in a separate goroutine but simultaneously
@@ -297,6 +306,9 @@ func (s *V1Instance) getGlobalRateLimit(req *RateLimitReq) (*RateLimitResp, erro
 // UpdatePeerGlobals updates the local cache with a list of global rate limits. This method should only
 // be called by a peer who is the owner of a global rate limit.
 func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
+	// TODO: Move this code into HandlerPool go routine
+	//  This method should send the `UpdatePeerGlobalsReq` to that go routine for it to handle this code
+
 	s.conf.Cache.Lock()
 	defer s.conf.Cache.Unlock()
 
@@ -376,8 +388,8 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*Healt
 }
 
 func (s *V1Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
-	s.conf.Cache.Lock()
-	defer s.conf.Cache.Unlock()
+	//s.conf.Cache.Lock()
+	//defer s.conf.Cache.Unlock()
 
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
 		s.global.QueueUpdate(r)
@@ -387,13 +399,7 @@ func (s *V1Instance) getRateLimit(r *RateLimitReq) (*RateLimitResp, error) {
 		s.mutliRegion.QueueHits(r)
 	}
 
-	switch r.Algorithm {
-	case Algorithm_TOKEN_BUCKET:
-		return tokenBucket(s.conf.Store, s.conf.Cache, r)
-	case Algorithm_LEAKY_BUCKET:
-		return leakyBucket(s.conf.Store, s.conf.Cache, r)
-	}
-	return nil, errors.Errorf("invalid rate limit algorithm '%d'", r.Algorithm)
+	return s.handler.Handle(r)
 }
 
 // SetPeers is called by the implementor to indicate the pool of peers has changed

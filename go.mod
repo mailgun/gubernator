@@ -3,6 +3,7 @@ module github.com/mailgun/gubernator/v2
 go 1.14
 
 require (
+	github.com/OneOfOne/xxhash v1.2.8
 	github.com/davecgh/go-spew v1.1.1
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.5.0
 	github.com/hashicorp/memberlist v0.2.4

@@ -36,6 +36,8 @@ type Cache interface {
 	Each() chan *CacheItem
 	Remove(key interface{})
 
+	New() Cache
+
 	// If the cache is exclusive, this will control access to the cache
 	Unlock()
 	Lock()
@@ -90,6 +92,11 @@ func NewLRUCache(maxSize int) *LRUCache {
 		accessMetric: prometheus.NewDesc("gubernator_cache_access_count",
 			"Cache access counts.", []string{"type"}, nil),
 	}
+}
+
+// New returns a new instance of the cache with the same config as the original
+func (c *LRUCache) New() Cache {
+	return NewLRUCache(c.cacheSize)
 }
 
 func (c *LRUCache) Lock() {

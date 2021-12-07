@@ -186,3 +186,7 @@ func (c *SyncLRUCache) Describe(ch chan<- *prometheus.Desc) {
 func (c *SyncLRUCache) Collect(ch chan<- prometheus.Metric) {
 	c.cache.Collect(ch)
 }
+
+func (c *SyncLRUCache) New() Cache {
+	return NewSyncLRUCache(c.cache.cacheSize)
+}

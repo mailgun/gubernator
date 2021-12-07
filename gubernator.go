@@ -19,6 +19,7 @@ package gubernator
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -51,6 +52,7 @@ type V1Instance struct {
 	conf                 Config
 	isClosed             bool
 	getRateLimitsCounter int64
+	checkHandlerPool     *checkHandlerPool
 }
 
 var getRateLimitCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -130,6 +132,8 @@ func NewV1Instance(conf Config) (*V1Instance, error) {
 	}
 	setter.SetDefault(&s.log, logrus.WithField("category", "gubernator"))
 
+	numCpus := runtime.NumCPU()
+	s.checkHandlerPool = newCheckHandlerPool(conf, numCpus)
 	s.global = newGlobalManager(conf.Behaviors, &s)
 	s.mutliRegion = newMultiRegionManager(conf.Behaviors, &s)
 
@@ -167,15 +171,34 @@ func (s *V1Instance) Close() error {
 	s.global.Close()
 	s.mutliRegion.Close()
 
-	// Write cache to store.
+	err := s.storeCache()
+	if err != nil {
+		logrus.WithError(err).Error("Error in storeCache")
+		return errors.Wrap(err, "Error in storeCache")
+	}
+
+	err = s.checkHandlerPool.Close()
+	if err != nil {
+		logrus.WithError(err).Error("Error in checkHandlerPool.Close")
+		return errors.Wrap(err, "Error in checkHandlerPool.Close")
+	}
+
+	s.isClosed = true
+	return nil
+}
+
+// Write cache to store.
+func (s *V1Instance) storeCache() error {
+	// TODO: Update for checkHandlerPool.
 	out := make(chan CacheItem, 500)
+
 	go func() {
 		for item := range s.conf.Cache.Each() {
 			out <- item
 		}
 		close(out)
 	}()
-	s.isClosed = true
+
 	return s.conf.Loader.Save(out)
 }
 
@@ -399,6 +422,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 // getGlobalRateLimit handles rate limits that are marked as `Behavior = GLOBAL`. Rate limit responses
 // are returned from the local cache and the hits are queued to be sent to the owning peer.
 func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) (*RateLimitResp, error) {
+	// TODO: Update for checkHandlerPool.
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
@@ -441,6 +465,7 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 // UpdatePeerGlobals updates the local cache with a list of global rate limits. This method should only
 // be called by a peer who is the owner of a global rate limit.
 func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
+	// TODO: Update for checkHandlerPool.
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
@@ -556,9 +581,6 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 	defer requestTimer.ObserveDuration()
 	checkCounter.Add(1)
 
-	s.conf.Cache.Lock()
-	defer s.conf.Cache.Unlock()
-
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
 		s.global.QueueUpdate(r)
 		tracing.LogInfo(span, "s.global.QueueUpdate(r)")
@@ -569,38 +591,7 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 		tracing.LogInfo(span, "s.mutliRegion.QueueHits(r)")
 	}
 
-	switch r.Algorithm {
-	case Algorithm_TOKEN_BUCKET:
-		tokenBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit_tokenBucket"))
-		defer tokenBucketTimer.ObserveDuration()
-		resp, err := tokenBucket(ctx, s.conf.Store, s.conf.Cache, r)
-		if err != nil {
-			msg := "Error in tokenBucket"
-			err2 := errors.Wrap(err, msg)
-			ext.LogError(span, err2)
-			countCheckError(err, msg)
-			return nil, err2
-		}
-		return resp, nil
-
-	case Algorithm_LEAKY_BUCKET:
-		leakyBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit_leakyBucket"))
-		defer leakyBucketTimer.ObserveDuration()
-		resp, err := leakyBucket(ctx, s.conf.Store, s.conf.Cache, r)
-		if err != nil {
-			msg := "Error in leakyBucket"
-			err2 := errors.Wrap(err, msg)
-			ext.LogError(span, err2)
-			countCheckError(err, msg)
-			return nil, err2
-		}
-		return resp, nil
-	}
-
-	err := fmt.Errorf("Invalid rate limit algorithm '%d'", r.Algorithm)
-	ext.LogError(span, err)
-	checkErrorCounter.WithLabelValues("Invalid algorithm").Add(1)
-	return nil, err
+	return s.checkHandlerPool.Handle(ctx, r)
 }
 
 // SetPeers is called by the implementor to indicate the pool of peers has changed

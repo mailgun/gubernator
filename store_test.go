@@ -35,9 +35,9 @@ type v1Server struct {
 	srv      *gubernator.V1Instance
 }
 
-func (s *v1Server) Close() {
+func (s *v1Server) Close() error {
 	s.conf.GRPCServers[0].GracefulStop()
-	s.srv.Close()
+	return s.srv.Close()
 }
 
 // Start a single instance of V1Server with the provided config and listening address.
@@ -107,7 +107,8 @@ func TestLoader(t *testing.T) {
 	require.Equal(t, 1, len(resp.Responses))
 	require.Equal(t, "", resp.Responses[0].Error)
 
-	srv.Close()
+	err = srv.Close()
+	require.NoError(t, err, "Error in srv.Close")
 
 	// Loader.Save() should been called during gubernator shutdown
 	assert.Equal(t, 1, loader.Called["Load()"])

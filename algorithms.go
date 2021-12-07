@@ -21,12 +21,15 @@ import (
 
 	"github.com/mailgun/gubernator/v2/tracing"
 	"github.com/mailgun/holster/v4/clock"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket
 func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
+	tokenBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("tokenBucket"))
+	defer tokenBucketTimer.ObserveDuration()
 
 	getSpan, _ := tracing.StartNamedSpan(ctx, "c.GetItem()")
 	item, ok := c.GetItem(r.HashKey())
@@ -231,6 +234,8 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
+	leakyBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit_leakyBucket"))
+	defer leakyBucketTimer.ObserveDuration()
 
 	if r.Burst == 0 {
 		r.Burst = r.Limit

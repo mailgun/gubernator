@@ -29,6 +29,9 @@ type Cache interface {
 	Lock()
 
 	Close() error
+
+	// Create a new instance of the current cache implementation.
+	New() Cache
 }
 
 type CacheItem struct {

@@ -191,3 +191,7 @@ func (c *LRUCache) Close() error {
 	c.ll = nil
 	return nil
 }
+
+func (c *LRUCache) New() Cache {
+	return NewLRUCache(c.cacheSize)
+}

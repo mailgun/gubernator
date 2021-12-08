@@ -212,9 +212,9 @@ func (chp *gubernatorPool) GetRateLimit(ctx context.Context, rlRequest *RateLimi
 	// Delegate request to assigned channel based on request key.
 	worker := chp.getWorker(rlRequest.UniqueKey)
 	handlerRequest := &request{
+		ctx:     ctx,
 		resp:    make(chan *response, 1),
 		request: rlRequest,
-		ctx:     ctx,
 	}
 
 	// Send request.
@@ -337,6 +337,7 @@ func (chp *gubernatorPool) Load(ctx context.Context) error {
 
 			// Tie up the worker while loading.
 			worker.loadRequest <- poolLoadRequest{
+				ctx:      ctx,
 				response: loadCh.respChan,
 				in:       loadCh.ch,
 			}
@@ -421,13 +422,14 @@ func (chp *gubernatorPool) Store(ctx context.Context) error {
 	for _, worker := range chp.workers {
 		wg.Add(1)
 
-		go func() {
+		go func(worker *poolWorker) {
 			span2, ctx2 := tracing.StartNamedSpan(ctx, fmt.Sprintf("%x", worker.hash))
 			defer span2.Finish()
 			defer wg.Done()
 
 			respChan := make(chan poolStoreResponse)
 			req := poolStoreRequest{
+				ctx:      ctx2,
 				response: respChan,
 				out:      out,
 			}
@@ -451,7 +453,7 @@ func (chp *gubernatorPool) Store(ctx context.Context) error {
 				ext.LogError(span2, ctx2.Err())
 				return
 			}
-		}()
+		}(worker)
 	}
 
 	// When all iterators are done, close `out` channel.

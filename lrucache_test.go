@@ -27,8 +27,8 @@ func TestLRUCache(t *testing.T) {
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
 			item := gubernator.CacheItem{
-				Key: key,
-				Value: i,
+				Key:      key,
+				Value:    i,
 				ExpireAt: expireAt,
 			}
 			mutex.Lock()
@@ -67,8 +67,8 @@ func TestLRUCache(t *testing.T) {
 
 		// Add key.
 		item1 := gubernator.CacheItem{
-			Key: key,
-			Value: "initial value",
+			Key:      key,
+			Value:    "initial value",
 			ExpireAt: expireAt,
 		}
 		exists1 := cache.Add(item1)
@@ -76,8 +76,8 @@ func TestLRUCache(t *testing.T) {
 
 		// Update same key.
 		item2 := gubernator.CacheItem{
-			Key: key,
-			Value: "new value",
+			Key:      key,
+			Value:    "new value",
 			ExpireAt: expireAt,
 		}
 		exists2 := cache.Add(item2)
@@ -96,8 +96,8 @@ func TestLRUCache(t *testing.T) {
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
 			item := gubernator.CacheItem{
-				Key: key,
-				Value: i,
+				Key:      key,
+				Value:    i,
 				ExpireAt: expireAt,
 			}
 			exists := cache.Add(item)
@@ -148,8 +148,8 @@ func TestLRUCache(t *testing.T) {
 				for i := 0; i < iterations; i++ {
 					key := strconv.Itoa(i)
 					item := gubernator.CacheItem{
-						Key: key,
-						Value: i,
+						Key:      key,
+						Value:    i,
 						ExpireAt: expireAt,
 					}
 					mutex.Lock()
@@ -164,7 +164,6 @@ func TestLRUCache(t *testing.T) {
 		doneWg.Wait()
 	})
 
-
 	t.Run("Concurrent reads and writes", func(t *testing.T) {
 		cache := gubernator.NewLRUCache(0)
 
@@ -172,8 +171,8 @@ func TestLRUCache(t *testing.T) {
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
 			item := gubernator.CacheItem{
-				Key: key,
-				Value: i,
+				Key:      key,
+				Value:    i,
 				ExpireAt: expireAt,
 			}
 			mutex.Lock()
@@ -211,8 +210,8 @@ func TestLRUCache(t *testing.T) {
 				for i := 0; i < iterations; i++ {
 					key := strconv.Itoa(i)
 					item := gubernator.CacheItem{
-						Key: key,
-						Value: i,
+						Key:      key,
+						Value:    i,
 						ExpireAt: expireAt,
 					}
 					mutex.Lock()
@@ -234,8 +233,8 @@ func TestLRUCache(t *testing.T) {
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
 			item := gubernator.CacheItem{
-				Key: key,
-				Value: i,
+				Key:      key,
+				Value:    i,
 				ExpireAt: expireAt,
 			}
 			mutex.Lock()
@@ -277,8 +276,8 @@ func TestLRUCache(t *testing.T) {
 					// Add existing.
 					key := strconv.Itoa(i)
 					item := gubernator.CacheItem{
-						Key: key,
-						Value: i,
+						Key:      key,
+						Value:    i,
 						ExpireAt: expireAt,
 					}
 					mutex.Lock()
@@ -288,8 +287,8 @@ func TestLRUCache(t *testing.T) {
 					// Add new.
 					key2 := strconv.Itoa(rand.Intn(1000) + 20000)
 					item2 := gubernator.CacheItem{
-						Key: key2,
-						Value: i,
+						Key:      key2,
+						Value:    i,
 						ExpireAt: expireAt,
 					}
 					mutex.Lock()
@@ -327,8 +326,8 @@ func BenchmarkLRUCache(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			key := strconv.Itoa(i)
 			item := gubernator.CacheItem{
-				Key: key,
-				Value: i,
+				Key:      key,
+				Value:    i,
 				ExpireAt: expireAt,
 			}
 			exists := cache.Add(item)
@@ -356,8 +355,8 @@ func BenchmarkLRUCache(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			key := strconv.Itoa(i)
 			item := gubernator.CacheItem{
-				Key: key,
-				Value: i,
+				Key:      key,
+				Value:    i,
 				ExpireAt: expireAt,
 			}
 			mutex.Lock()
@@ -374,8 +373,8 @@ func BenchmarkLRUCache(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			key := strconv.Itoa(i)
 			item := gubernator.CacheItem{
-				Key: key,
-				Value: i,
+				Key:      key,
+				Value:    i,
 				ExpireAt: expireAt,
 			}
 			exists := cache.Add(item)
@@ -420,8 +419,8 @@ func BenchmarkLRUCache(b *testing.B) {
 				launchWg.Wait()
 
 				item := gubernator.CacheItem{
-					Key: key,
-					Value: i,
+					Key:      key,
+					Value:    i,
 					ExpireAt: expireAt,
 				}
 				mutex.Lock()
@@ -446,8 +445,8 @@ func BenchmarkLRUCache(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			key := strconv.Itoa(i)
 			item := gubernator.CacheItem{
-				Key: key,
-				Value: i,
+				Key:      key,
+				Value:    i,
 				ExpireAt: expireAt,
 			}
 			exists := cache.Add(item)
@@ -472,8 +471,8 @@ func BenchmarkLRUCache(b *testing.B) {
 				launchWg.Wait()
 
 				item := gubernator.CacheItem{
-					Key: key,
-					Value: i,
+					Key:      key,
+					Value:    i,
 					ExpireAt: expireAt,
 				}
 				mutex.Lock()
@@ -513,8 +512,8 @@ func BenchmarkLRUCache(b *testing.B) {
 
 				key := "z" + strconv.Itoa(i)
 				item := gubernator.CacheItem{
-					Key: key,
-					Value: i,
+					Key:      key,
+					Value:    i,
 					ExpireAt: expireAt,
 				}
 				mutex.Lock()

@@ -20,7 +20,6 @@ package gubernator
 
 import (
 	"container/list"
-	"sync"
 	"sync/atomic"
 
 	"github.com/mailgun/holster/v4/clock"
@@ -32,7 +31,6 @@ import (
 // Not thread-safe.  Be sure to use a mutex to prevent concurrent method calls.
 type LRUCache struct {
 	cache     map[string]*list.Element
-	mutex     sync.Mutex
 	ll        *list.List
 	cacheSize int
 	cacheLen  int64
@@ -58,14 +56,6 @@ func NewLRUCache(maxSize int) *LRUCache {
 		ll:        list.New(),
 		cacheSize: maxSize,
 	}
-}
-
-func (c *LRUCache) Lock() {
-	c.mutex.Lock()
-}
-
-func (c *LRUCache) Unlock() {
-	c.mutex.Unlock()
 }
 
 // FIXME: Not threadsafe.  Each() maintains a goroutine that iterates.
@@ -158,7 +148,7 @@ func (c *LRUCache) removeElement(e *list.Element) {
 	atomic.StoreInt64(&c.cacheLen, int64(c.ll.Len()))
 }
 
-// Len returns the number of items in the cache.
+// Returns the number of items in the cache.
 func (c *LRUCache) Size() int {
 	return c.ll.Len()
 }
@@ -190,8 +180,4 @@ func (c *LRUCache) Close() error {
 	c.cache = nil
 	c.ll = nil
 	return nil
-}
-
-func (c *LRUCache) New() Cache {
-	return NewLRUCache(c.cacheSize)
 }

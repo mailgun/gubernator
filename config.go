@@ -72,7 +72,7 @@ type Config struct {
 	Behaviors BehaviorConfig
 
 	// (Optional) The cache implementation
-	Cache Cache
+	CacheFactory func() Cache
 
 	// (Optional) A persistent store implementation. Allows the implementor the ability to store the rate limits this
 	// instance of gubernator owns. It's up to the implementor to decide what rate limits to persist.
@@ -120,8 +120,10 @@ func (c *Config) SetDefaults() error {
 	setter.SetDefault(&c.LocalPicker, NewReplicatedConsistentHash(nil, defaultReplicas))
 	setter.SetDefault(&c.RegionPicker, NewRegionPicker(nil))
 
-	if c.Cache == nil {
-		c.Cache = NewLRUCache(0)
+	if c.CacheFactory == nil {
+		c.CacheFactory = func() Cache {
+			return NewLRUCache(0)
+		}
 	}
 
 	if c.Behaviors.BatchLimit > maxBatchSize {
@@ -134,19 +136,6 @@ func (c *Config) SetDefaults() error {
 	}
 
 	return nil
-}
-
-func (c *Config) Close() error {
-	var err error
-
-	if c.Cache != nil {
-		if err2 := c.Cache.Close(); err2 != nil {
-			logrus.WithError(err2).Warn("Error in Cache.Close()")
-			err = err2
-		}
-	}
-
-	return err
 }
 
 type PeerInfo struct {

@@ -25,8 +25,8 @@ func TestSyncLRUCache(t *testing.T) {
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
 			item := gubernator.CacheItem{
-				Key: key,
-				Value: i,
+				Key:      key,
+				Value:    i,
 				ExpireAt: expireAt,
 			}
 			exists := syncCache.Add(item)
@@ -62,8 +62,8 @@ func TestSyncLRUCache(t *testing.T) {
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
 			item := gubernator.CacheItem{
-				Key: key,
-				Value: i,
+				Key:      key,
+				Value:    i,
 				ExpireAt: expireAt,
 			}
 			exists := syncCache.Add(item)
@@ -113,8 +113,8 @@ func TestSyncLRUCache(t *testing.T) {
 				for i := 0; i < iterations; i++ {
 					key := strconv.Itoa(i)
 					item := gubernator.CacheItem{
-						Key: key,
-						Value: i,
+						Key:      key,
+						Value:    i,
 						ExpireAt: expireAt,
 					}
 					syncCache.Add(item)
@@ -136,8 +136,8 @@ func TestSyncLRUCache(t *testing.T) {
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
 			item := gubernator.CacheItem{
-				Key: key,
-				Value: i,
+				Key:      key,
+				Value:    i,
 				ExpireAt: expireAt,
 			}
 			exists := syncCache.Add(item)
@@ -171,8 +171,8 @@ func TestSyncLRUCache(t *testing.T) {
 				for i := 0; i < iterations; i++ {
 					key := strconv.Itoa(i)
 					item := gubernator.CacheItem{
-						Key: key,
-						Value: i,
+						Key:      key,
+						Value:    i,
 						ExpireAt: expireAt,
 					}
 					syncCache.Add(item)
@@ -196,8 +196,8 @@ func BenchmarkSyncLRUCache(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			key := strconv.Itoa(i)
 			item := gubernator.CacheItem{
-				Key: key,
-				Value: i,
+				Key:      key,
+				Value:    i,
 				ExpireAt: expireAt,
 			}
 			exists := syncCache.Add(item)
@@ -224,8 +224,8 @@ func BenchmarkSyncLRUCache(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			key := strconv.Itoa(i)
 			item := gubernator.CacheItem{
-				Key: key,
-				Value: i,
+				Key:      key,
+				Value:    i,
 				ExpireAt: expireAt,
 			}
 			_ = syncCache.Add(item)
@@ -241,8 +241,8 @@ func BenchmarkSyncLRUCache(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			key := strconv.Itoa(i)
 			item := gubernator.CacheItem{
-				Key: key,
-				Value: i,
+				Key:      key,
+				Value:    i,
 				ExpireAt: expireAt,
 			}
 			exists := syncCache.Add(item)
@@ -286,8 +286,8 @@ func BenchmarkSyncLRUCache(b *testing.B) {
 				launchWg.Wait()
 
 				item := gubernator.CacheItem{
-					Key: key,
-					Value: i,
+					Key:      key,
+					Value:    i,
 					ExpireAt: expireAt,
 				}
 				_ = syncCache.Add(item)
@@ -311,8 +311,8 @@ func BenchmarkSyncLRUCache(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			key := strconv.Itoa(i)
 			item := gubernator.CacheItem{
-				Key: key,
-				Value: i,
+				Key:      key,
+				Value:    i,
 				ExpireAt: expireAt,
 			}
 			exists := syncCache.Add(item)
@@ -335,8 +335,8 @@ func BenchmarkSyncLRUCache(b *testing.B) {
 				launchWg.Wait()
 
 				item := gubernator.CacheItem{
-					Key: key,
-					Value: i,
+					Key:      key,
+					Value:    i,
 					ExpireAt: expireAt,
 				}
 				_ = syncCache.Add(item)
@@ -373,8 +373,8 @@ func BenchmarkSyncLRUCache(b *testing.B) {
 
 				key := "z" + strconv.Itoa(i)
 				item := gubernator.CacheItem{
-					Key: key,
-					Value: i,
+					Key:      key,
+					Value:    i,
 					ExpireAt: expireAt,
 				}
 				_ = syncCache.Add(item)

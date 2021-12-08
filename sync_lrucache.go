@@ -160,23 +160,16 @@ func (c *SyncLRUCache) Remove(key string) {
 	<-c.removeResponse
 }
 
-func (c *SyncLRUCache) Unlock() {
-	// No operation.
-}
-
-func (c *SyncLRUCache) Lock() {
-	// No operation.
+// Returns the number of items in the cache.
+func (c *SyncLRUCache) Size() int {
+	c.sizeRequest <- syncLRUCacheSizeRequest{}
+	response := <-c.sizeResponse
+	return response.Size
 }
 
 func (c *SyncLRUCache) Close() error {
 	close(c.done)
 	return nil
-}
-
-func (c *SyncLRUCache) Size() int {
-	c.sizeRequest <- syncLRUCacheSizeRequest{}
-	response := <-c.sizeResponse
-	return response.Size
 }
 
 func (c *SyncLRUCache) Describe(ch chan<- *prometheus.Desc) {
@@ -185,8 +178,4 @@ func (c *SyncLRUCache) Describe(ch chan<- *prometheus.Desc) {
 
 func (c *SyncLRUCache) Collect(ch chan<- prometheus.Metric) {
 	c.cache.Collect(ch)
-}
-
-func (c *SyncLRUCache) New() Cache {
-	return NewSyncLRUCache(c.cache.cacheSize)
 }

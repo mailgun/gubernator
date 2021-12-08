@@ -99,7 +99,7 @@ func main() {
 			Hits:      1,
 			Limit:     randInt(1, 1000),
 			Duration:  randInt(int(clock.Millisecond*500), int(clock.Second*6)),
-			Behavior: guber.Behavior_BATCHING,
+			Behavior:  guber.Behavior_BATCHING,
 			Algorithm: guber.Algorithm_TOKEN_BUCKET,
 		})
 	}
@@ -116,7 +116,7 @@ func main() {
 	for {
 		for i := int(0); i < len(rateLimits); i += int(checksPerRequest) {
 			req := &guber.GetRateLimitsReq{
-				Requests: rateLimits[i:min(i + int(checksPerRequest), len(rateLimits))],
+				Requests: rateLimits[i:min(i+int(checksPerRequest), len(rateLimits))],
 			}
 
 			fan.Run(func(obj interface{}) error {

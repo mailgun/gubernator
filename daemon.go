@@ -81,12 +81,17 @@ func SpawnDaemon(ctx context.Context, conf DaemonConfig) (*Daemon, error) {
 func (s *Daemon) Start(ctx context.Context) error {
 	var err error
 
-	// The LRU cache we store rate limits in
-	cache := NewSyncLRUCache(s.conf.CacheSize)
-
-	// cache also implements prometheus.Collector interface
 	s.promRegister = prometheus.NewRegistry()
-	s.promRegister.Register(cache)
+
+	// The LRU cache for storing rate limits.
+	cacheFactory := func() Cache {
+		cache := NewSyncLRUCache(s.conf.CacheSize)
+
+		// cache also implements prometheus.Collector interface
+		s.promRegister.Register(cache)
+
+		return cache
+	}
 
 	// Handler to collect duration and API access metrics for GRPC
 	s.statsHandler = NewGRPCStatsHandler()
@@ -127,12 +132,12 @@ func (s *Daemon) Start(ctx context.Context) error {
 
 	// Registers a new gubernator instance with the GRPC server
 	s.gubeConfig = Config{
-		PeerTLS:     s.conf.ClientTLS(),
-		DataCenter:  s.conf.DataCenter,
-		LocalPicker: s.conf.Picker,
-		GRPCServers: s.grpcSrvs,
-		Logger:      s.log,
-		Cache:       cache,
+		PeerTLS:      s.conf.ClientTLS(),
+		DataCenter:   s.conf.DataCenter,
+		LocalPicker:  s.conf.Picker,
+		GRPCServers:  s.grpcSrvs,
+		Logger:       s.log,
+		CacheFactory: cacheFactory,
 	}
 	s.V1Server, err = NewV1Instance(s.gubeConfig)
 	if err != nil {
@@ -327,7 +332,6 @@ func (s *Daemon) Close() {
 	s.wg.Stop()
 	s.statsHandler.Close()
 	s.gwCancel()
-	_ = s.gubeConfig.Close()
 	s.httpSrv = nil
 	s.grpcSrvs = nil
 }

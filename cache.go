@@ -23,15 +23,8 @@ type Cache interface {
 	GetItem(key string) (value CacheItem, ok bool)
 	Each() chan CacheItem
 	Remove(key string)
-
-	// If the cache is exclusive, this will control access to the cache
-	Unlock()
-	Lock()
-
+	Size() int
 	Close() error
-
-	// Create a new instance of the current cache implementation.
-	New() Cache
 }
 
 type CacheItem struct {

@@ -309,6 +309,7 @@ func (chp *gubernatorPool) Load(ctx context.Context) error {
 	loadChMap := map[uint64]loadChannel{}
 
 	// Send each item to assigned channel's cache.
+mainloop:
 	for {
 		var item CacheItem
 		var ok bool
@@ -316,7 +317,7 @@ func (chp *gubernatorPool) Load(ctx context.Context) error {
 		select {
 		case item, ok = <-ch:
 			if !ok {
-				return nil
+				break mainloop
 			}
 			// Successfully received item.
 
@@ -379,6 +380,7 @@ func (chp *gubernatorPool) handleLoad(request poolLoadRequest, cache Cache) {
 	span, ctx := tracing.StartSpan(request.ctx)
 	defer span.Finish()
 
+mainloop:
 	for {
 		var item CacheItem
 		var ok bool
@@ -386,7 +388,7 @@ func (chp *gubernatorPool) handleLoad(request poolLoadRequest, cache Cache) {
 		select {
 		case item, ok = <-request.in:
 			if !ok {
-				return
+				break mainloop
 			}
 			// Successfully received item.
 

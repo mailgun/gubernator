@@ -281,7 +281,7 @@ func BenchmarkSyncLRUCache(b *testing.B) {
 			key := strconv.Itoa(i)
 			doneWg.Add(1)
 
-			go func() {
+			go func(i int) {
 				defer doneWg.Done()
 				launchWg.Wait()
 
@@ -291,7 +291,7 @@ func BenchmarkSyncLRUCache(b *testing.B) {
 					ExpireAt: expireAt,
 				}
 				_ = syncCache.Add(item)
-			}()
+			}(i)
 		}
 
 		b.ReportAllocs()
@@ -330,7 +330,7 @@ func BenchmarkSyncLRUCache(b *testing.B) {
 				_, _ = syncCache.GetItem(key)
 			}()
 
-			go func() {
+			go func(i int) {
 				defer doneWg.Done()
 				launchWg.Wait()
 
@@ -340,7 +340,7 @@ func BenchmarkSyncLRUCache(b *testing.B) {
 					ExpireAt: expireAt,
 				}
 				_ = syncCache.Add(item)
-			}()
+			}(i)
 		}
 
 		b.ReportAllocs()
@@ -367,7 +367,7 @@ func BenchmarkSyncLRUCache(b *testing.B) {
 				_, _ = syncCache.GetItem(key)
 			}()
 
-			go func() {
+			go func(i int) {
 				defer doneWg.Done()
 				launchWg.Wait()
 
@@ -378,7 +378,7 @@ func BenchmarkSyncLRUCache(b *testing.B) {
 					ExpireAt: expireAt,
 				}
 				_ = syncCache.Add(item)
-			}()
+			}(i)
 		}
 
 		b.ReportAllocs()

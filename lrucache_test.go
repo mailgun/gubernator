@@ -417,7 +417,7 @@ func BenchmarkLRUCache(b *testing.B) {
 			key := strconv.Itoa(i)
 			doneWg.Add(1)
 
-			go func() {
+			go func(i int) {
 				defer doneWg.Done()
 				launchWg.Wait()
 
@@ -429,7 +429,7 @@ func BenchmarkLRUCache(b *testing.B) {
 				mutex.Lock()
 				cache.Add(item)
 				mutex.Unlock()
-			}()
+			}(i)
 		}
 
 		b.ReportAllocs()
@@ -469,7 +469,7 @@ func BenchmarkLRUCache(b *testing.B) {
 				mutex.Unlock()
 			}()
 
-			go func() {
+			go func(i int) {
 				defer doneWg.Done()
 				launchWg.Wait()
 
@@ -481,7 +481,7 @@ func BenchmarkLRUCache(b *testing.B) {
 				mutex.Lock()
 				cache.Add(item)
 				mutex.Unlock()
-			}()
+			}(i)
 		}
 
 		b.ReportAllocs()
@@ -499,7 +499,7 @@ func BenchmarkLRUCache(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			doneWg.Add(2)
 
-			go func() {
+			go func(i int) {
 				defer doneWg.Done()
 				launchWg.Wait()
 
@@ -507,9 +507,9 @@ func BenchmarkLRUCache(b *testing.B) {
 				mutex.Lock()
 				_, _ = cache.GetItem(key)
 				mutex.Unlock()
-			}()
+			}(i)
 
-			go func() {
+			go func(i int) {
 				defer doneWg.Done()
 				launchWg.Wait()
 
@@ -522,7 +522,7 @@ func BenchmarkLRUCache(b *testing.B) {
 				mutex.Lock()
 				cache.Add(item)
 				mutex.Unlock()
-			}()
+			}(i)
 		}
 
 		b.ReportAllocs()

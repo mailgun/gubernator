@@ -102,6 +102,11 @@ type Config struct {
 
 	// (Optional) The TLS config used when connecting to gubernator peers
 	PeerTLS *tls.Config
+
+	// Number of nodes to add to hashring per worker.
+	// Higher number means more even distribution of hash ranges, but incurs
+	// potential performance burden in `getWorker()`.
+	PoolWorkerHashRingRedundancy int
 }
 
 func (c *Config) SetDefaults() error {
@@ -122,7 +127,7 @@ func (c *Config) SetDefaults() error {
 
 	if c.CacheFactory == nil {
 		c.CacheFactory = func() Cache {
-			return NewLRUCache(0)
+			return NewSyncLRUCache(0)
 		}
 	}
 
@@ -134,6 +139,8 @@ func (c *Config) SetDefaults() error {
 	if c.PeerTLS != nil {
 		c.PeerTLS = c.PeerTLS.Clone()
 	}
+
+	setter.SetDefault(&c.PoolWorkerHashRingRedundancy, 4)
 
 	return nil
 }

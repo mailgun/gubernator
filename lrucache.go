@@ -37,6 +37,7 @@ type LRUCache struct {
 }
 
 // Prometheus metrics collector for LRUCache.
+// Register only one collector, add one or more caches to this collector.
 type LRUCacheCollector struct {
 	caches []Cache
 }

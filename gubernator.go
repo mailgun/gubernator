@@ -93,13 +93,6 @@ var checkCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Name: "gubernator_check_counter",
 	Help: "The number of rate limits checked",
 })
-var checkLockCounter = prometheus.NewSummary(prometheus.SummaryOpts{
-	Name: "baliedge_lock_counter",
-	Help: "Number of concurrently attempted mutex locks within getRateLimit().",
-	Objectives: map[float64]float64{
-		0.99: 0.001,
-	},
-})
 var overLimitCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Name: "gubernator_over_limit_counter",
 	Help: "The number of rate limit checks that are over the limit",

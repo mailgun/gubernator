@@ -56,14 +56,14 @@ func main() {
 	flags.BoolVar(&quiet, "q", false, "Quiet logging")
 	checkErr(flags.Parse(os.Args[1:]))
 
-	err := initTracing()
-
-	// Print startup message.
 	ctx := context.Background()
+	err := initTracing()
 	if err != nil {
 		log.WithError(err).Warn("Error in initTracing")
 	}
 	span, _ := tracing.StartSpan(ctx)
+
+	// Print startup message.
 	argsMsg := fmt.Sprintf("Command line: %s", strings.Join(os.Args[1:], " "))
 	log.Info(argsMsg)
 	tracing.LogInfo(span, argsMsg)
@@ -97,8 +97,8 @@ func main() {
 			Name:      fmt.Sprintf("gubernator-cli-%d", i),
 			UniqueKey: guber.RandomString(10),
 			Hits:      1,
-			Limit:     randInt(1, 1000),
-			Duration:  randInt(int(clock.Millisecond*500), int(clock.Second*6)),
+			Limit:     int64(randInt(1, 1000)),
+			Duration:  int64(randInt(int(clock.Millisecond*500), int(clock.Second*6))),
 			Behavior:  guber.Behavior_BATCHING,
 			Algorithm: guber.Algorithm_TOKEN_BUCKET,
 		})
@@ -147,8 +147,8 @@ func checkErr(err error) {
 	}
 }
 
-func randInt(min, max int) int64 {
-	return int64(rand.Intn(max-min) + min)
+func randInt(min, max int) int {
+	return rand.Intn(max-min) + min
 }
 
 func sendRequest(ctx context.Context, client guber.V1Client, req *guber.GetRateLimitsReq) {
@@ -158,12 +158,12 @@ func sendRequest(ctx context.Context, client guber.V1Client, req *guber.GetRateL
 
 	// Now hit our cluster with the rate limits
 	resp, err := client.GetRateLimits(ctx, req)
+	cancel()
 	if err != nil {
 		ext.LogError(span, errors.Wrap(err, "Error in client.GetRateLimits"))
 		log.WithError(err).Error("Error in client.GetRateLimits")
 		return
 	}
-	cancel()
 
 	// Sanity checks.
 	if resp == nil {

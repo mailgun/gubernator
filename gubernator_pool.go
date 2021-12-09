@@ -111,12 +111,14 @@ func (chp *gubernatorPool) addWorker() *poolWorker {
 		getCacheItemRequest: make(chan poolGetCacheItemRequest),
 	}
 
-	// Generate a hash based off the worker pointer.
-	// This hash value is the beginning range of a hash ring node.
-	key := fmt.Sprintf("%p", worker)
-	worker.hash = xxhash.ChecksumString64S(key, 0)
+	for i := 0; i < chp.conf.PoolWorkerHashRingRedundancy; i++ {
+		// Generate an arbitrary hash based off the worker pointer.
+		// This hash value is the beginning range of a hash ring node.
+		key := fmt.Sprintf("%p-%x", worker, i)
+		worker.hash = xxhash.ChecksumString64S(key, 0)
 
-	chp.workers = append(chp.workers, worker)
+		chp.workers = append(chp.workers, worker)
+	}
 
 	// Ensure keys array is sorted by hash value.
 	sort.Slice(chp.workers, func(a, b int) bool {

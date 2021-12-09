@@ -36,7 +36,13 @@ type LRUCache struct {
 	cacheLen  int64
 }
 
+// Prometheus metrics collector for LRUCache.
+type LRUCacheCollector struct {
+	caches []Cache
+}
+
 var _ Cache = &LRUCache{}
+var _ prometheus.Collector = &LRUCacheCollector{}
 
 var sizeMetric = prometheus.NewGauge(prometheus.GaugeOpts{
 	Name: "gubernator_cache_size",
@@ -149,8 +155,8 @@ func (c *LRUCache) removeElement(e *list.Element) {
 }
 
 // Returns the number of items in the cache.
-func (c *LRUCache) Size() int {
-	return c.ll.Len()
+func (c *LRUCache) Size() int64 {
+	return atomic.LoadInt64(&c.cacheLen)
 }
 
 // Update the expiration time for the key
@@ -163,21 +169,43 @@ func (c *LRUCache) UpdateExpiration(key string, expireAt int64) bool {
 	return false
 }
 
+func (c *LRUCache) Close() error {
+	c.cache = nil
+	c.ll = nil
+	c.cacheLen = 0
+	return nil
+}
+
+func NewLRUCacheCollector() *LRUCacheCollector {
+	return &LRUCacheCollector{
+		caches: []Cache{},
+	}
+}
+
+// Add a Cache object to be tracked by the collector.
+func (collector *LRUCacheCollector) AddCache(cache Cache) {
+	collector.caches = append(collector.caches, cache)
+}
+
 // Describe fetches prometheus metrics to be registered
-func (c *LRUCache) Describe(ch chan<- *prometheus.Desc) {
+func (collector *LRUCacheCollector) Describe(ch chan<- *prometheus.Desc) {
 	sizeMetric.Describe(ch)
 	accessMetric.Describe(ch)
 }
 
 // Collect fetches metric counts and gauges from the cache
-func (c *LRUCache) Collect(ch chan<- prometheus.Metric) {
-	sizeMetric.Set(float64(atomic.LoadInt64(&c.cacheLen)))
+func (collector *LRUCacheCollector) Collect(ch chan<- prometheus.Metric) {
+	sizeMetric.Set(collector.getSize())
 	sizeMetric.Collect(ch)
 	accessMetric.Collect(ch)
 }
 
-func (c *LRUCache) Close() error {
-	c.cache = nil
-	c.ll = nil
-	return nil
+func (collector *LRUCacheCollector) getSize() float64 {
+	var size float64
+
+	for _, cache := range collector.caches {
+		size += float64(cache.Size())
+	}
+
+	return size
 }

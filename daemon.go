@@ -84,12 +84,12 @@ func (s *Daemon) Start(ctx context.Context) error {
 	s.promRegister = prometheus.NewRegistry()
 
 	// The LRU cache for storing rate limits.
+	cacheCollector := NewLRUCacheCollector()
+	s.promRegister.Register(cacheCollector)
+
 	cacheFactory := func() Cache {
 		cache := NewSyncLRUCache(s.conf.CacheSize)
-
-		// cache also implements prometheus.Collector interface
-		s.promRegister.Register(cache)
-
+		cacheCollector.AddCache(cache)
 		return cache
 	}
 

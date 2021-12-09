@@ -23,7 +23,7 @@ type Cache interface {
 	GetItem(key string) (value CacheItem, ok bool)
 	Each() chan CacheItem
 	Remove(key string)
-	Size() int
+	Size() int64
 	Close() error
 }
 

@@ -38,7 +38,7 @@ func TestLRUCache(t *testing.T) {
 		}
 
 		// Validate cache.
-		assert.Equal(t, iterations, cache.Size())
+		assert.Equal(t, int64(iterations), cache.Size())
 
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
@@ -104,7 +104,7 @@ func TestLRUCache(t *testing.T) {
 			assert.False(t, exists)
 		}
 
-		assert.Equal(t, iterations, cache.Size())
+		assert.Equal(t, int64(iterations), cache.Size())
 		var launchWg, doneWg sync.WaitGroup
 		launchWg.Add(1)
 
@@ -181,7 +181,7 @@ func TestLRUCache(t *testing.T) {
 			assert.False(t, exists)
 		}
 
-		assert.Equal(t, iterations, cache.Size())
+		assert.Equal(t, int64(iterations), cache.Size())
 		var launchWg, doneWg sync.WaitGroup
 		launchWg.Add(1)
 
@@ -242,7 +242,7 @@ func TestLRUCache(t *testing.T) {
 			mutex.Unlock()
 		}
 
-		assert.Equal(t, iterations, cache.Size())
+		assert.Equal(t, int64(iterations), cache.Size())
 		var launchWg, doneWg sync.WaitGroup
 		launchWg.Add(1)
 
@@ -297,6 +297,9 @@ func TestLRUCache(t *testing.T) {
 				}
 			}()
 
+			collector := gubernator.NewLRUCacheCollector()
+			collector.AddCache(cache)
+
 			go func() {
 				defer doneWg.Done()
 				launchWg.Wait()
@@ -304,7 +307,7 @@ func TestLRUCache(t *testing.T) {
 				for i := 0; i < iterations; i++ {
 					// Get metrics.
 					ch := make(chan prometheus.Metric, 10)
-					cache.Collect(ch)
+					collector.Collect(ch)
 				}
 			}()
 		}

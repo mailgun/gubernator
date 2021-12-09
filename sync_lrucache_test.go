@@ -34,7 +34,7 @@ func TestSyncLRUCache(t *testing.T) {
 		}
 
 		// Validate cache.
-		assert.Equal(t, iterations, syncCache.Size())
+		assert.Equal(t, int64(iterations), syncCache.Size())
 
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
@@ -70,7 +70,7 @@ func TestSyncLRUCache(t *testing.T) {
 			assert.False(t, exists)
 		}
 
-		assert.Equal(t, iterations, syncCache.Size())
+		assert.Equal(t, int64(iterations), syncCache.Size())
 		var launchWg, doneWg sync.WaitGroup
 		launchWg.Add(1)
 
@@ -144,7 +144,7 @@ func TestSyncLRUCache(t *testing.T) {
 			assert.False(t, exists)
 		}
 
-		assert.Equal(t, iterations, syncCache.Size())
+		assert.Equal(t, int64(iterations), syncCache.Size())
 		var launchWg, doneWg sync.WaitGroup
 		launchWg.Add(1)
 

@@ -16,8 +16,6 @@ limitations under the License.
 
 package gubernator
 
-import "github.com/prometheus/client_golang/prometheus"
-
 type SyncLRUCache struct {
 	cache                    *LRUCache
 	done                     chan struct{}
@@ -76,7 +74,7 @@ type syncLRUCacheRemoveResponse struct{}
 type syncLRUCacheSizeRequest struct{}
 
 type syncLRUCacheSizeResponse struct {
-	Size int
+	Size int64
 }
 
 // Thread-safe implementation of `LRUCache`.
@@ -161,7 +159,7 @@ func (c *SyncLRUCache) Remove(key string) {
 }
 
 // Returns the number of items in the cache.
-func (c *SyncLRUCache) Size() int {
+func (c *SyncLRUCache) Size() int64 {
 	c.sizeRequest <- syncLRUCacheSizeRequest{}
 	response := <-c.sizeResponse
 	return response.Size
@@ -170,12 +168,4 @@ func (c *SyncLRUCache) Size() int {
 func (c *SyncLRUCache) Close() error {
 	close(c.done)
 	return nil
-}
-
-func (c *SyncLRUCache) Describe(ch chan<- *prometheus.Desc) {
-	c.cache.Describe(ch)
-}
-
-func (c *SyncLRUCache) Collect(ch chan<- prometheus.Metric) {
-	c.cache.Collect(ch)
 }

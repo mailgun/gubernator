@@ -42,9 +42,9 @@ func (m *MockCache) Remove(key string) {
 	m.Called(key)
 }
 
-func (m *MockCache) Size() int {
+func (m *MockCache) Size() int64 {
 	args := m.Called()
-	return args.Int(0)
+	return int64(args.Int(0))
 }
 
 func (m *MockCache) Close() error {

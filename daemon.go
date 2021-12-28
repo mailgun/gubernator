@@ -128,8 +128,10 @@ func (s *Daemon) Start(ctx context.Context) error {
 	// Registers a new gubernator instance with the GRPC server
 	s.instanceConf = Config{
 		PeerTLS:      s.conf.ClientTLS(),
-		DataCenter:   s.conf.DataCenter,
+		ClusterName:  s.conf.ClusterName,
+		Behaviors:    s.conf.Behaviors,
 		LocalPicker:  s.conf.Picker,
+		CacheFactory: cacheFactory,
 		GRPCServers:  s.grpcSrvs,
 		Logger:       s.log,
 		CacheFactory: cacheFactory,

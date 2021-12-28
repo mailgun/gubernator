@@ -41,18 +41,18 @@ import (
 // Setup and shutdown the mock gubernator cluster for the entire test suite
 func TestMain(m *testing.M) {
 	if err := cluster.StartWith([]guber.PeerInfo{
-		{GRPCAddress: "127.0.0.1:9990", HTTPAddress: "127.0.0.1:9980", DataCenter: cluster.DataCenterNone},
-		{GRPCAddress: "127.0.0.1:9991", HTTPAddress: "127.0.0.1:9981", DataCenter: cluster.DataCenterNone},
-		{GRPCAddress: "127.0.0.1:9992", HTTPAddress: "127.0.0.1:9982", DataCenter: cluster.DataCenterNone},
-		{GRPCAddress: "127.0.0.1:9993", HTTPAddress: "127.0.0.1:9983", DataCenter: cluster.DataCenterNone},
-		{GRPCAddress: "127.0.0.1:9994", HTTPAddress: "127.0.0.1:9984", DataCenter: cluster.DataCenterNone},
-		{GRPCAddress: "127.0.0.1:9995", HTTPAddress: "127.0.0.1:9985", DataCenter: cluster.DataCenterNone},
+		{GRPCAddress: "127.0.0.1:9990", HTTPAddress: "127.0.0.1:9980", ClusterName: cluster.NameEmpty},
+		{GRPCAddress: "127.0.0.1:9991", HTTPAddress: "127.0.0.1:9981", ClusterName: cluster.NameEmpty},
+		{GRPCAddress: "127.0.0.1:9992", HTTPAddress: "127.0.0.1:9982", ClusterName: cluster.NameEmpty},
+		{GRPCAddress: "127.0.0.1:9993", HTTPAddress: "127.0.0.1:9983", ClusterName: cluster.NameEmpty},
+		{GRPCAddress: "127.0.0.1:9994", HTTPAddress: "127.0.0.1:9984", ClusterName: cluster.NameEmpty},
+		{GRPCAddress: "127.0.0.1:9995", HTTPAddress: "127.0.0.1:9985", ClusterName: cluster.NameEmpty},
 
-		// DataCenterOne
-		{GRPCAddress: "127.0.0.1:9890", HTTPAddress: "127.0.0.1:9880", DataCenter: cluster.DataCenterOne},
-		{GRPCAddress: "127.0.0.1:9891", HTTPAddress: "127.0.0.1:9881", DataCenter: cluster.DataCenterOne},
-		{GRPCAddress: "127.0.0.1:9892", HTTPAddress: "127.0.0.1:9882", DataCenter: cluster.DataCenterOne},
-		{GRPCAddress: "127.0.0.1:9893", HTTPAddress: "127.0.0.1:9883", DataCenter: cluster.DataCenterOne},
+		// NameOne
+		{GRPCAddress: "127.0.0.1:9890", HTTPAddress: "127.0.0.1:9880", ClusterName: cluster.NameOne},
+		{GRPCAddress: "127.0.0.1:9891", HTTPAddress: "127.0.0.1:9881", ClusterName: cluster.NameOne},
+		{GRPCAddress: "127.0.0.1:9892", HTTPAddress: "127.0.0.1:9882", ClusterName: cluster.NameOne},
+		{GRPCAddress: "127.0.0.1:9893", HTTPAddress: "127.0.0.1:9883", ClusterName: cluster.NameOne},
 	}); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -62,7 +62,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestOverTheLimit(t *testing.T) {
-	client, errs := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
+	client, errs := guber.DialV1Server(cluster.GetRandomPeer(cluster.NameEmpty).GRPCAddress, nil)
 	require.Nil(t, errs)
 
 	tests := []struct {
@@ -159,7 +159,7 @@ func TestMultipleAsync(t *testing.T) {
 func TestTokenBucket(t *testing.T) {
 	defer clock.Freeze(clock.Now()).Unfreeze()
 
-	addr := cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress
+	addr := cluster.GetRandomPeer(cluster.NameEmpty).GRPCAddress
 	client, errs := guber.DialV1Server(addr, nil)
 	require.Nil(t, errs)
 
@@ -220,7 +220,7 @@ func TestTokenBucket(t *testing.T) {
 func TestTokenBucketGregorian(t *testing.T) {
 	defer clock.Freeze(clock.Now()).Unfreeze()
 
-	client, errs := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
+	client, errs := guber.DialV1Server(cluster.GetRandomPeer(cluster.NameEmpty).GRPCAddress, nil)
 	require.Nil(t, errs)
 
 	tests := []struct {
@@ -735,7 +735,7 @@ func TestLeakyBucketNegativeHits(t *testing.T) {
 }
 
 func TestMissingFields(t *testing.T) {
-	client, errs := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
+	client, errs := guber.DialV1Server(cluster.GetRandomPeer(cluster.NameEmpty).GRPCAddress, nil)
 	require.Nil(t, errs)
 
 	tests := []struct {
@@ -868,7 +868,7 @@ func TestGlobalRateLimits(t *testing.T) {
 }
 
 func TestChangeLimit(t *testing.T) {
-	client, errs := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
+	client, errs := guber.DialV1Server(cluster.GetRandomPeer(cluster.NameEmpty).GRPCAddress, nil)
 	require.Nil(t, errs)
 
 	tests := []struct {
@@ -963,7 +963,7 @@ func TestChangeLimit(t *testing.T) {
 }
 
 func TestResetRemaining(t *testing.T) {
-	client, errs := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
+	client, errs := guber.DialV1Server(cluster.GetRandomPeer(cluster.NameEmpty).GRPCAddress, nil)
 	require.Nil(t, errs)
 
 	tests := []struct {
@@ -1106,7 +1106,7 @@ func TestHealthCheck(t *testing.T) {
 func TestLeakyBucketDivBug(t *testing.T) {
 	defer clock.Freeze(clock.Now()).Unfreeze()
 
-	client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
+	client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.NameEmpty).GRPCAddress, nil)
 	require.NoError(t, err)
 
 	resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
@@ -1145,18 +1145,18 @@ func TestLeakyBucketDivBug(t *testing.T) {
 	assert.Equal(t, int64(2000), resp.Responses[0].Limit)
 }
 
-func TestMultiRegion(t *testing.T) {
+func TestMultiCluster(t *testing.T) {
 
-	// TODO: Queue a rate limit with multi region behavior on the DataCenterNone cluster
+	// TODO: Queue a rate limit with multi cluster behavior on the NameEmpty cluster
 	// TODO: Check the immediate response is correct
-	// TODO: Wait until the rate limit count shows up on the DataCenterOne and DataCenterTwo cluster
+	// TODO: Wait until the rate limit count shows up on the NameOne and NameTwo cluster
 
-	// TODO: Increment the counts on the DataCenterTwo and DataCenterOne clusters
-	// TODO: Wait until both rate limit count show up on all datacenters
+	// TODO: Increment the counts on the NameTwo and NameOne clusters
+	// TODO: Wait until both rate limit count show up on all clusters
 }
 
 func TestGRPCGateway(t *testing.T) {
-	resp, err := http.DefaultClient.Get("http://" + cluster.GetRandomPeer(cluster.DataCenterNone).HTTPAddress + "/v1/HealthCheck")
+	resp, err := http.DefaultClient.Get("http://" + cluster.GetRandomPeer(cluster.NameEmpty).HTTPAddress + "/v1/HealthCheck")
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	b, err := ioutil.ReadAll(resp.Body)

@@ -28,9 +28,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// globalManager manages async hit queue and updates peers in
-// the cluster periodically when a global rate limit we own updates.
-type globalManager struct {
+// broadcastManager manages the distribution of rate limits within a single cluster.
+// It is used by both multi cluster and broadcast behavior to distribute rate limits.
+type broadcastManager struct {
 	asyncQueue     chan *RateLimitReq
 	broadcastQueue chan *RateLimitReq
 	wg             syncutil.WaitGroup
@@ -42,16 +42,16 @@ type globalManager struct {
 	broadcastMetrics prometheus.Summary
 }
 
-func newGlobalManager(conf BehaviorConfig, instance *V1Instance) *globalManager {
-	gm := globalManager{
+func newBroadcastManager(conf BehaviorConfig, instance *V1Instance) *broadcastManager {
+	gm := broadcastManager{
 		log: instance.log,
 		asyncMetrics: prometheus.NewSummary(prometheus.SummaryOpts{
-			Help:       "The duration of GLOBAL async sends in seconds.",
+			Help:       "The duration of async sends in seconds.",
 			Name:       "gubernator_async_durations",
 			Objectives: map[float64]float64{0.5: 0.05, 0.99: 0.001},
 		}),
 		broadcastMetrics: prometheus.NewSummary(prometheus.SummaryOpts{
-			Help:       "The duration of GLOBAL broadcasts to peers in seconds.",
+			Help:       "The duration of broadcasts to peers in seconds.",
 			Name:       "gubernator_broadcast_durations",
 			Objectives: map[float64]float64{0.5: 0.05, 0.99: 0.001},
 		}),
@@ -65,17 +65,17 @@ func newGlobalManager(conf BehaviorConfig, instance *V1Instance) *globalManager 
 	return &gm
 }
 
-func (gm *globalManager) QueueHit(r *RateLimitReq) {
+func (gm *broadcastManager) QueueHit(r *RateLimitReq) {
 	gm.asyncQueue <- r
 }
 
-func (gm *globalManager) QueueUpdate(r *RateLimitReq) {
+func (gm *broadcastManager) QueueUpdate(r *RateLimitReq) {
 	gm.broadcastQueue <- r
 }
 
 // runAsyncHits collects async hit requests and queues them to
 // be sent to their owning peers.
-func (gm *globalManager) runAsyncHits() {
+func (gm *broadcastManager) runAsyncHits() {
 	var interval = NewInterval(gm.conf.GlobalSyncWait)
 	hits := make(map[string]*RateLimitReq)
 
@@ -121,7 +121,7 @@ func (gm *globalManager) runAsyncHits() {
 
 // sendHits takes the hits collected by runAsyncHits and sends them to their
 // owning peers
-func (gm *globalManager) sendHits(ctx context.Context, hits map[string]*RateLimitReq) {
+func (gm *broadcastManager) sendHits(ctx context.Context, hits map[string]*RateLimitReq) {
 	type pair struct {
 		client *PeerClient
 		req    GetPeerRateLimitsReq
@@ -156,15 +156,15 @@ func (gm *globalManager) sendHits(ctx context.Context, hits map[string]*RateLimi
 
 		if err != nil {
 			gm.log.WithError(err).
-				Errorf("error sending global hits to '%s'", p.client.Info().GRPCAddress)
+				Errorf("error sending broadcast hits to '%s'", p.client.Info().GRPCAddress)
 			continue
 		}
 	}
 	gm.asyncMetrics.Observe(time.Since(start).Seconds())
 }
 
-// runBroadcasts collects status changes for global rate limits and broadcasts the changes to each peer in the cluster.
-func (gm *globalManager) runBroadcasts() {
+// runBroadcasts collects status changes for broadcast rate limits and broadcasts the changes to each peer in the cluster.
+func (gm *broadcastManager) runBroadcasts() {
 	var interval = NewInterval(gm.conf.GlobalSyncWait)
 	updates := make(map[string]*RateLimitReq)
 
@@ -201,16 +201,16 @@ func (gm *globalManager) runBroadcasts() {
 	})
 }
 
-// broadcastPeers broadcasts global rate limit statuses to all other peers
-func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]*RateLimitReq) {
+// broadcastPeers broadcasts rate limit statuses to all other peers
+func (gm *broadcastManager) broadcastPeers(ctx context.Context, updates map[string]*RateLimitReq) {
 	var req UpdatePeerGlobalsReq
 	start := clock.Now()
 
 	for _, r := range updates {
-		// Copy the original since we removing the GLOBAL behavior
+		// Copy the original since we are removing the GLOBAL behavior
 		rl := proto.Clone(r).(*RateLimitReq)
-		// We are only sending the status of the rate limit so
-		// we clear the behavior flag so we don't get queued for update again.
+		// We are only sending the status of the rate limit, so
+		// we clear the behavior flag, so we don't get queued for update again.
 		SetBehavior(&rl.Behavior, Behavior_GLOBAL, false)
 		rl.Hits = 0
 
@@ -240,7 +240,7 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 		if err != nil {
 			// Skip peers that are not in a ready state
 			if !IsNotReady(err) {
-				gm.log.WithError(err).Errorf("while broadcasting global updates to '%s'", peer.Info().GRPCAddress)
+				gm.log.WithError(err).Errorf("while broadcasting broadcast updates to '%s'", peer.Info().GRPCAddress)
 			}
 			continue
 		}
@@ -249,6 +249,6 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 	gm.broadcastMetrics.Observe(time.Since(start).Seconds())
 }
 
-func (gm *globalManager) Close() {
+func (gm *broadcastManager) Close() {
 	gm.wg.Stop()
 }

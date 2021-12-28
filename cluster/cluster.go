@@ -29,26 +29,26 @@ import (
 )
 
 const (
-	DataCenterNone = ""
-	DataCenterOne  = "datacenter-1"
-	DataCenterTwo  = "datacenter-2"
+	NameEmpty = ""
+	NameOne   = "cluster-1"
+	NameTwo   = "cluster-2"
 )
 
 var daemons []*gubernator.Daemon
 var peers []gubernator.PeerInfo
 
 // GetRandomPeer returns a random peer from the cluster
-func GetRandomPeer(dc string) gubernator.PeerInfo {
+func GetRandomPeer(lc string) gubernator.PeerInfo {
 	var local []gubernator.PeerInfo
 
 	for _, p := range peers {
-		if p.DataCenter == dc {
+		if p.ClusterName == lc {
 			local = append(local, p)
 		}
 	}
 
 	if len(local) == 0 {
-		panic(fmt.Sprintf("failed to find random peer for dc '%s'", dc))
+		panic(fmt.Sprintf("failed to find random peer for cluster '%s'", lc))
 	}
 
 	return local[rand.Intn(len(local))]
@@ -115,13 +115,13 @@ func StartWith(localPeers []gubernator.PeerInfo) error {
 			Logger:            logrus.WithField("instance", peer.GRPCAddress),
 			GRPCListenAddress: peer.GRPCAddress,
 			HTTPListenAddress: peer.HTTPAddress,
-			DataCenter:        peer.DataCenter,
+			ClusterName:       peer.ClusterName,
 			Behaviors: gubernator.BehaviorConfig{
 				// Suitable for testing but not production
-				GlobalSyncWait:     clock.Millisecond * 50,
-				GlobalTimeout:      clock.Second * 5,
-				BatchTimeout:       clock.Second * 5,
-				MultiRegionTimeout: clock.Second * 5,
+				GlobalSyncWait:      clock.Millisecond * 50,
+				GlobalTimeout:       clock.Second * 5,
+				BatchTimeout:        clock.Second * 5,
+				MultiClusterTimeout: clock.Second * 5,
 			},
 		})
 		cancel()
@@ -133,7 +133,7 @@ func StartWith(localPeers []gubernator.PeerInfo) error {
 		peers = append(peers, gubernator.PeerInfo{
 			GRPCAddress: d.GRPCListeners[0].Addr().String(),
 			HTTPAddress: d.HTTPListener.Addr().String(),
-			DataCenter:  peer.DataCenter,
+			ClusterName: peer.ClusterName,
 		})
 		daemons = append(daemons, d)
 	}

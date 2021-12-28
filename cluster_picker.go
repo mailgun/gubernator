@@ -20,50 +20,50 @@ import (
 	"github.com/mailgun/holster/v4/syncutil"
 )
 
-type RegionPeerPicker interface {
+type ClusterPeerPicker interface {
 	GetClients(string) ([]*PeerClient, error)
 	GetByPeerInfo(PeerInfo) *PeerClient
 	Pickers() map[string]PeerPicker
 	Peers() []*PeerClient
 	Add(*PeerClient)
-	New() RegionPeerPicker
+	New() ClusterPeerPicker
 }
 
-// RegionPicker encapsulates pickers for a set of regions
-type RegionPicker struct {
+// ClusterPicker encapsulates pickers for a set of clusters
+type ClusterPicker struct {
 	*ReplicatedConsistentHash
 
-	// A map of all the pickers by region
-	regions map[string]PeerPicker
-	// The implementation of picker we will use for each region
+	// A map of all the pickers by ClusterName
+	clusters map[string]PeerPicker
+	// The implementation of picker we will use for each cluster
 	conf     BehaviorConfig
 	wg       syncutil.WaitGroup
 	reqQueue chan *RateLimitReq
 }
 
-func NewRegionPicker(fn HashString64) *RegionPicker {
-	rp := &RegionPicker{
-		regions:                  make(map[string]PeerPicker),
-		reqQueue:                 make(chan *RateLimitReq, 0),
+func NewClusterPicker(fn HashString64) *ClusterPicker {
+	rp := &ClusterPicker{
 		ReplicatedConsistentHash: NewReplicatedConsistentHash(fn, defaultReplicas),
+		clusters:                 make(map[string]PeerPicker),
+		reqQueue:                 make(chan *RateLimitReq, 0),
 	}
 	return rp
 }
 
-func (rp *RegionPicker) New() RegionPeerPicker {
+func (rp *ClusterPicker) New() ClusterPeerPicker {
 	hash := rp.ReplicatedConsistentHash.New().(*ReplicatedConsistentHash)
-	return &RegionPicker{
-		regions:                  make(map[string]PeerPicker),
+	return &ClusterPicker{
+		clusters:                 make(map[string]PeerPicker),
 		reqQueue:                 make(chan *RateLimitReq, 0),
 		ReplicatedConsistentHash: hash,
 	}
 }
 
-// GetClients returns all the PeerClients that match this key in all regions
-func (rp *RegionPicker) GetClients(key string) ([]*PeerClient, error) {
-	result := make([]*PeerClient, len(rp.regions))
+// GetClients returns all the PeerClients that match this key in all clusters
+func (rp *ClusterPicker) GetClients(key string) ([]*PeerClient, error) {
+	result := make([]*PeerClient, len(rp.clusters))
 	var i int
-	for _, picker := range rp.regions {
+	for _, picker := range rp.clusters {
 		peer, err := picker.Get(key)
 		if err != nil {
 			return nil, err
@@ -75,8 +75,8 @@ func (rp *RegionPicker) GetClients(key string) ([]*PeerClient, error) {
 }
 
 // GetByPeerInfo returns the first PeerClient the PeerInfo.HasKey() matches
-func (rp *RegionPicker) GetByPeerInfo(info PeerInfo) *PeerClient {
-	for _, picker := range rp.regions {
+func (rp *ClusterPicker) GetByPeerInfo(info PeerInfo) *PeerClient {
+	for _, picker := range rp.clusters {
 		if client := picker.GetByPeerInfo(info); client != nil {
 			return client
 		}
@@ -84,15 +84,15 @@ func (rp *RegionPicker) GetByPeerInfo(info PeerInfo) *PeerClient {
 	return nil
 }
 
-// Pickers returns a map of each region and its respective PeerPicker
-func (rp *RegionPicker) Pickers() map[string]PeerPicker {
-	return rp.regions
+// Pickers returns a map of each cluster and its respective PeerPicker
+func (rp *ClusterPicker) Pickers() map[string]PeerPicker {
+	return rp.clusters
 }
 
-func (rp *RegionPicker) Peers() []*PeerClient {
+func (rp *ClusterPicker) Peers() []*PeerClient {
 	var peers []*PeerClient
 
-	for _, picker := range rp.regions {
+	for _, picker := range rp.clusters {
 		for _, peer := range picker.Peers() {
 			peers = append(peers, peer)
 		}
@@ -101,11 +101,11 @@ func (rp *RegionPicker) Peers() []*PeerClient {
 	return peers
 }
 
-func (rp *RegionPicker) Add(peer *PeerClient) {
-	picker, ok := rp.regions[peer.Info().DataCenter]
+func (rp *ClusterPicker) Add(peer *PeerClient) {
+	picker, ok := rp.clusters[peer.Info().ClusterName]
 	if !ok {
 		picker = rp.ReplicatedConsistentHash.New()
-		rp.regions[peer.Info().DataCenter] = picker
+		rp.clusters[peer.Info().ClusterName] = picker
 	}
 	picker.Add(peer)
 }

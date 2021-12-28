@@ -99,6 +99,40 @@ func local_request_PeersV1_UpdatePeerGlobals_0(ctx context.Context, marshaler ru
 
 }
 
+func request_PeersV1_UpdateRateLimits_0(ctx context.Context, marshaler runtime.Marshaler, client PeersV1Client, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq UpdateRateLimitsReq
+	var metadata runtime.ServerMetadata
+
+	newReader, berr := utilities.IOReaderFactory(req.Body)
+	if berr != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", berr)
+	}
+	if err := marshaler.NewDecoder(newReader()).Decode(&protoReq); err != nil && err != io.EOF {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	msg, err := client.UpdateRateLimits(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+
+}
+
+func local_request_PeersV1_UpdateRateLimits_0(ctx context.Context, marshaler runtime.Marshaler, server PeersV1Server, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq UpdateRateLimitsReq
+	var metadata runtime.ServerMetadata
+
+	newReader, berr := utilities.IOReaderFactory(req.Body)
+	if berr != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", berr)
+	}
+	if err := marshaler.NewDecoder(newReader()).Decode(&protoReq); err != nil && err != io.EOF {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	msg, err := server.UpdateRateLimits(ctx, &protoReq)
+	return msg, metadata, err
+
+}
+
 // RegisterPeersV1HandlerServer registers the http handlers for service PeersV1 to "mux".
 // UnaryRPC     :call PeersV1Server directly.
 // StreamingRPC :currently unsupported pending https://github.com/grpc/grpc-go/issues/906.
@@ -148,6 +182,29 @@ func RegisterPeersV1HandlerServer(ctx context.Context, mux *runtime.ServeMux, se
 		}
 
 		forward_PeersV1_UpdatePeerGlobals_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
+	})
+
+	mux.Handle("POST", pattern_PeersV1_UpdateRateLimits_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/pb.gubernator.PeersV1/UpdateRateLimits", runtime.WithHTTPPathPattern("/pb.gubernator.PeersV1/UpdateRateLimits"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_PeersV1_UpdateRateLimits_0(rctx, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		ctx = runtime.NewServerMetadataContext(ctx, md)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_PeersV1_UpdateRateLimits_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 
 	})
 
@@ -232,6 +289,26 @@ func RegisterPeersV1HandlerClient(ctx context.Context, mux *runtime.ServeMux, cl
 
 	})
 
+	mux.Handle("POST", pattern_PeersV1_UpdateRateLimits_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/pb.gubernator.PeersV1/UpdateRateLimits", runtime.WithHTTPPathPattern("/pb.gubernator.PeersV1/UpdateRateLimits"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_PeersV1_UpdateRateLimits_0(rctx, inboundMarshaler, client, req, pathParams)
+		ctx = runtime.NewServerMetadataContext(ctx, md)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_PeersV1_UpdateRateLimits_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
+	})
+
 	return nil
 }
 
@@ -239,10 +316,14 @@ var (
 	pattern_PeersV1_GetPeerRateLimits_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"pb.gubernator.PeersV1", "GetPeerRateLimits"}, ""))
 
 	pattern_PeersV1_UpdatePeerGlobals_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"pb.gubernator.PeersV1", "UpdatePeerGlobals"}, ""))
+
+	pattern_PeersV1_UpdateRateLimits_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"pb.gubernator.PeersV1", "UpdateRateLimits"}, ""))
 )
 
 var (
 	forward_PeersV1_GetPeerRateLimits_0 = runtime.ForwardResponseMessage
 
 	forward_PeersV1_UpdatePeerGlobals_0 = runtime.ForwardResponseMessage
+
+	forward_PeersV1_UpdateRateLimits_0 = runtime.ForwardResponseMessage
 )

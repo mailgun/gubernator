@@ -227,7 +227,7 @@ func (e *K8sPool) updatePeersFromEndpoints() {
 
 		for _, s := range endpoint.Subsets {
 			for _, addr := range s.Addresses {
-				// TODO(thrawn01): Might consider using the `namespace` as the `DataCenter`. We should
+				// TODO(thrawn01): Might consider using the `namespace` as the `ClusterName`. We should
 				//  do what ever k8s convention is for identifying a k8s cluster within a federated multi-data
 				//  center setup.
 				peer := PeerInfo{GRPCAddress: fmt.Sprintf("%s:%s", addr.IP, e.conf.PodPort)}

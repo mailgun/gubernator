@@ -20,7 +20,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=b'Z\035github.com/mailgun/gubernator\200\001\001',
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\x0bpeers.proto\x12\rpb.gubernator\x1a\x10gubernator.proto\"E\n\x14GetPeerRateLimitsReq\x12-\n\x08requests\x18\x01 \x03(\x0b\x32\x1b.pb.gubernator.RateLimitReq\"J\n\x15GetPeerRateLimitsResp\x12\x31\n\x0brate_limits\x18\x01 \x03(\x0b\x32\x1c.pb.gubernator.RateLimitResp\"H\n\x14UpdatePeerGlobalsReq\x12\x30\n\x07globals\x18\x01 \x03(\x0b\x32\x1f.pb.gubernator.UpdatePeerGlobal\"z\n\x10UpdatePeerGlobal\x12\x0b\n\x03key\x18\x01 \x01(\t\x12,\n\x06status\x18\x02 \x01(\x0b\x32\x1c.pb.gubernator.RateLimitResp\x12+\n\talgorithm\x18\x03 \x01(\x0e\x32\x18.pb.gubernator.Algorithm\"\x17\n\x15UpdatePeerGlobalsResp2\xcd\x01\n\x07PeersV1\x12`\n\x11GetPeerRateLimits\x12#.pb.gubernator.GetPeerRateLimitsReq\x1a$.pb.gubernator.GetPeerRateLimitsResp\"\x00\x12`\n\x11UpdatePeerGlobals\x12#.pb.gubernator.UpdatePeerGlobalsReq\x1a$.pb.gubernator.UpdatePeerGlobalsResp\"\x00\x42\"Z\x1dgithub.com/mailgun/gubernator\x80\x01\x01\x62\x06proto3'
+  serialized_pb=b'\n\x0bpeers.proto\x12\rpb.gubernator\x1a\x10gubernator.proto\"E\n\x14GetPeerRateLimitsReq\x12-\n\x08requests\x18\x01 \x03(\x0b\x32\x1b.pb.gubernator.RateLimitReq\"J\n\x15GetPeerRateLimitsResp\x12\x31\n\x0brate_limits\x18\x01 \x03(\x0b\x32\x1c.pb.gubernator.RateLimitResp\"H\n\x14UpdatePeerGlobalsReq\x12\x30\n\x07globals\x18\x01 \x03(\x0b\x32\x1f.pb.gubernator.UpdatePeerGlobal\"z\n\x10UpdatePeerGlobal\x12\x0b\n\x03key\x18\x01 \x01(\t\x12,\n\x06status\x18\x02 \x01(\x0b\x32\x1c.pb.gubernator.RateLimitResp\x12+\n\talgorithm\x18\x03 \x01(\x0e\x32\x18.pb.gubernator.Algorithm\"\x17\n\x15UpdatePeerGlobalsResp\"G\n\x13UpdateRateLimitsReq\x12\x30\n\x0brate_limits\x18\x01 \x03(\x0b\x32\x1b.pb.gubernator.RateLimitReq\"\x16\n\x14UpdateRateLimitsResp2\xac\x02\n\x07PeersV1\x12`\n\x11GetPeerRateLimits\x12#.pb.gubernator.GetPeerRateLimitsReq\x1a$.pb.gubernator.GetPeerRateLimitsResp\"\x00\x12`\n\x11UpdatePeerGlobals\x12#.pb.gubernator.UpdatePeerGlobalsReq\x1a$.pb.gubernator.UpdatePeerGlobalsResp\"\x00\x12]\n\x10UpdateRateLimits\x12\".pb.gubernator.UpdateRateLimitsReq\x1a#.pb.gubernator.UpdateRateLimitsResp\"\x00\x42\"Z\x1dgithub.com/mailgun/gubernator\x80\x01\x01\x62\x06proto3'
   ,
   dependencies=[gubernator__pb2.DESCRIPTOR,])
 
@@ -193,16 +193,76 @@ _UPDATEPEERGLOBALSRESP = _descriptor.Descriptor(
   serialized_end=416,
 )
 
+
+_UPDATERATELIMITSREQ = _descriptor.Descriptor(
+  name='UpdateRateLimitsReq',
+  full_name='pb.gubernator.UpdateRateLimitsReq',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='rate_limits', full_name='pb.gubernator.UpdateRateLimitsReq.rate_limits', index=0,
+      number=1, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=418,
+  serialized_end=489,
+)
+
+
+_UPDATERATELIMITSRESP = _descriptor.Descriptor(
+  name='UpdateRateLimitsResp',
+  full_name='pb.gubernator.UpdateRateLimitsResp',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=491,
+  serialized_end=513,
+)
+
 _GETPEERRATELIMITSREQ.fields_by_name['requests'].message_type = gubernator__pb2._RATELIMITREQ
 _GETPEERRATELIMITSRESP.fields_by_name['rate_limits'].message_type = gubernator__pb2._RATELIMITRESP
 _UPDATEPEERGLOBALSREQ.fields_by_name['globals'].message_type = _UPDATEPEERGLOBAL
 _UPDATEPEERGLOBAL.fields_by_name['status'].message_type = gubernator__pb2._RATELIMITRESP
 _UPDATEPEERGLOBAL.fields_by_name['algorithm'].enum_type = gubernator__pb2._ALGORITHM
+_UPDATERATELIMITSREQ.fields_by_name['rate_limits'].message_type = gubernator__pb2._RATELIMITREQ
 DESCRIPTOR.message_types_by_name['GetPeerRateLimitsReq'] = _GETPEERRATELIMITSREQ
 DESCRIPTOR.message_types_by_name['GetPeerRateLimitsResp'] = _GETPEERRATELIMITSRESP
 DESCRIPTOR.message_types_by_name['UpdatePeerGlobalsReq'] = _UPDATEPEERGLOBALSREQ
 DESCRIPTOR.message_types_by_name['UpdatePeerGlobal'] = _UPDATEPEERGLOBAL
 DESCRIPTOR.message_types_by_name['UpdatePeerGlobalsResp'] = _UPDATEPEERGLOBALSRESP
+DESCRIPTOR.message_types_by_name['UpdateRateLimitsReq'] = _UPDATERATELIMITSREQ
+DESCRIPTOR.message_types_by_name['UpdateRateLimitsResp'] = _UPDATERATELIMITSRESP
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 GetPeerRateLimitsReq = _reflection.GeneratedProtocolMessageType('GetPeerRateLimitsReq', (_message.Message,), {
@@ -240,6 +300,20 @@ UpdatePeerGlobalsResp = _reflection.GeneratedProtocolMessageType('UpdatePeerGlob
   })
 _sym_db.RegisterMessage(UpdatePeerGlobalsResp)
 
+UpdateRateLimitsReq = _reflection.GeneratedProtocolMessageType('UpdateRateLimitsReq', (_message.Message,), {
+  'DESCRIPTOR' : _UPDATERATELIMITSREQ,
+  '__module__' : 'peers_pb2'
+  # @@protoc_insertion_point(class_scope:pb.gubernator.UpdateRateLimitsReq)
+  })
+_sym_db.RegisterMessage(UpdateRateLimitsReq)
+
+UpdateRateLimitsResp = _reflection.GeneratedProtocolMessageType('UpdateRateLimitsResp', (_message.Message,), {
+  'DESCRIPTOR' : _UPDATERATELIMITSRESP,
+  '__module__' : 'peers_pb2'
+  # @@protoc_insertion_point(class_scope:pb.gubernator.UpdateRateLimitsResp)
+  })
+_sym_db.RegisterMessage(UpdateRateLimitsResp)
+
 
 DESCRIPTOR._options = None
 
@@ -250,8 +324,8 @@ _PEERSV1 = _descriptor.ServiceDescriptor(
   index=0,
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_start=419,
-  serialized_end=624,
+  serialized_start=516,
+  serialized_end=816,
   methods=[
   _descriptor.MethodDescriptor(
     name='GetPeerRateLimits',
@@ -270,6 +344,16 @@ _PEERSV1 = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=_UPDATEPEERGLOBALSREQ,
     output_type=_UPDATEPEERGLOBALSRESP,
+    serialized_options=None,
+    create_key=_descriptor._internal_create_key,
+  ),
+  _descriptor.MethodDescriptor(
+    name='UpdateRateLimits',
+    full_name='pb.gubernator.PeersV1.UpdateRateLimits',
+    index=2,
+    containing_service=None,
+    input_type=_UPDATERATELIMITSREQ,
+    output_type=_UPDATERATELIMITSRESP,
     serialized_options=None,
     create_key=_descriptor._internal_create_key,
   ),

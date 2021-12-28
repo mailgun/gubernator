@@ -186,7 +186,12 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			span.AddEvent("Over the limit")
 			metricOverLimitCounter.Add(1)
 			rl.Status = Status_OVER_LIMIT
-			return rl, nil
+
+			// Unless client requests to always count the hits, we return
+			// here without updating the remaining.
+			if !HasBehavior(r.Behavior, Behavior_ALWAYS_COUNT_HITS) {
+				return rl, nil
+			}
 		}
 
 		span.AddEvent("Under the limit")
@@ -407,12 +412,16 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			return rl, nil
 		}
 
-		// If requested is more than available, then return over the limit
-		// without updating the bucket.
+		// If requested is more than available, then set over the limit
 		if r.Hits > int64(b.Remaining) {
 			metricOverLimitCounter.Add(1)
 			rl.Status = Status_OVER_LIMIT
-			return rl, nil
+
+			// Unless client requests to always count the hits, we return
+			// here without updating the remaining.
+			if !HasBehavior(r.Behavior, Behavior_ALWAYS_COUNT_HITS) {
+				return rl, nil
+			}
 		}
 
 		// Client is only interested in retrieving the current status

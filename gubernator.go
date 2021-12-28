@@ -38,7 +38,7 @@ import (
 )
 
 const (
-	maxBatchSize = 1000
+	maxBatchSize = 10_000
 	Healthy      = "healthy"
 	UnHealthy    = "unhealthy"
 )
@@ -46,8 +46,8 @@ const (
 type V1Instance struct {
 	UnimplementedV1Server
 	UnimplementedPeersV1Server
-	global               *globalManager
-	mutliRegion          *mutliRegionManager
+	broadcast            *broadcastManager
+	remoteCluster        *remoteClusterManager
 	peerMutex            sync.RWMutex
 	log                  FieldLogger
 	conf                 Config
@@ -134,8 +134,8 @@ func NewV1Instance(conf Config) (retval *V1Instance, reterr error) {
 	setter.SetDefault(&s.log, logrus.WithField("category", "gubernator"))
 
 	s.gubernatorPool = NewWorkerPool(&conf)
-	s.global = newGlobalManager(conf.Behaviors, &s)
-	s.mutliRegion = newMultiRegionManager(conf.Behaviors, &s)
+	s.broadcast = newBroadcastManager(conf.Behaviors, &s)
+	s.remoteCluster = newRemoteClusterManager(conf.Behaviors, &s)
 
 	// Register our instance with all GRPC servers
 	for _, srv := range conf.GRPCServers {
@@ -167,8 +167,8 @@ func (s *V1Instance) Close() (reterr error) {
 		return nil
 	}
 
-	s.global.Close()
-	s.mutliRegion.Close()
+	s.broadcast.Close()
+	s.remoteCluster.Close()
 
 	err := s.gubernatorPool.Store(ctx)
 	if err != nil {
@@ -429,7 +429,7 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 	// NOTE: The defer here avoids a race condition where we queue the req to
 	// be forwarded to the owning peer in a separate goroutine but simultaneously
 	// access and possibly copy the req in this method.
-	defer s.global.QueueHit(req)
+	defer s.broadcast.QueueHit(req)
 
 	item, ok, err := s.gubernatorPool.GetCacheItem(ctx, req.HashKey())
 	if err != nil {
@@ -476,6 +476,52 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 	}
 
 	return &UpdatePeerGlobalsResp{}, nil
+}
+
+// UpdateRateLimits updates the local cache with a list of rate limits from another cluster
+func (s *V1Instance) UpdateRateLimits(ctx context.Context, r *UpdateRateLimitsReq) (*UpdateRateLimitsResp, error) {
+	log := s.log.WithField("method", "UpdateRateLimits()")
+	s.conf.Cache.Lock()
+	defer s.conf.Cache.Unlock()
+
+	var prl GetPeerRateLimitsReq
+	for _, rl := range r.RateLimits {
+		// Check for context cancel
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		// Avoid computing who owns the rate limit if the caller is already sure we own this rl.
+		if !HasBehavior(rl.Behavior, Behavior_HASH_COMPUTED) {
+			// Verify we own this rate limit as we could be receiving a batch of rate limits we don't own.
+			key := rl.Name + "_" + rl.UniqueKey
+			peer, err := s.GetPeer(key)
+			if err != nil {
+				log.WithError(err).Errorf("while creating rate limit")
+				continue
+			}
+
+			if !peer.Info().IsOwner {
+				// If the peer is not us, then queue for delivery to node in our local cluster
+				s.broadcast.QueueHit(rl)
+				continue
+			}
+		}
+
+		// Clear the GLOBAL behavior flag and replica value, so we don't
+		// get queued to be delivered to a remote cluster again.
+		SetBehavior(&rl.Behavior, Behavior_GLOBAL, false)
+		rl.Replica = ""
+		prl.Requests = append(prl.Requests, rl)
+	}
+
+	// Spin this out into a go routine, so we can get off the wire sooner
+	go func() {
+		if _, err := s.GetPeerRateLimits(ctx, &prl); err != nil {
+			log.WithError(err).Errorf("error recording local hits")
+		}
+	}()
+	return &UpdateRateLimitsResp{}, nil
 }
 
 // GetPeerRateLimits is called by other peers to get the rate limits owned by this peer.
@@ -565,9 +611,9 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (retval
 		}
 	}
 
-	// Do the same for region peers
-	regionPeers := s.conf.RegionPicker.Peers()
-	for _, peer := range regionPeers {
+	// Do the same for cluster peers
+	clusterPeers := s.conf.ClusterPicker.Peers()
+	for _, peer := range clusterPeers {
 		lastErr := peer.GetLastErr()
 
 		if lastErr != nil {
@@ -580,7 +626,7 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (retval
 	}
 
 	health := HealthCheckResp{
-		PeerCount: int32(len(localPeers) + len(regionPeers)),
+		PeerCount: int32(len(localPeers) + len(clusterPeers)),
 		Status:    Healthy,
 	}
 
@@ -615,9 +661,16 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (retval 
 	metricCheckCounter.Add(1)
 
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
-		s.global.QueueUpdate(r)
+		s.broadcast.QueueUpdate(r)
 	}
 
+	if r.Replica != "" {
+		s.remoteCluster.QueueHits(r)
+		tracing.LogInfo(span, "s.mutliCluster.QueueHits(r)")
+    }
+
+	// TODO: This should check for a cluster name specified so we know which
+	//  cluster to forward the rate limit too.
 	if HasBehavior(r.Behavior, Behavior_MULTI_REGION) {
 		s.mutliRegion.QueueHits(r)
 	}
@@ -633,12 +686,12 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (retval 
 // SetPeers is called by the implementor to indicate the pool of peers has changed
 func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 	localPicker := s.conf.LocalPicker.New()
-	regionPicker := s.conf.RegionPicker.New()
+	clusterPicker := s.conf.ClusterPicker.New()
 
 	for _, info := range peerInfo {
-		// Add peers that are not in our local DC to the RegionPicker
-		if info.DataCenter != s.conf.DataCenter {
-			peer := s.conf.RegionPicker.GetByPeerInfo(info)
+		// Add peers that are not in our local DC to the ClusterPicker
+		if info.ClusterName != s.conf.ClusterName {
+			peer := s.conf.ClusterPicker.GetByPeerInfo(info)
 			// If we don't have an existing PeerClient create a new one
 			if peer == nil {
 				peer = NewPeerClient(PeerConfig{
@@ -648,7 +701,7 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 					Info:     info,
 				})
 			}
-			regionPicker.Add(peer)
+			clusterPicker.Add(peer)
 			continue
 		}
 		// If we don't have an existing PeerClient create a new one
@@ -668,9 +721,9 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 
 	// Replace our current pickers
 	oldLocalPicker := s.conf.LocalPicker
-	oldRegionPicker := s.conf.RegionPicker
+	oldClusterPicker := s.conf.ClusterPicker
 	s.conf.LocalPicker = localPicker
-	s.conf.RegionPicker = regionPicker
+	s.conf.ClusterPicker = clusterPicker
 	s.peerMutex.Unlock()
 
 	s.log.WithField("peers", peerInfo).Debug("peers updated")
@@ -686,9 +739,9 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 		}
 	}
 
-	for _, regionPicker := range oldRegionPicker.Pickers() {
-		for _, peer := range regionPicker.Peers() {
-			if peerInfo := s.conf.RegionPicker.GetByPeerInfo(peer.Info()); peerInfo == nil {
+	for _, clusterPicker := range oldClusterPicker.Pickers() {
+		for _, peer := range clusterPicker.Peers() {
+			if peerInfo := s.conf.ClusterPicker.GetByPeerInfo(peer.Info()); peerInfo == nil {
 				shutdownPeers = append(shutdownPeers, peer)
 			}
 		}
@@ -740,10 +793,10 @@ func (s *V1Instance) GetPeerList() []*PeerClient {
 	return s.conf.LocalPicker.Peers()
 }
 
-func (s *V1Instance) GetRegionPickers() map[string]PeerPicker {
+func (s *V1Instance) GetClusterPickers() map[string]PeerPicker {
 	s.peerMutex.RLock()
 	defer s.peerMutex.RUnlock()
-	return s.conf.RegionPicker.Pickers()
+	return s.conf.ClusterPicker.Pickers()
 }
 
 // Describe fetches prometheus metrics to be registered

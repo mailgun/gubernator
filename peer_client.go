@@ -241,12 +241,10 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	return resp, nil
 }
 
-// UpdatePeerGlobals sends global rate limit status updates to a peer
-func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (retval *UpdatePeerGlobalsResp, reterr error) {
-	ctx = tracing.StartScope(ctx)
-	defer func() {
-		tracing.EndScope(ctx, reterr)
-	}()
+// UpdatePeerGlobals sends broadcast rate limit status updates to a peer
+func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
+	span, ctx := tracing.StartSpan(ctx)
+	defer span.Finish()
 
 	if err := c.connect(ctx); err != nil {
 		return nil, c.setLastErr(err)

@@ -25,6 +25,11 @@ class PeersV1Stub(object):
                 request_serializer=peers__pb2.UpdatePeerGlobalsReq.SerializeToString,
                 response_deserializer=peers__pb2.UpdatePeerGlobalsResp.FromString,
                 )
+        self.UpdateRateLimits = channel.unary_unary(
+                '/pb.gubernator.PeersV1/UpdateRateLimits',
+                request_serializer=peers__pb2.UpdateRateLimitsReq.SerializeToString,
+                response_deserializer=peers__pb2.UpdateRateLimitsResp.FromString,
+                )
 
 
 class PeersV1Servicer(object):
@@ -45,6 +50,13 @@ class PeersV1Servicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def UpdateRateLimits(self, request, context):
+        """Used by multi-cluster manager to send rate limits to other clusters
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_PeersV1Servicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -57,6 +69,11 @@ def add_PeersV1Servicer_to_server(servicer, server):
                     servicer.UpdatePeerGlobals,
                     request_deserializer=peers__pb2.UpdatePeerGlobalsReq.FromString,
                     response_serializer=peers__pb2.UpdatePeerGlobalsResp.SerializeToString,
+            ),
+            'UpdateRateLimits': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateRateLimits,
+                    request_deserializer=peers__pb2.UpdateRateLimitsReq.FromString,
+                    response_serializer=peers__pb2.UpdateRateLimitsResp.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -100,5 +117,22 @@ class PeersV1(object):
         return grpc.experimental.unary_unary(request, target, '/pb.gubernator.PeersV1/UpdatePeerGlobals',
             peers__pb2.UpdatePeerGlobalsReq.SerializeToString,
             peers__pb2.UpdatePeerGlobalsResp.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def UpdateRateLimits(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/pb.gubernator.PeersV1/UpdateRateLimits',
+            peers__pb2.UpdateRateLimitsReq.SerializeToString,
+            peers__pb2.UpdateRateLimitsResp.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

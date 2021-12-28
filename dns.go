@@ -159,7 +159,7 @@ func peer(ip string, self string, ipv6 bool) PeerInfo {
 	}
 	grpc := ip + ":81"
 	return PeerInfo{
-		DataCenter:  "",
+		ClusterName: "",
 		HTTPAddress: ip + ":80",
 		GRPCAddress: grpc,
 		IsOwner:     grpc == self,

@@ -34,7 +34,7 @@ func BenchmarkServer(b *testing.B) {
 
 	b.Run("GetPeerRateLimit() with no batching", func(b *testing.B) {
 		client := guber.NewPeerClient(guber.PeerConfig{
-			Info:     cluster.GetRandomPeer(cluster.DataCenterNone),
+			Info:     cluster.GetRandomPeer(cluster.NameEmpty),
 			Behavior: conf.Behaviors,
 		})
 
@@ -56,7 +56,7 @@ func BenchmarkServer(b *testing.B) {
 	})
 
 	b.Run("GetRateLimit()", func(b *testing.B) {
-		client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
+		client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.NameEmpty).GRPCAddress, nil)
 		require.NoError(b, err, "Error in guber.DialV1Server")
 
 		b.ResetTimer()
@@ -80,7 +80,7 @@ func BenchmarkServer(b *testing.B) {
 	})
 
 	b.Run("GetRateLimitGlobal()", func(b *testing.B) {
-		client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
+		client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.NameEmpty).GRPCAddress, nil)
 		require.NoError(b, err, "Error in guber.DialV1Server")
 
 		b.ResetTimer()
@@ -105,7 +105,7 @@ func BenchmarkServer(b *testing.B) {
 	})
 
 	b.Run("HealthCheck", func(b *testing.B) {
-		client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
+		client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.NameEmpty).GRPCAddress, nil)
 		require.NoError(b, err, "Error in guber.DialV1Server")
 
 		b.ResetTimer()
@@ -118,7 +118,7 @@ func BenchmarkServer(b *testing.B) {
 	})
 
 	b.Run("Thundering herd", func(b *testing.B) {
-		client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
+		client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.NameEmpty).GRPCAddress, nil)
 		require.NoError(b, err, "Error in guber.DialV1Server")
 
 		b.ResetTimer()

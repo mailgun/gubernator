@@ -122,12 +122,20 @@ enum Behavior {
   // cache value. For `LEAKY_BUCKET` it sets the `Remaining` to `Limit`.
   RESET_REMAINING = 8;
 
-  // Enables rate limits to be pushed to other regions. Currently this is only implemented when using
-  // 'member-list' peer discovery. Also requires GUBER_DATA_CENTER to be set to different values on at
-  // least 2 instances of Gubernator.
-  MULTI_REGION = 16;
+  // If this flag is set, it tells gubernator that the client has already performed a consistent hash
+  // calculation and is sure that the instance receiving this rate limit is the owner. No forwarding
+  // of this rate limit will be done. (Currently only respected via the UpdateRateLimits() call)
+  HASH_COMPUTED = 9;
 
-  // TODO: Add support for LOCAL. Which would force the rate limit to be handled by the local instance
+  // If this flag is set, then even if a rate limit response is OVER_LIMIT the hits submitted will
+  // count against the remaining.
+  //
+  // In the common case a client who requested more than is available will be denied access to the
+  // resource that is rate limited, since the request will be denied the hits should not be subtracted
+  // from the remaining. However in some cases it might be useful to the client to subtract the hits of
+  // the denied request from the remaining. Setting this flag enables that behavior. NOTE: Even when
+  // counting over the limit hits, the remaining should never be a negative number.
+  ALWAYS_COUNT_HITS = 10;
 }
 
 message RateLimitReq {
@@ -159,6 +167,10 @@ message RateLimitReq {
 
   // Maximum burst size that the limit can accept.
   int64 burst = 8;
+
+  // The name of the replica group this rate limit should be replicated too.
+  // If empty no replication is performed.
+  string replica = 9;
 }
 
 enum Status {

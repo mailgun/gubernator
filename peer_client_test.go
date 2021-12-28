@@ -57,7 +57,7 @@ func TestPeerClientShutdown(t *testing.T) {
 
 		t.Run(c.Name, func(t *testing.T) {
 			client := gubernator.NewPeerClient(gubernator.PeerConfig{
-				Info:     cluster.GetRandomPeer(cluster.DataCenterNone),
+				Info:     cluster.GetRandomPeer(cluster.NameEmpty),
 				Behavior: config,
 			})
 

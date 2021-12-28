@@ -21,7 +21,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=b'Z\035github.com/mailgun/gubernator\200\001\001',
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\x10gubernator.proto\x12\rpb.gubernator\x1a\x1cgoogle/api/annotations.proto\"A\n\x10GetRateLimitsReq\x12-\n\x08requests\x18\x01 \x03(\x0b\x32\x1b.pb.gubernator.RateLimitReq\"D\n\x11GetRateLimitsResp\x12/\n\tresponses\x18\x01 \x03(\x0b\x32\x1c.pb.gubernator.RateLimitResp\"\xc6\x01\n\x0cRateLimitReq\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x12\n\nunique_key\x18\x02 \x01(\t\x12\x0c\n\x04hits\x18\x03 \x01(\x03\x12\r\n\x05limit\x18\x04 \x01(\x03\x12\x10\n\x08\x64uration\x18\x05 \x01(\x03\x12+\n\talgorithm\x18\x06 \x01(\x0e\x32\x18.pb.gubernator.Algorithm\x12)\n\x08\x62\x65havior\x18\x07 \x01(\x0e\x32\x17.pb.gubernator.Behavior\x12\r\n\x05\x62urst\x18\x08 \x01(\x03\"\xea\x01\n\rRateLimitResp\x12%\n\x06status\x18\x01 \x01(\x0e\x32\x15.pb.gubernator.Status\x12\r\n\x05limit\x18\x02 \x01(\x03\x12\x11\n\tremaining\x18\x03 \x01(\x03\x12\x12\n\nreset_time\x18\x04 \x01(\x03\x12\r\n\x05\x65rror\x18\x05 \x01(\t\x12<\n\x08metadata\x18\x06 \x03(\x0b\x32*.pb.gubernator.RateLimitResp.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x10\n\x0eHealthCheckReq\"F\n\x0fHealthCheckResp\x12\x0e\n\x06status\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x12\n\npeer_count\x18\x03 \x01(\x05*/\n\tAlgorithm\x12\x10\n\x0cTOKEN_BUCKET\x10\x00\x12\x10\n\x0cLEAKY_BUCKET\x10\x01*w\n\x08\x42\x65havior\x12\x0c\n\x08\x42\x41TCHING\x10\x00\x12\x0f\n\x0bNO_BATCHING\x10\x01\x12\n\n\x06GLOBAL\x10\x02\x12\x19\n\x15\x44URATION_IS_GREGORIAN\x10\x04\x12\x13\n\x0fRESET_REMAINING\x10\x08\x12\x10\n\x0cMULTI_REGION\x10\x10*)\n\x06Status\x12\x0f\n\x0bUNDER_LIMIT\x10\x00\x12\x0e\n\nOVER_LIMIT\x10\x01\x32\xdd\x01\n\x02V1\x12p\n\rGetRateLimits\x12\x1f.pb.gubernator.GetRateLimitsReq\x1a .pb.gubernator.GetRateLimitsResp\"\x1c\x82\xd3\xe4\x93\x02\x16\"\x11/v1/GetRateLimits:\x01*\x12\x65\n\x0bHealthCheck\x12\x1d.pb.gubernator.HealthCheckReq\x1a\x1e.pb.gubernator.HealthCheckResp\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/HealthCheckB\"Z\x1dgithub.com/mailgun/gubernator\x80\x01\x01\x62\x06proto3'
+  serialized_pb=b'\n\x10gubernator.proto\x12\rpb.gubernator\x1a\x1cgoogle/api/annotations.proto\"A\n\x10GetRateLimitsReq\x12-\n\x08requests\x18\x01 \x03(\x0b\x32\x1b.pb.gubernator.RateLimitReq\"D\n\x11GetRateLimitsResp\x12/\n\tresponses\x18\x01 \x03(\x0b\x32\x1c.pb.gubernator.RateLimitResp\"\xd7\x01\n\x0cRateLimitReq\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x12\n\nunique_key\x18\x02 \x01(\t\x12\x0c\n\x04hits\x18\x03 \x01(\x03\x12\r\n\x05limit\x18\x04 \x01(\x03\x12\x10\n\x08\x64uration\x18\x05 \x01(\x03\x12+\n\talgorithm\x18\x06 \x01(\x0e\x32\x18.pb.gubernator.Algorithm\x12)\n\x08\x62\x65havior\x18\x07 \x01(\x0e\x32\x17.pb.gubernator.Behavior\x12\r\n\x05\x62urst\x18\x08 \x01(\x03\x12\x0f\n\x07replica\x18\t \x01(\t\"\xea\x01\n\rRateLimitResp\x12%\n\x06status\x18\x01 \x01(\x0e\x32\x15.pb.gubernator.Status\x12\r\n\x05limit\x18\x02 \x01(\x03\x12\x11\n\tremaining\x18\x03 \x01(\x03\x12\x12\n\nreset_time\x18\x04 \x01(\x03\x12\r\n\x05\x65rror\x18\x05 \x01(\t\x12<\n\x08metadata\x18\x06 \x03(\x0b\x32*.pb.gubernator.RateLimitResp.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x10\n\x0eHealthCheckReq\"F\n\x0fHealthCheckResp\x12\x0e\n\x06status\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x12\n\npeer_count\x18\x03 \x01(\x05*/\n\tAlgorithm\x12\x10\n\x0cTOKEN_BUCKET\x10\x00\x12\x10\n\x0cLEAKY_BUCKET\x10\x01*\x8f\x01\n\x08\x42\x65havior\x12\x0c\n\x08\x42\x41TCHING\x10\x00\x12\x0f\n\x0bNO_BATCHING\x10\x01\x12\n\n\x06GLOBAL\x10\x02\x12\x19\n\x15\x44URATION_IS_GREGORIAN\x10\x04\x12\x13\n\x0fRESET_REMAINING\x10\x08\x12\x11\n\rHASH_COMPUTED\x10\t\x12\x15\n\x11\x41LWAYS_COUNT_HITS\x10\n*)\n\x06Status\x12\x0f\n\x0bUNDER_LIMIT\x10\x00\x12\x0e\n\nOVER_LIMIT\x10\x01\x32\xdd\x01\n\x02V1\x12p\n\rGetRateLimits\x12\x1f.pb.gubernator.GetRateLimitsReq\x1a .pb.gubernator.GetRateLimitsResp\"\x1c\x82\xd3\xe4\x93\x02\x16\"\x11/v1/GetRateLimits:\x01*\x12\x65\n\x0bHealthCheck\x12\x1d.pb.gubernator.HealthCheckReq\x1a\x1e.pb.gubernator.HealthCheckResp\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/HealthCheckB\"Z\x1dgithub.com/mailgun/gubernator\x80\x01\x01\x62\x06proto3'
   ,
   dependencies=[google_dot_api_dot_annotations__pb2.DESCRIPTOR,])
 
@@ -45,8 +45,8 @@ _ALGORITHM = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=730,
-  serialized_end=777,
+  serialized_start=747,
+  serialized_end=794,
 )
 _sym_db.RegisterEnumDescriptor(_ALGORITHM)
 
@@ -84,15 +84,20 @@ _BEHAVIOR = _descriptor.EnumDescriptor(
       type=None,
       create_key=_descriptor._internal_create_key),
     _descriptor.EnumValueDescriptor(
-      name='MULTI_REGION', index=5, number=16,
+      name='HASH_COMPUTED', index=5, number=9,
+      serialized_options=None,
+      type=None,
+      create_key=_descriptor._internal_create_key),
+    _descriptor.EnumValueDescriptor(
+      name='ALWAYS_COUNT_HITS', index=6, number=10,
       serialized_options=None,
       type=None,
       create_key=_descriptor._internal_create_key),
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=779,
-  serialized_end=898,
+  serialized_start=797,
+  serialized_end=940,
 )
 _sym_db.RegisterEnumDescriptor(_BEHAVIOR)
 
@@ -117,8 +122,8 @@ _STATUS = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=900,
-  serialized_end=941,
+  serialized_start=942,
+  serialized_end=983,
 )
 _sym_db.RegisterEnumDescriptor(_STATUS)
 
@@ -130,7 +135,8 @@ NO_BATCHING = 1
 GLOBAL = 2
 DURATION_IS_GREGORIAN = 4
 RESET_REMAINING = 8
-MULTI_REGION = 16
+HASH_COMPUTED = 9
+ALWAYS_COUNT_HITS = 10
 UNDER_LIMIT = 0
 OVER_LIMIT = 1
 
@@ -264,6 +270,13 @@ _RATELIMITREQ = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='replica', full_name='pb.gubernator.RateLimitReq.replica', index=8,
+      number=9, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
   ],
   extensions=[
   ],
@@ -277,7 +290,7 @@ _RATELIMITREQ = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=203,
-  serialized_end=401,
+  serialized_end=418,
 )
 
 
@@ -315,8 +328,8 @@ _RATELIMITRESP_METADATAENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=591,
-  serialized_end=638,
+  serialized_start=608,
+  serialized_end=655,
 )
 
 _RATELIMITRESP = _descriptor.Descriptor(
@@ -381,8 +394,8 @@ _RATELIMITRESP = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=404,
-  serialized_end=638,
+  serialized_start=421,
+  serialized_end=655,
 )
 
 
@@ -406,8 +419,8 @@ _HEALTHCHECKREQ = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=640,
-  serialized_end=656,
+  serialized_start=657,
+  serialized_end=673,
 )
 
 
@@ -452,8 +465,8 @@ _HEALTHCHECKRESP = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=658,
-  serialized_end=728,
+  serialized_start=675,
+  serialized_end=745,
 )
 
 _GETRATELIMITSREQ.fields_by_name['requests'].message_type = _RATELIMITREQ
@@ -535,8 +548,8 @@ _V1 = _descriptor.ServiceDescriptor(
   index=0,
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_start=944,
-  serialized_end=1165,
+  serialized_start=986,
+  serialized_end=1207,
   methods=[
   _descriptor.MethodDescriptor(
     name='GetRateLimits',

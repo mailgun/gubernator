@@ -260,7 +260,7 @@ func unmarshallPeer(b []byte, ip string) (PeerInfo, error) {
 		if metadata.AdvertiseAddress == "" {
 			metadata.AdvertiseAddress = makeAddress(ip, metadata.GubernatorPort)
 		}
-		return PeerInfo{GRPCAddress: metadata.AdvertiseAddress, DataCenter: metadata.DataCenter}, nil
+		return PeerInfo{GRPCAddress: metadata.AdvertiseAddress, ClusterName: metadata.DataCenter}, nil
 	}
 	return peer, nil
 }

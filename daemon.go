@@ -115,6 +115,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 		GRPCServers: s.grpcSrvs,
 		Logger:      s.log,
 		Cache:       cache,
+		Behaviors:   s.conf.Behaviors,
 	})
 	if err != nil {
 		return errors.Wrap(err, "while creating new gubernator instance")

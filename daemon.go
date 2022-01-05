@@ -138,6 +138,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 		GRPCServers:  s.grpcSrvs,
 		Logger:       s.log,
 		CacheFactory: cacheFactory,
+		Behaviors:    s.conf.Behaviors,
 	}
 	s.V1Server, err = NewV1Instance(s.gubeConfig)
 	if err != nil {

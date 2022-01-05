@@ -11,8 +11,8 @@ test:
 
 .PHONY: docker
 docker:
-	docker build --build-arg VERSION=$(VERSION) -t thrawn01/gubernator:$(VERSION) .
-	docker tag thrawn01/gubernator:$(VERSION) thrawn01/gubernator:latest
+	docker build --build-arg VERSION=$(VERSION) -t ghcr.io/mailgun/gubernator:$(VERSION) .
+	docker tag ghcr.io/mailgun/gubernator:$(VERSION) ghcr.io/mailgun/gubernator:latest
 
 .PHONY: release
 release:

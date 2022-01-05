@@ -80,7 +80,7 @@ func TestLoader(t *testing.T) {
 			GlobalSyncWait: clock.Millisecond * 50, // Suitable for testing but not production
 			GlobalTimeout:  clock.Second,
 		},
-		Loader: loader,
+		Loader:                       loader,
 		PoolWorkerHashRingRedundancy: 1,
 	})
 

@@ -90,7 +90,7 @@ func TestGubernatorPool(t *testing.T) {
 					CacheFactory: func() Cache {
 						return mockCache
 					},
-					Loader: mockLoader,
+					Loader:                       mockLoader,
 					PoolWorkerHashRingRedundancy: 1,
 				}
 				conf.SetDefaults()

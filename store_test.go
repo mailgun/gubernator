@@ -81,6 +81,7 @@ func TestLoader(t *testing.T) {
 			GlobalTimeout:  clock.Second,
 		},
 		Loader: loader,
+		PoolWorkerHashRingRedundancy: 1,
 	})
 
 	// loader.Load() should have been called for gubernator startup

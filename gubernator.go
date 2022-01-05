@@ -57,34 +57,22 @@ type V1Instance struct {
 
 var getRateLimitCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Name: "gubernator_getratelimit_counter",
-	Help: "Count of getRateLimit() calls.  Label \"calltype\" may be \"local\" for calls handled by the same peer, \"forward\" for calls forwarded to another peer, or \"global\" for global rate limits.",
+	Help: "The count of getRateLimit() calls.  Label \"calltype\" may be \"local\" for calls handled by the same peer, \"forward\" for calls forwarded to another peer, or \"global\" for global rate limits.",
 }, []string{"calltype"})
-var getPeerRateLimitDurationMetric = prometheus.NewSummary(prometheus.SummaryOpts{
-	Name: "baliedge_gubernator_duration",
-	Help: "Processing time for calls to getRateLimit within Gubernator.",
-	Objectives: map[float64]float64{
-		0.99: 0.001,
-	},
-})
-var getPeerRateLimitLockDurationMetric = prometheus.NewSummary(prometheus.SummaryOpts{
-	Name: "baliedge_gubernator_lock_duration",
-	Help: "Lock wait time for calls to getRateLimit within Gubernator.",
-	Objectives: map[float64]float64{
-		0.99: 0.001,
-	},
-})
 var funcTimeMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
-	Name: "baliedge_func_duration",
+	Name: "gubernator_func_duration",
+	Help: "The timings of key functions in Gubernator.",
 	Objectives: map[float64]float64{
 		0.99: 0.001,
 	},
 }, []string{"name"})
-var asyncRequestsRetriesCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
-	Name: "baliedge_asyncrequests_retries",
+var asyncRequestRetriesCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Name: "gubernator_asyncrequest_retries",
+	Help: "The count of retries occurred in asyncRequests() forwarding a request to another peer.",
 }, []string{"name"})
 var queueLengthMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
-	Name: "baliedge_queue_length",
-	Help: "Queue length in PeerClient.",
+	Name: "gubernator_queue_length",
+	Help: "The getRateLimitsBatch() queue length in PeerClient.",
 	Objectives: map[float64]float64{
 		0.99: 0.001,
 	},
@@ -97,9 +85,9 @@ var overLimitCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Name: "gubernator_over_limit_counter",
 	Help: "The number of rate limit checks that are over the limit",
 })
-var concurrentChecksCounter = prometheus.NewSummary(prometheus.SummaryOpts{
-	Name: "baliedge_getratelimits_concurrent_counter",
-	Help: "Number of concurrent GetRateLimits calls.",
+var concurrentChecksMetric = prometheus.NewSummary(prometheus.SummaryOpts{
+	Name: "gubernator_concurrent_checks_counter",
+	Help: "The number of concurrent GetRateLimits API calls.",
 	Objectives: map[float64]float64{
 		0.99: 0.001,
 	},
@@ -198,7 +186,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 	concurrentCounter := atomic.AddInt64(&s.getRateLimitsCounter, 1)
 	defer atomic.AddInt64(&s.getRateLimitsCounter, -1)
 	span.SetTag("concurrentCounter", concurrentCounter)
-	concurrentChecksCounter.Observe(float64(concurrentCounter))
+	concurrentChecksMetric.Observe(float64(concurrentCounter))
 
 	if len(r.Requests) > maxBatchSize {
 		checkErrorCounter.WithLabelValues("Request too large").Add(1)
@@ -369,7 +357,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 		if err != nil {
 			if IsNotReady(err) {
 				attempts++
-				asyncRequestsRetriesCounter.WithLabelValues(req.Req.Name).Add(1)
+				asyncRequestRetriesCounter.WithLabelValues(req.Req.Name).Add(1)
 				req.Peer, err = s.GetPeer(ctx, req.Key)
 				if err != nil {
 					errPart := fmt.Sprintf("Error finding peer that owns rate limit '%s'", req.Key)
@@ -518,6 +506,7 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*Healt
 	var errs []string
 
 	s.peerMutex.RLock()
+	defer s.peerMutex.RUnlock()
 	tracing.LogInfo(span, "peerMutex.RLock()")
 
 	// Iterate through local peers and get their last errors
@@ -561,7 +550,6 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (*Healt
 	span.SetTag("health.peerCount", health.PeerCount)
 	span.SetTag("health.status", health.Status)
 
-	defer s.peerMutex.RUnlock()
 	return &health, nil
 }
 
@@ -573,8 +561,8 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (*RateLi
 	span.SetTag("request.limit", r.Limit)
 	span.SetTag("request.duration", r.Duration)
 
-	requestTimer := prometheus.NewTimer(getPeerRateLimitDurationMetric)
-	defer requestTimer.ObserveDuration()
+	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit"))
+	defer funcTimer.ObserveDuration()
 	checkCounter.Add(1)
 
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
@@ -693,10 +681,9 @@ func (s *V1Instance) GetPeer(ctx context.Context, key string) (*PeerClient, erro
 		return nil, ctx.Err()
 	}
 
-	lockSpan, _ := tracing.StartNamedSpan(ctx, "s.peerMutex.RLock()")
 	s.peerMutex.RLock()
 	defer s.peerMutex.RUnlock()
-	lockSpan.Finish()
+	tracing.LogInfo(span, "peerMutex.RLock()")
 	lockTimer.ObserveDuration()
 
 	peer, err := s.conf.LocalPicker.Get(key)
@@ -726,12 +713,10 @@ func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
 	ch <- s.global.asyncMetrics.Desc()
 	ch <- s.global.broadcastMetrics.Desc()
 	getRateLimitCounter.Describe(ch)
-	getPeerRateLimitDurationMetric.Describe(ch)
-	getPeerRateLimitLockDurationMetric.Describe(ch)
 	funcTimeMetric.Describe(ch)
-	asyncRequestsRetriesCounter.Describe(ch)
+	asyncRequestRetriesCounter.Describe(ch)
 	queueLengthMetric.Describe(ch)
-	concurrentChecksCounter.Describe(ch)
+	concurrentChecksMetric.Describe(ch)
 	checkErrorCounter.Describe(ch)
 	overLimitCounter.Describe(ch)
 	checkCounter.Describe(ch)
@@ -742,12 +727,10 @@ func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
 	ch <- s.global.asyncMetrics
 	ch <- s.global.broadcastMetrics
 	getRateLimitCounter.Collect(ch)
-	getPeerRateLimitDurationMetric.Collect(ch)
-	getPeerRateLimitLockDurationMetric.Collect(ch)
 	funcTimeMetric.Collect(ch)
-	asyncRequestsRetriesCounter.Collect(ch)
+	asyncRequestRetriesCounter.Collect(ch)
 	queueLengthMetric.Collect(ch)
-	concurrentChecksCounter.Collect(ch)
+	concurrentChecksMetric.Collect(ch)
 	checkErrorCounter.Collect(ch)
 	overLimitCounter.Collect(ch)
 	checkCounter.Collect(ch)

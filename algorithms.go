@@ -82,18 +82,14 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			removeSpan.Finish()
 
 			if s != nil {
-				removeSpan, _ := tracing.StartNamedSpan(ctx, "s.Remove()")
 				s.Remove(r.HashKey())
-				removeSpan.Finish()
 			}
 			return tokenBucket(ctx, s, c, r)
 		}
 
 		if s != nil {
 			defer func() {
-				onChangeSpan, _ := tracing.StartNamedSpan(ctx, "s.OnChange()")
 				s.OnChange(r, item)
-				onChangeSpan.Finish()
 			}()
 		}
 

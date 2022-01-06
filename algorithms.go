@@ -31,17 +31,16 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 	tokenBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("tokenBucket"))
 	defer tokenBucketTimer.ObserveDuration()
 
-	getSpan, _ := tracing.StartNamedSpan(ctx, "c.GetItem()")
 	item, ok := c.GetItem(r.HashKey())
-	getSpan.Finish()
+	tracing.LogInfo(span, "c.GetItem()")
 
 	if s != nil {
 		if !ok {
 			// Check our store for the item
 			if item, ok = s.Get(r); ok {
-				addSpan, _ := tracing.StartNamedSpan(ctx, "Check store for rate limit")
+				tracing.LogInfo(span, "Check store for rate limit")
 				c.Add(item)
-				addSpan.Finish()
+				tracing.LogInfo(span, "c.Add()")
 			}
 		}
 	}
@@ -50,14 +49,12 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		tracing.LogInfo(span, "Update existing rate limit")
 
 		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
-			removeSpan, _ := tracing.StartNamedSpan(ctx, "c.Remove()")
 			c.Remove(r.HashKey())
-			removeSpan.Finish()
+			tracing.LogInfo(span, "c.Remove()")
 
 			if s != nil {
-				removeSpan, _ := tracing.StartNamedSpan(ctx, "s.Remove()")
 				s.Remove(r.HashKey())
-				removeSpan.Finish()
+				tracing.LogInfo(span, "c.Remove()")
 			}
 			return &RateLimitResp{
 				Status:    Status_UNDER_LIMIT,
@@ -77,12 +74,12 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			// Client switched algorithms; perhaps due to a migration?
 			tracing.LogInfo(span, "Client switched algorithms; perhaps due to a migration?")
 
-			removeSpan, _ := tracing.StartNamedSpan(ctx, "c.Remove()")
 			c.Remove(r.HashKey())
-			removeSpan.Finish()
+			tracing.LogInfo(span, "c.Remove()")
 
 			if s != nil {
 				s.Remove(r.HashKey())
+				tracing.LogInfo(span, "c.Remove()")
 			}
 			return tokenBucket(ctx, s, c, r)
 		}
@@ -90,6 +87,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		if s != nil {
 			defer func() {
 				s.OnChange(r, item)
+				tracing.LogInfo(span, "defer s.OnChange()")
 			}()
 		}
 
@@ -126,9 +124,8 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 				// Update this so s.OnChange() will get the new expire change
 				item.ExpireAt = expire
 
-				removeSpan, _ := tracing.StartNamedSpan(ctx, "c.Remove()")
 				c.Remove(item.Key)
-				removeSpan.Finish()
+				tracing.LogInfo(span, "c.Remove()")
 
 				return tokenBucket(ctx, s, c, r)
 			}
@@ -214,14 +211,12 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		ExpireAt:  expire,
 	}
 
-	addSpan, _ := tracing.StartNamedSpan(ctx, "c.Add()")
 	c.Add(item)
-	addSpan.Finish()
+	tracing.LogInfo(span, "c.Add()")
 
 	if s != nil {
-		onChangeSpan, _ := tracing.StartNamedSpan(ctx, "s.OnChange()")
 		s.OnChange(r, item)
-		onChangeSpan.Finish()
+		tracing.LogInfo(span, "s.OnChange()")
 	}
 	return rl, nil
 }
@@ -239,14 +234,16 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 	now := MillisecondNow()
 	item, ok := c.GetItem(r.HashKey())
+
 	if s != nil {
 		if !ok {
 			// Check our store for the item
-			span2, _ := tracing.StartNamedSpan(ctx, "Check our store for the item")
-			if item, ok = s.Get(r); ok {
+			item, ok = s.Get(r)
+			tracing.LogInfo(span, "c.Get()")
+			if ok {
 				c.Add(item)
+				tracing.LogInfo(span, "c.Add()")
 			}
-			span2.Finish()
 		}
 	}
 
@@ -255,11 +252,13 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		if !ok {
 			// Client switched algorithms; perhaps due to a migration?
 			c.Remove(r.HashKey())
+			tracing.LogInfo(span, "c.Remove()")
+
 			if s != nil {
-				span2, _ := tracing.StartNamedSpan(ctx, "s.Remove()")
 				s.Remove(r.HashKey())
-				span2.Finish()
+				tracing.LogInfo(span, "c.Remove()")
 			}
+
 			return leakyBucket(ctx, s, c, r)
 		}
 
@@ -280,6 +279,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 		duration := r.Duration
 		rate := float64(duration) / float64(r.Limit)
+
 		if HasBehavior(r.Behavior, Behavior_DURATION_IS_GREGORIAN) {
 			d, err := GregorianDuration(clock.Now(), r.Duration)
 			if err != nil {
@@ -320,9 +320,8 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 		if s != nil {
 			defer func() {
-				span2, _ := tracing.StartNamedSpan(ctx, "s.OnChange()")
 				s.OnChange(r, item)
-				span2.Finish()
+				tracing.LogInfo(span, "s.OnChange()")
 			}()
 		}
 
@@ -405,11 +404,14 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		Key:       r.HashKey(),
 		Value:     &b,
 	}
+
 	c.Add(item)
+	tracing.LogInfo(span, "c.Add()")
+
 	if s != nil {
-		span2, _ := tracing.StartNamedSpan(ctx, "s.OnChange()")
 		s.OnChange(r, item)
-		span2.Finish()
+		tracing.LogInfo(span, "s.OnChange()")
 	}
+
 	return &rl, nil
 }

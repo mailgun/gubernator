@@ -236,6 +236,7 @@ func (chp *gubernatorPool) GetRateLimit(ctx context.Context, rlRequest *RateLimi
 	}
 
 	// Send request.
+	tracing.LogInfo(span, "Sending request...")
 	select {
 	case worker.getRateLimitRequest <- handlerRequest:
 		// Successfully sent request.
@@ -245,6 +246,7 @@ func (chp *gubernatorPool) GetRateLimit(ctx context.Context, rlRequest *RateLimi
 	}
 
 	// Wait for response.
+	tracing.LogInfo(span, "Waiting for response...")
 	select {
 	case handlerResponse := <-handlerRequest.resp:
 		// Successfully read response.

@@ -338,7 +338,7 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	}
 
 	// Enqueue the request to be sent
-	tracing.LogInfo(span, "Enqueue request, queue length: %d", len(c.queue))
+	tracing.LogInfo(span, "Enqueue request", "queueLength", len(c.queue))
 	peerAddr := c.Info().GRPCAddress
 	queueLengthMetric.WithLabelValues(peerAddr).Observe(float64(len(c.queue)))
 

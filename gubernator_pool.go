@@ -39,14 +39,17 @@ import (
 )
 
 type gubernatorPool struct {
-	// List of channels.  Must be sorted by hash value.
 	workers []*poolWorker
-	conf    *Config
-	done    chan struct{}
+
+	// Workers in the hash ring.  Must be sorted by hash value.
+	hashRing []poolHashRingNode
+
+	conf *Config
+	done chan struct{}
 }
 
 type poolWorker struct {
-	hash                uint64
+	name                string
 	conf                *Config
 	cache               Cache
 	getRateLimitRequest chan *request
@@ -54,6 +57,12 @@ type poolWorker struct {
 	loadRequest         chan poolLoadRequest
 	addCacheItemRequest chan poolAddCacheItemRequest
 	getCacheItemRequest chan poolGetCacheItemRequest
+}
+
+// Reference to a poolWorker in the hash ring.
+type poolHashRingNode struct {
+	hash   uint64
+	worker *poolWorker
 }
 
 type poolStoreRequest struct {
@@ -126,19 +135,26 @@ func (chp *gubernatorPool) addWorker() *poolWorker {
 		addCacheItemRequest: make(chan poolAddCacheItemRequest, commandChannelSize),
 		getCacheItemRequest: make(chan poolGetCacheItemRequest, commandChannelSize),
 	}
+	worker.name = fmt.Sprintf("%p", worker)
+	chp.workers = append(chp.workers, worker)
 
+	// Create redundant poolWorker references in the hash ring to improve even
+	// distribution of workload.
 	for i := 0; i < chp.conf.PoolWorkerHashRingRedundancy; i++ {
 		// Generate an arbitrary hash based off the worker pointer.
 		// This hash value is the beginning range of a hash ring node.
 		key := fmt.Sprintf("%p-%x", worker, i)
-		worker.hash = xxhash.ChecksumString64S(key, 0)
+		node := poolHashRingNode{
+			hash:   xxhash.ChecksumString64S(key, 0),
+			worker: worker,
+		}
 
-		chp.workers = append(chp.workers, worker)
+		chp.hashRing = append(chp.hashRing, node)
 	}
 
-	// Ensure keys array is sorted by hash value.
-	sort.Slice(chp.workers, func(a, b int) bool {
-		return chp.workers[a].hash < chp.workers[b].hash
+	// Sort hashRing array by hash value.
+	sort.Slice(chp.hashRing, func(a, b int) bool {
+		return chp.hashRing[a].hash < chp.hashRing[b].hash
 	})
 
 	return worker
@@ -150,16 +166,16 @@ func (chp *gubernatorPool) getWorker(key string) *poolWorker {
 	hash := xxhash.ChecksumString64S(key, 0)
 
 	// Binary search for appropriate channel.
-	idx := sort.Search(len(chp.workers), func(i int) bool {
-		return chp.workers[i].hash >= hash
+	idx := sort.Search(len(chp.hashRing), func(i int) bool {
+		return chp.hashRing[i].hash >= hash
 	})
 
 	// Means we have cycled back to the first.
-	if idx >= len(chp.workers) {
+	if idx >= len(chp.hashRing) {
 		idx = 0
 	}
 
-	return chp.workers[idx]
+	return chp.hashRing[idx].worker
 }
 
 // Pool worker for processing Gubernator requests.
@@ -236,7 +252,7 @@ func (chp *gubernatorPool) GetRateLimit(ctx context.Context, rlRequest *RateLimi
 	}
 
 	// Send request.
-	tracing.LogInfo(span, "Sending request...")
+	tracing.LogInfo(span, "Sending request...", "channelLength", len(worker.getRateLimitRequest))
 	select {
 	case worker.getRateLimitRequest <- handlerRequest:
 		// Successfully sent request.
@@ -244,6 +260,8 @@ func (chp *gubernatorPool) GetRateLimit(ctx context.Context, rlRequest *RateLimi
 		ext.LogError(span, ctx.Err())
 		return nil, ctx.Err()
 	}
+
+	poolWorkerQueueLength.WithLabelValues(worker.name).Observe(float64(len(worker.getRateLimitRequest)))
 
 	// Wait for response.
 	tracing.LogInfo(span, "Waiting for response...")
@@ -324,7 +342,7 @@ func (chp *gubernatorPool) Load(ctx context.Context) error {
 	}
 
 	// Map request channel hash to load channel.
-	loadChMap := map[uint64]loadChannel{}
+	loadChMap := map[*poolWorker]loadChannel{}
 
 	// Send each item to assigned channel's cache.
 mainloop:
@@ -347,14 +365,14 @@ mainloop:
 		worker := chp.getWorker(item.Key)
 
 		// Initiate a load channel with each worker.
-		loadCh, exist := loadChMap[worker.hash]
+		loadCh, exist := loadChMap[worker]
 		if !exist {
 			loadCh = loadChannel{
 				ch:       make(chan CacheItem),
 				worker:   worker,
 				respChan: make(chan poolLoadResponse),
 			}
-			loadChMap[worker.hash] = loadCh
+			loadChMap[worker] = loadCh
 
 			// Tie up the worker while loading.
 			worker.loadRequest <- poolLoadRequest{
@@ -445,7 +463,7 @@ func (chp *gubernatorPool) Store(ctx context.Context) error {
 		wg.Add(1)
 
 		go func(worker *poolWorker) {
-			span2, ctx2 := tracing.StartNamedSpan(ctx, fmt.Sprintf("%x", worker.hash))
+			span2, ctx2 := tracing.StartNamedSpan(ctx, fmt.Sprintf("%p", worker))
 			defer span2.Finish()
 			defer wg.Done()
 

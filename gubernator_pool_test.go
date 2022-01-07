@@ -91,7 +91,6 @@ func TestGubernatorPool(t *testing.T) {
 						return mockCache
 					},
 					Loader:                       mockLoader,
-					PoolWorkerHashRingRedundancy: 1,
 				}
 				conf.SetDefaults()
 				chp := newGubernatorPool(conf, testCase.concurrency)

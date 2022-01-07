@@ -79,11 +79,11 @@ var queueLengthMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 }, []string{"peerAddr"})
 var checkCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Name: "gubernator_check_counter",
-	Help: "The number of rate limits checked",
+	Help: "The number of rate limits checked.",
 })
 var overLimitCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Name: "gubernator_over_limit_counter",
-	Help: "The number of rate limit checks that are over the limit",
+	Help: "The number of rate limit checks that are over the limit.",
 })
 var concurrentChecksMetric = prometheus.NewSummary(prometheus.SummaryOpts{
 	Name: "gubernator_concurrent_checks_counter",
@@ -94,8 +94,15 @@ var concurrentChecksMetric = prometheus.NewSummary(prometheus.SummaryOpts{
 })
 var checkErrorCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Name: "gubernator_check_error_counter",
-	Help: "The number of errors while checking rate limits",
+	Help: "The number of errors while checking rate limits.",
 }, []string{"error"})
+var poolWorkerQueueLength = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+	Name: "gubernator_pool_queue_length",
+	Help: "The number of GetRateLimit requests queued up in GubernatorPool workers.",
+	Objectives: map[float64]float64{
+		0.99: 0.001,
+	},
+}, []string{"worker"})
 
 // NewV1Instance instantiate a single instance of a gubernator peer and registers this
 // instance with the provided GRPCServer.
@@ -720,6 +727,7 @@ func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
 	checkErrorCounter.Describe(ch)
 	overLimitCounter.Describe(ch)
 	checkCounter.Describe(ch)
+	poolWorkerQueueLength.Describe(ch)
 }
 
 // Collect fetches metrics from the server for use by prometheus
@@ -734,6 +742,7 @@ func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
 	checkErrorCounter.Collect(ch)
 	overLimitCounter.Collect(ch)
 	checkCounter.Collect(ch)
+	poolWorkerQueueLength.Collect(ch)
 }
 
 // HasBehavior returns true if the provided behavior is set

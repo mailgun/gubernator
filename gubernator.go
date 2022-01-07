@@ -102,7 +102,7 @@ var poolWorkerQueueLength = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 	Objectives: map[float64]float64{
 		0.99: 0.001,
 	},
-}, []string{"worker"})
+}, []string{"method", "worker"})
 
 // NewV1Instance instantiate a single instance of a gubernator peer and registers this
 // instance with the provided GRPCServer.

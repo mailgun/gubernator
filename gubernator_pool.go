@@ -105,7 +105,7 @@ type poolGetCacheItemResponse struct {
 }
 
 var _ io.Closer = &gubernatorPool{}
-var poolWorkerCounter uint64
+var poolWorkerCounter int64
 
 func newGubernatorPool(conf *Config, concurrency int) *gubernatorPool {
 	chp := &gubernatorPool{
@@ -138,8 +138,8 @@ func (chp *gubernatorPool) addWorker() *poolWorker {
 		addCacheItemRequest: make(chan poolAddCacheItemRequest, commandChannelSize),
 		getCacheItemRequest: make(chan poolGetCacheItemRequest, commandChannelSize),
 	}
-	workerNumber := atomic.AddUint64(&poolWorkerCounter, 1)
-	worker.name = strconv.FormatUint(workerNumber, 10)
+	workerNumber := atomic.AddInt64(&poolWorkerCounter, 1) - 1
+	worker.name = strconv.FormatInt(workerNumber, 10)
 	chp.workers = append(chp.workers, worker)
 
 	// Create redundant poolWorker references in the hash ring to improve even
@@ -265,7 +265,7 @@ func (chp *gubernatorPool) GetRateLimit(ctx context.Context, rlRequest *RateLimi
 		return nil, ctx.Err()
 	}
 
-	poolWorkerQueueLength.WithLabelValues(worker.name).Observe(float64(len(worker.getRateLimitRequest)))
+	poolWorkerQueueLength.WithLabelValues("GetRateLimit", worker.name).Observe(float64(len(worker.getRateLimitRequest)))
 
 	// Wait for response.
 	tracing.LogInfo(span, "Waiting for response...")
@@ -558,6 +558,8 @@ func (chp *gubernatorPool) AddCacheItem(ctx context.Context, key string, item Ca
 	select {
 	case worker.addCacheItemRequest <- req:
 		// Successfully sent request.
+		poolWorkerQueueLength.WithLabelValues("AddCacheItem", worker.name).Observe(float64(len(worker.addCacheItemRequest)))
+
 		select {
 		case <-respChan:
 			// Successfully received response.
@@ -609,6 +611,8 @@ func (chp *gubernatorPool) GetCacheItem(ctx context.Context, key string) (CacheI
 	select {
 	case worker.getCacheItemRequest <- req:
 		// Successfully sent requst.
+		poolWorkerQueueLength.WithLabelValues("GetCacheItem", worker.name).Observe(float64(len(worker.getCacheItemRequest)))
+
 		select {
 		case resp := <-respChan:
 			// Successfully received response.

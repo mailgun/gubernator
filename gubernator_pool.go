@@ -96,8 +96,6 @@ type poolGetCacheItemResponse struct {
 var _ io.Closer = &gubernatorPool{}
 
 func newGubernatorPool(conf *Config, concurrency int) *gubernatorPool {
-	const HandlerChannelSize = 1000
-
 	chp := &gubernatorPool{
 		conf: conf,
 		done: make(chan struct{}),
@@ -118,13 +116,15 @@ func (chp *gubernatorPool) Close() error {
 
 // Add a request channel to the worker pool.
 func (chp *gubernatorPool) addWorker() *poolWorker {
+	const commandChannelSize = 10000
+
 	worker := &poolWorker{
 		cache:               chp.conf.CacheFactory(),
-		getRateLimitRequest: make(chan *request),
-		storeRequest:        make(chan poolStoreRequest),
-		loadRequest:         make(chan poolLoadRequest),
-		addCacheItemRequest: make(chan poolAddCacheItemRequest),
-		getCacheItemRequest: make(chan poolGetCacheItemRequest),
+		getRateLimitRequest: make(chan *request, commandChannelSize),
+		storeRequest:        make(chan poolStoreRequest, commandChannelSize),
+		loadRequest:         make(chan poolLoadRequest, commandChannelSize),
+		addCacheItemRequest: make(chan poolAddCacheItemRequest, commandChannelSize),
+		getCacheItemRequest: make(chan poolGetCacheItemRequest, commandChannelSize),
 	}
 
 	for i := 0; i < chp.conf.PoolWorkerHashRingRedundancy; i++ {

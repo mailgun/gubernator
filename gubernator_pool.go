@@ -29,7 +29,9 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"sync"
+	"sync/atomic"
 
 	"github.com/OneOfOne/xxhash"
 	"github.com/mailgun/gubernator/v2/tracing"
@@ -103,6 +105,7 @@ type poolGetCacheItemResponse struct {
 }
 
 var _ io.Closer = &gubernatorPool{}
+var poolWorkerCounter uint64
 
 func newGubernatorPool(conf *Config, concurrency int) *gubernatorPool {
 	chp := &gubernatorPool{
@@ -135,7 +138,8 @@ func (chp *gubernatorPool) addWorker() *poolWorker {
 		addCacheItemRequest: make(chan poolAddCacheItemRequest, commandChannelSize),
 		getCacheItemRequest: make(chan poolGetCacheItemRequest, commandChannelSize),
 	}
-	worker.name = fmt.Sprintf("%p", worker)
+	workerNumber := atomic.AddUint64(&poolWorkerCounter, 1)
+	worker.name = strconv.FormatUint(workerNumber, 10)
 	chp.workers = append(chp.workers, worker)
 
 	// Create redundant poolWorker references in the hash ring to improve even

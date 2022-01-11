@@ -22,6 +22,7 @@ import (
 	"github.com/mailgun/gubernator/v2/tracing"
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sirupsen/logrus"
 )
 
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket
@@ -43,6 +44,17 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 				tracing.LogInfo(span, "c.Add()")
 			}
 		}
+	}
+
+	if ok && item.Value == nil {
+		msgPart := "tokenBucket: Invalid cache item; Value is nil"
+		tracing.LogInfo(span, msgPart,
+			"hashKey", r.HashKey(),
+			"key", r.UniqueKey,
+			"name", r.Name,
+		)
+		logrus.Error(msgPart)
+		ok = false
 	}
 
 	if ok {

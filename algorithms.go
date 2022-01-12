@@ -32,7 +32,8 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 	tokenBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("tokenBucket"))
 	defer tokenBucketTimer.ObserveDuration()
 
-	item, ok := c.GetItem(r.HashKey())
+	hashKey := r.HashKey()
+	item, ok := c.GetItem(hashKey)
 	tracing.LogInfo(span, "c.GetItem()")
 
 	if s != nil {
@@ -46,15 +47,27 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		}
 	}
 
-	if ok && item.Value == nil {
-		msgPart := "tokenBucket: Invalid cache item; Value is nil"
-		tracing.LogInfo(span, msgPart,
-			"hashKey", r.HashKey(),
-			"key", r.UniqueKey,
-			"name", r.Name,
-		)
-		logrus.Error(msgPart)
-		ok = false
+	// Sanity checks.
+	if ok {
+		if item.Value == nil {
+			msgPart := "tokenBucket: Invalid cache item; Value is nil"
+			tracing.LogInfo(span, msgPart,
+				"hashKey", hashKey,
+				"key", r.UniqueKey,
+				"name", r.Name,
+			)
+			logrus.Error(msgPart)
+			ok = false
+		} else if item.Key != hashKey {
+			msgPart := "tokenBucket: Invalid cache item; key mismatch"
+			tracing.LogInfo(span, msgPart,
+				"itemKey", item.Key,
+				"hashKey", hashKey,
+				"name", r.Name,
+			)
+			logrus.Error(msgPart)
+			ok = false
+		}
 	}
 
 	if ok {
@@ -132,7 +145,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 				}
 			}
 			// If our new duration means we are currently expired
-			if expire < MillisecondNow() {
+			if expire <= MillisecondNow() {
 				// Update this so s.OnChange() will get the new expire change
 				item.ExpireAt = expire
 

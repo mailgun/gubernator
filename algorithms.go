@@ -32,19 +32,44 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 	tokenBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("tokenBucket"))
 	defer tokenBucketTimer.ObserveDuration()
 
+	// Get definition from cache.
 	hashKey := r.HashKey()
 	item, ok := c.GetItem(hashKey)
 	tracing.LogInfo(span, "c.GetItem()")
 
-	if s != nil {
-		if !ok {
-			// Check our store for the item
-			if item, ok = s.Get(r); ok {
-				tracing.LogInfo(span, "Check store for rate limit")
-				c.Add(item)
-				tracing.LogInfo(span, "c.Add()")
-			}
+	// DEBUG
+	recursionLevel, _ := ctx.Value("tokenBucket_recursionLevel").(int)
+	if recursionLevel > 0 && recursionLevel % 100 == 0 {
+		logrus.
+			WithFields(logrus.Fields{
+				"recursionLevel": recursionLevel,
+				"item": item,
+				"ok": ok,
+			}).
+			Info("tokenBucket: GetItem() during recursion")
+	}
+	// END DEBUG
+
+	if s != nil && !ok {
+		// Cache miss.
+		// Check our store for the item.
+		if item, ok = s.Get(r); ok {
+			tracing.LogInfo(span, "Check store for rate limit")
+			c.Add(item)
+			tracing.LogInfo(span, "c.Add()")
 		}
+
+		// DEBUG
+		if recursionLevel > 0 && recursionLevel % 100 == 0 {
+			logrus.
+				WithFields(logrus.Fields{
+					"recursionLevel": recursionLevel,
+					"item": item,
+					"ok": ok,
+				}).
+				Info("tokenBucket: s.Get()")
+		}
+		// END DEBUG
 	}
 
 	// Sanity checks.
@@ -73,6 +98,16 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 	if ok {
 		tracing.LogInfo(span, "Update existing rate limit")
 
+		// DEBUG
+		if recursionLevel > 0 && recursionLevel % 100 == 0 {
+			logrus.
+				WithFields(logrus.Fields{
+					"recursionLevel": recursionLevel,
+				}).
+				Info("tokenBucket: Update existing rate limit")
+		}
+		// END DEBUG
+
 		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
 			c.Remove(r.HashKey())
 			tracing.LogInfo(span, "c.Remove()")
@@ -95,6 +130,20 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		// don't store OVER_LIMIT in the cache the client can retry within the same rate limit duration with
 		// 100 emails and the request will succeed.
 		t, ok := item.Value.(*TokenBucketItem)
+
+		// DEBUG
+		if recursionLevel > 0 && recursionLevel % 100 == 0 {
+			logrus.
+				WithFields(logrus.Fields{
+					"recursionLevel": recursionLevel,
+					"t": t,
+					"ok": ok,
+					"r": r,
+				}).
+				Info("tokenBucket: TokkenBucketItem")
+		}
+		// END DEBUG
+
 		if !ok {
 			// Client switched algorithms; perhaps due to a migration?
 			tracing.LogInfo(span, "Client switched algorithms; perhaps due to a migration?")
@@ -151,6 +200,24 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 				c.Remove(item.Key)
 				tracing.LogInfo(span, "c.Remove()")
+
+				// DEBUG
+				recursionLevel, _ := ctx.Value("tokenBucket_recursionLevel").(int)
+				recursionLevel++
+				tracing.LogInfo(span, "tokenBucket: recursion", "recursionLevel", recursionLevel)
+				if recursionLevel % 100 == 0 {
+					logrus.
+						WithFields(logrus.Fields{
+							"recursionLevel": recursionLevel,
+							"expire": expire,
+							"item": item,
+							"t": t,
+							"r": r,
+						}).
+						Infof("tokenBucket: recursion level %d", recursionLevel)
+				}
+				ctx = context.WithValue(ctx, "tokenBucket_recursionLevel", recursionLevel)
+				// END DEBUG
 
 				return tokenBucket(ctx, s, c, r)
 			}

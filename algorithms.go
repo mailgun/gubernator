@@ -140,7 +140,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 					"ok": ok,
 					"r": r,
 				}).
-				Info("tokenBucket: TokkenBucketItem")
+				Info("tokenBucket: TokenBucketItem")
 		}
 		// END DEBUG
 
@@ -200,9 +200,10 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 				c.Remove(item.Key)
 				tracing.LogInfo(span, "c.Remove()")
+				s.OnChange(r, item)
+				tracing.LogInfo(span, "s.OnChange()")
 
 				// DEBUG
-				recursionLevel, _ := ctx.Value("tokenBucket_recursionLevel").(int)
 				recursionLevel++
 				tracing.LogInfo(span, "tokenBucket: recursion", "recursionLevel", recursionLevel)
 				if recursionLevel % 100 == 0 {

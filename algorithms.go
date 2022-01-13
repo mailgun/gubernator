@@ -200,8 +200,6 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 				c.Remove(item.Key)
 				tracing.LogInfo(span, "c.Remove()")
-				s.OnChange(r, item)
-				tracing.LogInfo(span, "s.OnChange()")
 
 				// DEBUG
 				recursionLevel++
@@ -220,7 +218,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 				ctx = context.WithValue(ctx, "tokenBucket_recursionLevel", recursionLevel)
 				// END DEBUG
 
-				return tokenBucket(ctx, s, c, r)
+				return tokenBucketNewItem(ctx, s, c, r, item)
 			}
 			item.ExpireAt = expire
 			rl.ResetTime = expire
@@ -262,6 +260,13 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		rl.Remaining = t.Remaining
 		return rl, nil
 	}
+
+	return tokenBucketNewItem(ctx, s, c, r, item)
+}
+
+func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, item CacheItem) (resp *RateLimitResp, err error) {
+	span, ctx := tracing.StartSpan(ctx)
+	defer span.Finish()
 
 	// Add a new rate limit to the cache
 	tracing.LogInfo(span, "Add a new rate limit to the cache")

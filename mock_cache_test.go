@@ -14,19 +14,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package gubernator
+package gubernator_test
 
 // Mock implementation of Cache.
 
-import "github.com/stretchr/testify/mock"
+import (
+	guber "github.com/mailgun/gubernator/v2"
+	"github.com/stretchr/testify/mock"
+)
 
 type MockCache struct {
 	mock.Mock
 }
 
-var _ Cache = &MockCache{}
+var _ guber.Cache = &MockCache{}
 
-func (m *MockCache) Add(item CacheItem) bool {
+func (m *MockCache) Add(item guber.CacheItem) bool {
 	args := m.Called(item)
 	return args.Bool(0)
 }
@@ -36,19 +39,19 @@ func (m *MockCache) UpdateExpiration(key string, expireAt int64) bool {
 	return args.Bool(0)
 }
 
-func (m *MockCache) GetItem(key string) (value CacheItem, ok bool) {
+func (m *MockCache) GetItem(key string) (value guber.CacheItem, ok bool) {
 	args := m.Called(key)
-	var retval CacheItem
-	if retval2, ok := args.Get(0).(CacheItem); ok {
+	var retval guber.CacheItem
+	if retval2, ok := args.Get(0).(guber.CacheItem); ok {
 		retval = retval2
 	}
 	return retval, args.Bool(1)
 }
 
-func (m *MockCache) Each() chan CacheItem {
+func (m *MockCache) Each() chan guber.CacheItem {
 	args := m.Called()
-	var retval chan CacheItem
-	if retval2, ok := args.Get(0).(chan CacheItem); ok {
+	var retval chan guber.CacheItem
+	if retval2, ok := args.Get(0).(chan guber.CacheItem); ok {
 		retval = retval2
 	}
 	return retval

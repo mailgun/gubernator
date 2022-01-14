@@ -74,12 +74,12 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		tracing.LogInfo(span, "Update existing rate limit")
 
 		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
-			c.Remove(r.HashKey())
+			c.Remove(hashKey)
 			tracing.LogInfo(span, "c.Remove()")
 
 			if s != nil {
-				s.Remove(r.HashKey())
-				tracing.LogInfo(span, "c.Remove()")
+				s.Remove(hashKey)
+				tracing.LogInfo(span, "s.Remove()")
 			}
 			return &RateLimitResp{
 				Status:    Status_UNDER_LIMIT,
@@ -99,14 +99,15 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			// Client switched algorithms; perhaps due to a migration?
 			tracing.LogInfo(span, "Client switched algorithms; perhaps due to a migration?")
 
-			c.Remove(r.HashKey())
+			c.Remove(hashKey)
 			tracing.LogInfo(span, "c.Remove()")
 
 			if s != nil {
-				s.Remove(r.HashKey())
+				s.Remove(hashKey)
 				tracing.LogInfo(span, "s.Remove()")
 			}
 
+			// FIXME: Eliminate recursion.
 			return tokenBucket(ctx, s, c, r)
 		}
 
@@ -145,16 +146,21 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 					return nil, err
 				}
 			}
+
 			// If our new duration means we are currently expired
 			if expire <= MillisecondNow() {
 				// Update this so s.OnChange() will get the new expire change
+				tracing.LogInfo(span, "Limit has expired")
 				item.ExpireAt = expire
 
 				c.Remove(item.Key)
 				tracing.LogInfo(span, "c.Remove()")
 
-				return tokenBucketNewItem(ctx, s, c, r, item)
+				// FIXME: tokenBucketNewItem creates a new item.  But, we want to
+				// preserve this item for its CreatedAt timestamp.
+				return tokenBucketNewItem(ctx, s, c, r)
 			}
+
 			item.ExpireAt = expire
 			rl.ResetTime = expire
 		}
@@ -196,10 +202,11 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		return rl, nil
 	}
 
-	return tokenBucketNewItem(ctx, s, c, r, item)
+	return tokenBucketNewItem(ctx, s, c, r)
 }
 
-func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, item CacheItem) (resp *RateLimitResp, err error) {
+// Called by tokenBucket() when the requested item is not found in cache or store.
+func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
@@ -237,7 +244,7 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, 
 		t.Remaining = r.Limit
 	}
 
-	item = CacheItem{
+	item := CacheItem{
 		Algorithm: r.Algorithm,
 		Key:       r.HashKey(),
 		Value:     t,
@@ -289,7 +296,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 			if s != nil {
 				s.Remove(r.HashKey())
-				tracing.LogInfo(span, "c.Remove()")
+				tracing.LogInfo(span, "s.Remove()")
 			}
 
 			return leakyBucket(ctx, s, c, r)

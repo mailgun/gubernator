@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package gubernator
+package gubernator_test
 
 import (
 	"context"
@@ -22,6 +22,7 @@ import (
 	"sort"
 	"testing"
 
+	guber "github.com/mailgun/gubernator/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -42,9 +43,9 @@ func TestGubernatorPool(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Setup mock data.
 			const NumCacheItems = 100
-			cacheItems := []CacheItem{}
+			cacheItems := []guber.CacheItem{}
 			for i := 0; i < NumCacheItems; i++ {
-				cacheItems = append(cacheItems, CacheItem{
+				cacheItems = append(cacheItems, guber.CacheItem{
 					Key:      fmt.Sprintf("Foobar%04d", i),
 					Value:    fmt.Sprintf("Stuff%04d", i),
 					ExpireAt: 4131978658000,
@@ -54,17 +55,17 @@ func TestGubernatorPool(t *testing.T) {
 			t.Run("Load()", func(t *testing.T) {
 				mockLoader := &MockLoader2{}
 				mockCache := &MockCache{}
-				conf := &Config{
-					CacheFactory: func() Cache {
+				conf := &guber.Config{
+					CacheFactory: func() guber.Cache {
 						return mockCache
 					},
 					Loader: mockLoader,
 				}
 				conf.SetDefaults()
-				chp := newGubernatorPool(conf, testCase.concurrency)
+				chp := guber.NewGubernatorPool(conf, testCase.concurrency)
 
 				// Mock Loader.
-				fakeLoadCh := make(chan CacheItem, NumCacheItems)
+				fakeLoadCh := make(chan guber.CacheItem, NumCacheItems)
 				for _, item := range cacheItems {
 					fakeLoadCh <- item
 				}
@@ -86,21 +87,21 @@ func TestGubernatorPool(t *testing.T) {
 			t.Run("Store()", func(t *testing.T) {
 				mockLoader := &MockLoader2{}
 				mockCache := &MockCache{}
-				conf := &Config{
-					CacheFactory: func() Cache {
+				conf := &guber.Config{
+					CacheFactory: func() guber.Cache {
 						return mockCache
 					},
 					Loader:                       mockLoader,
 				}
 				conf.SetDefaults()
-				chp := newGubernatorPool(conf, testCase.concurrency)
+				chp := guber.NewGubernatorPool(conf, testCase.concurrency)
 
 				// Mock Loader.
 				mockLoader.On("Save", mock.Anything).Once().Return(nil).
 					Run(func(args mock.Arguments) {
 						// Verify items sent over the channel passed to Save().
-						saveCh := args.Get(0).(chan CacheItem)
-						savedItems := []CacheItem{}
+						saveCh := args.Get(0).(chan guber.CacheItem)
+						savedItems := []guber.CacheItem{}
 						for item := range saveCh {
 							savedItems = append(savedItems, item)
 						}
@@ -113,7 +114,7 @@ func TestGubernatorPool(t *testing.T) {
 					})
 
 				// Mock Cache.
-				eachCh := make(chan CacheItem, NumCacheItems)
+				eachCh := make(chan guber.CacheItem, NumCacheItems)
 				for _, item := range cacheItems {
 					eachCh <- item
 				}

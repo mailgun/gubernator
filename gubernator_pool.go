@@ -40,7 +40,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type gubernatorPool struct {
+type GubernatorPool struct {
 	workers []*poolWorker
 
 	// Workers in the hash ring.  Must be sorted by hash value.
@@ -104,11 +104,11 @@ type poolGetCacheItemResponse struct {
 	ok   bool
 }
 
-var _ io.Closer = &gubernatorPool{}
+var _ io.Closer = &GubernatorPool{}
 var poolWorkerCounter int64
 
-func newGubernatorPool(conf *Config, concurrency int) *gubernatorPool {
-	chp := &gubernatorPool{
+func NewGubernatorPool(conf *Config, concurrency int) *GubernatorPool {
+	chp := &GubernatorPool{
 		conf: conf,
 		done: make(chan struct{}),
 	}
@@ -121,13 +121,13 @@ func newGubernatorPool(conf *Config, concurrency int) *gubernatorPool {
 	return chp
 }
 
-func (chp *gubernatorPool) Close() error {
+func (chp *GubernatorPool) Close() error {
 	close(chp.done)
 	return nil
 }
 
 // Add a request channel to the worker pool.
-func (chp *gubernatorPool) addWorker() *poolWorker {
+func (chp *GubernatorPool) addWorker() *poolWorker {
 	const commandChannelSize = 10000
 
 	worker := &poolWorker{
@@ -166,7 +166,7 @@ func (chp *gubernatorPool) addWorker() *poolWorker {
 
 // Returns the request channel associated with the key.
 // Hash the key, then lookup hash ring to find the channel.
-func (chp *gubernatorPool) getWorker(key string) *poolWorker {
+func (chp *GubernatorPool) getWorker(key string) *poolWorker {
 	hash := xxhash.ChecksumString64S(key, 0)
 
 	// Binary search for appropriate channel.
@@ -186,7 +186,7 @@ func (chp *gubernatorPool) getWorker(key string) *poolWorker {
 // Each worker maintains its own state.
 // A hash ring will distribute requests to an assigned worker by key.
 // See: getWorker()
-func (chp *gubernatorPool) worker(worker *poolWorker) {
+func (chp *GubernatorPool) worker(worker *poolWorker) {
 	for {
 		// Dispatch requests from each channel.
 		select {
@@ -243,7 +243,7 @@ func (chp *gubernatorPool) worker(worker *poolWorker) {
 }
 
 // Send a GetRateLimit request to worker pool.
-func (chp *gubernatorPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) (*RateLimitResp, error) {
+func (chp *GubernatorPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) (*RateLimitResp, error) {
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
@@ -280,7 +280,7 @@ func (chp *gubernatorPool) GetRateLimit(ctx context.Context, rlRequest *RateLimi
 }
 
 // Handle request received by worker.
-func (chp *gubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cache) {
+func (chp *GubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cache) {
 	span, ctx := tracing.StartSpan(handlerRequest.ctx)
 	defer span.Finish()
 
@@ -330,7 +330,7 @@ func (chp *gubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cac
 // Atomically load cache from persistent storage.
 // Read from persistent storage.  Load into each appropriate worker's cache.
 // Workers are locked during this load operation to prevent race conditions.
-func (chp *gubernatorPool) Load(ctx context.Context) error {
+func (chp *GubernatorPool) Load(ctx context.Context) error {
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
@@ -416,7 +416,7 @@ mainloop:
 	return nil
 }
 
-func (chp *gubernatorPool) handleLoad(request poolLoadRequest, cache Cache) {
+func (chp *GubernatorPool) handleLoad(request poolLoadRequest, cache Cache) {
 	span, ctx := tracing.StartSpan(request.ctx)
 	defer span.Finish()
 
@@ -455,7 +455,7 @@ mainloop:
 // Atomically store cache to persistent storage.
 // Save all workers' caches to persistent storage.
 // Workers are locked during this store operation to prevent race conditions.
-func (chp *gubernatorPool) Store(ctx context.Context) error {
+func (chp *GubernatorPool) Store(ctx context.Context) error {
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
@@ -514,7 +514,7 @@ func (chp *gubernatorPool) Store(ctx context.Context) error {
 	return chp.conf.Loader.Save(out)
 }
 
-func (chp *gubernatorPool) handleStore(request poolStoreRequest, cache Cache) {
+func (chp *GubernatorPool) handleStore(request poolStoreRequest, cache Cache) {
 	span, ctx := tracing.StartSpan(request.ctx)
 	defer span.Finish()
 
@@ -543,7 +543,7 @@ func (chp *gubernatorPool) handleStore(request poolStoreRequest, cache Cache) {
 }
 
 // Add to worker's cache.
-func (chp *gubernatorPool) AddCacheItem(ctx context.Context, key string, item CacheItem) error {
+func (chp *GubernatorPool) AddCacheItem(ctx context.Context, key string, item CacheItem) error {
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
@@ -578,7 +578,7 @@ func (chp *gubernatorPool) AddCacheItem(ctx context.Context, key string, item Ca
 	}
 }
 
-func (chp *gubernatorPool) handleAddCacheItem(request poolAddCacheItemRequest, cache Cache) {
+func (chp *GubernatorPool) handleAddCacheItem(request poolAddCacheItemRequest, cache Cache) {
 	span, ctx := tracing.StartSpan(request.ctx)
 	defer span.Finish()
 
@@ -596,7 +596,7 @@ func (chp *gubernatorPool) handleAddCacheItem(request poolAddCacheItemRequest, c
 }
 
 // Get item from worker's cache.
-func (chp *gubernatorPool) GetCacheItem(ctx context.Context, key string) (CacheItem, bool, error) {
+func (chp *GubernatorPool) GetCacheItem(ctx context.Context, key string) (CacheItem, bool, error) {
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
@@ -631,7 +631,7 @@ func (chp *gubernatorPool) GetCacheItem(ctx context.Context, key string) (CacheI
 	}
 }
 
-func (chp *gubernatorPool) handleGetCacheItem(request poolGetCacheItemRequest, cache Cache) {
+func (chp *GubernatorPool) handleGetCacheItem(request poolGetCacheItemRequest, cache Cache) {
 	span, ctx := tracing.StartSpan(request.ctx)
 	defer span.Finish()
 

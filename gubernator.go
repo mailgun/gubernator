@@ -52,7 +52,7 @@ type V1Instance struct {
 	conf                 Config
 	isClosed             bool
 	getRateLimitsCounter int64
-	gubernatorPool       *gubernatorPool
+	gubernatorPool       *GubernatorPool
 }
 
 var getRateLimitCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -125,7 +125,7 @@ func NewV1Instance(conf Config) (*V1Instance, error) {
 	setter.SetDefault(&s.log, logrus.WithField("category", "gubernator"))
 
 	numCpus := runtime.NumCPU()
-	s.gubernatorPool = newGubernatorPool(&conf, numCpus)
+	s.gubernatorPool = NewGubernatorPool(&conf, numCpus)
 	s.global = newGlobalManager(conf.Behaviors, &s)
 	s.mutliRegion = newMultiRegionManager(conf.Behaviors, &s)
 

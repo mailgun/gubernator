@@ -91,7 +91,7 @@ func TestGubernatorPool(t *testing.T) {
 					CacheFactory: func() guber.Cache {
 						return mockCache
 					},
-					Loader:                       mockLoader,
+					Loader: mockLoader,
 				}
 				conf.SetDefaults()
 				chp := guber.NewGubernatorPool(conf, testCase.concurrency)

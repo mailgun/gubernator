@@ -25,6 +25,7 @@ import (
 	"github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
@@ -125,168 +126,372 @@ func TestLoader(t *testing.T) {
 }
 
 func TestStore(t *testing.T) {
-	tests := []struct {
-		name            string
-		firstRemaining  int64
-		firstStatus     gubernator.Status
-		secondRemaining int64
-		secondStatus    gubernator.Status
-		algorithm       gubernator.Algorithm
-		switchAlgorithm gubernator.Algorithm
-		testCase        func(*gubernator.RateLimitReq, *gubernator.MockStore)
-	}{
-		{
-			name:            "Given there are no token bucket limits in the store",
-			firstRemaining:  int64(9),
-			firstStatus:     gubernator.Status_UNDER_LIMIT,
-			secondRemaining: int64(8),
-			secondStatus:    gubernator.Status_UNDER_LIMIT,
-			algorithm:       gubernator.Algorithm_TOKEN_BUCKET,
-			switchAlgorithm: gubernator.Algorithm_LEAKY_BUCKET,
-			testCase:        func(req *gubernator.RateLimitReq, store *gubernator.MockStore) {},
-		},
-		{
-			name:            "Given the store contains a token bucket rate limit not in the guber cache",
-			firstRemaining:  int64(0),
-			firstStatus:     gubernator.Status_UNDER_LIMIT,
-			secondRemaining: int64(0),
-			secondStatus:    gubernator.Status_OVER_LIMIT,
-			algorithm:       gubernator.Algorithm_TOKEN_BUCKET,
-			switchAlgorithm: gubernator.Algorithm_LEAKY_BUCKET,
-			testCase: func(req *gubernator.RateLimitReq, store *gubernator.MockStore) {
-				now := gubernator.MillisecondNow()
-				// Expire 1 second from now
-				expire := now + gubernator.Second
-				store.CacheItems[req.HashKey()] = gubernator.CacheItem{
-					Algorithm: gubernator.Algorithm_TOKEN_BUCKET,
-					ExpireAt:  expire,
-					Key:       req.HashKey(),
-					Value: &gubernator.TokenBucketItem{
-						Limit:     req.Limit,
-						Duration:  req.Duration,
-						CreatedAt: now,
-						Remaining: 1,
-					},
-				}
+	setup := func() (*MockStore2, *v1Server, gubernator.V1Client) {
+		store := &MockStore2{}
+
+		srv := newV1Server(t, "", gubernator.Config{
+			Behaviors: gubernator.BehaviorConfig{
+				GlobalSyncWait: clock.Millisecond * 50, // Suitable for testing but not production
+				GlobalTimeout:  clock.Second,
 			},
-		},
-		{
-			name:            "Given there are no leaky bucket limits in the store",
-			firstRemaining:  int64(9),
-			firstStatus:     gubernator.Status_UNDER_LIMIT,
-			secondRemaining: int64(8),
-			secondStatus:    gubernator.Status_UNDER_LIMIT,
-			algorithm:       gubernator.Algorithm_LEAKY_BUCKET,
-			switchAlgorithm: gubernator.Algorithm_TOKEN_BUCKET,
-			testCase:        func(req *gubernator.RateLimitReq, store *gubernator.MockStore) {},
-		},
-		{
-			name:            "Given the store contains a leaky bucket rate limit not in the guber cache",
-			firstRemaining:  int64(0),
-			firstStatus:     gubernator.Status_UNDER_LIMIT,
-			secondRemaining: int64(0),
-			secondStatus:    gubernator.Status_OVER_LIMIT,
-			algorithm:       gubernator.Algorithm_LEAKY_BUCKET,
-			switchAlgorithm: gubernator.Algorithm_TOKEN_BUCKET,
-			testCase: func(req *gubernator.RateLimitReq, store *gubernator.MockStore) {
-				// Expire 1 second from now
-				expire := gubernator.MillisecondNow() + gubernator.Second
-				store.CacheItems[req.HashKey()] = gubernator.CacheItem{
-					Algorithm: gubernator.Algorithm_LEAKY_BUCKET,
-					ExpireAt:  expire,
-					Key:       req.HashKey(),
-					Value: &gubernator.LeakyBucketItem{
-						UpdatedAt: gubernator.MillisecondNow(),
-						Duration:  req.Duration,
-						Limit:     req.Limit,
-						Remaining: 1,
-						Burst:     req.Limit,
-					},
-				}
-			},
-		},
+			Store: store,
+		})
+
+		client, err := gubernator.DialV1Server(srv.listener.Addr().String(), nil)
+		require.NoError(t, err)
+
+		return store, srv, client
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			store := gubernator.NewMockStore()
 
-			srv := newV1Server(t, "", gubernator.Config{
-				Behaviors: gubernator.BehaviorConfig{
-					GlobalSyncWait: clock.Millisecond * 50, // Suitable for testing but not production
-					GlobalTimeout:  clock.Second,
-				},
-				Store: store,
-			})
+	tearDown := func(srv *v1Server) {
+		err := srv.Close()
+		require.NoError(t, err)
+	}
 
-			// No calls to store
-			assert.Equal(t, 0, store.Called["OnChange()"])
-			assert.Equal(t, 0, store.Called["Get()"])
+	// Create a mock argument matcher for a request by name/key.
+	matchReq := func(req *gubernator.RateLimitReq) interface{} {
+		return mock.MatchedBy(func(req2 *gubernator.RateLimitReq) bool {
+			return req2.Name == req.Name &&
+				req2.UniqueKey == req.UniqueKey
+		})
+	}
 
-			client, err := gubernator.DialV1Server(srv.listener.Addr().String(), nil)
-			assert.Nil(t, err)
+	// TODO: Build equivalent tests for Leaky Bucket.
+	t.Run("Token bucket", func(t *testing.T) {
+		t.Run("First rate check pulls from store", func(t *testing.T) {
+			store, srv, client := setup()
+			defer tearDown(srv)
 
-			req := gubernator.RateLimitReq{
+			req := &gubernator.RateLimitReq{
 				Name:      "test_over_limit",
 				UniqueKey: "account:1234",
-				Algorithm: tt.algorithm,
+				Algorithm: gubernator.Algorithm_TOKEN_BUCKET,
 				Duration:  gubernator.Second,
 				Limit:     10,
 				Hits:      1,
 			}
 
-			tt.testCase(&req, store)
+			// Setup mocks.
+			expectedRemaining := req.Limit - req.Hits
+			store.On("Get", matchReq(req)).Once().Return(gubernator.CacheItem{}, false)
 
-			// This request for the rate limit should ask the store via Get() and then
-			// tell the store about the change to the rate limit by calling OnChange()
+			store.On("OnChange",
+				matchReq(req),
+				mock.MatchedBy(func(item gubernator.CacheItem) bool {
+					titem, ok := item.Value.(*gubernator.TokenBucketItem)
+					if !ok {
+						return false
+					}
+
+					return item.Algorithm == req.Algorithm &&
+						item.Key == req.HashKey() &&
+						titem.Limit == req.Limit &&
+						titem.Duration == req.Duration &&
+						titem.Remaining == expectedRemaining
+				}),
+			).
+				Once()
+
+			// Call code.
 			resp, err := client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
-				Requests: []*gubernator.RateLimitReq{&req},
+				Requests: []*gubernator.RateLimitReq{req},
 			})
-			require.Nil(t, err)
+			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.Equal(t, 1, len(resp.Responses))
-			require.Equal(t, "", resp.Responses[0].Error)
-			assert.Equal(t, tt.firstRemaining, resp.Responses[0].Remaining)
-			assert.Equal(t, int64(10), resp.Responses[0].Limit)
-			assert.Equal(t, tt.firstStatus, resp.Responses[0].Status)
+			assert.Len(t, resp.Responses, 1)
+			assert.Equal(t, expectedRemaining, resp.Responses[0].Remaining)
+			assert.Equal(t, req.Limit, resp.Responses[0].Limit)
+			assert.Equal(t, gubernator.Status_UNDER_LIMIT, resp.Responses[0].Status)
+			store.AssertExpectations(t)
 
-			// Should have called OnChange() and Get()
-			assert.Equal(t, 1, store.Called["OnChange()"])
-			assert.Equal(t, 1, store.Called["Get()"])
+			t.Run("Second rate check pulls from cache", func(t *testing.T) {
+				// Setup mocks.
+				expectedRemaining2 := req.Limit - (req.Hits * 2)
 
-			// Should have updated the store
-			assert.Equal(t, tt.firstRemaining, getRemaining(store.CacheItems[req.HashKey()]))
+				store.On("OnChange",
+					matchReq(req),
+					mock.MatchedBy(func(item gubernator.CacheItem) bool {
+						titem, ok := item.Value.(*gubernator.TokenBucketItem)
+						if !ok {
+							return false
+						}
 
-			// Next call should not call `Get()` but only `OnChange()`
-			resp, err = client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
-				Requests: []*gubernator.RateLimitReq{&req},
+						return item.Algorithm == req.Algorithm &&
+							item.Key == req.HashKey() &&
+							titem.Limit == req.Limit &&
+							titem.Duration == req.Duration &&
+							titem.Remaining == expectedRemaining2
+					}),
+				).
+					Once()
+
+				// Call code.
+				resp, err := client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
+					Requests: []*gubernator.RateLimitReq{req},
+				})
+				require.NoError(t, err)
+				require.NotNil(t, resp)
+				assert.Len(t, resp.Responses, 1)
+				assert.Equal(t, expectedRemaining2, resp.Responses[0].Remaining)
+				assert.Equal(t, req.Limit, resp.Responses[0].Limit)
+				assert.Equal(t, gubernator.Status_UNDER_LIMIT, resp.Responses[0].Status)
+				store.AssertExpectations(t)
 			})
-			require.Nil(t, err)
-			require.NotNil(t, resp)
-			assert.Equal(t, tt.secondRemaining, resp.Responses[0].Remaining)
-			assert.Equal(t, int64(10), resp.Responses[0].Limit)
-			assert.Equal(t, tt.secondStatus, resp.Responses[0].Status)
-
-			// Should have called OnChange() not Get() since rate limit is in the cache
-			assert.Equal(t, 2, store.Called["OnChange()"])
-			assert.Equal(t, 1, store.Called["Get()"])
-
-			// Should have updated the store
-			assert.Equal(t, tt.secondRemaining, getRemaining(store.CacheItems[req.HashKey()]))
-
-			// Should have called `Remove()` when algorithm changed
-			req.Algorithm = tt.switchAlgorithm
-			resp, err = client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
-				Requests: []*gubernator.RateLimitReq{&req},
-			})
-			require.Nil(t, err)
-			require.NotNil(t, resp)
-			assert.Equal(t, 1, store.Called["Remove()"])
-			assert.Equal(t, 3, store.Called["OnChange()"])
-			assert.Equal(t, 2, store.Called["Get()"])
-
-			assert.Equal(t, tt.switchAlgorithm, store.CacheItems[req.HashKey()].Algorithm)
 		})
-	}
+
+		t.Run("Found in store after cache miss", func(t *testing.T) {
+			store, srv, client := setup()
+			defer tearDown(srv)
+
+			req := &gubernator.RateLimitReq{
+				Name:      "test_over_limit",
+				UniqueKey: "account:1234",
+				Algorithm: gubernator.Algorithm_TOKEN_BUCKET,
+				Duration:  gubernator.Second,
+				Limit:     10,
+				Hits:      1,
+			}
+
+			// Setup mocks.
+			expectedRemaining := req.Limit - req.Hits
+			now := gubernator.MillisecondNow()
+			expire := now + req.Duration
+			storedItem := gubernator.CacheItem{
+				Algorithm: req.Algorithm,
+				ExpireAt:  expire,
+				Key:       req.HashKey(),
+				Value: &gubernator.TokenBucketItem{
+					Limit:     req.Limit,
+					Duration:  req.Duration,
+					CreatedAt: now,
+					Remaining: req.Limit,
+				},
+			}
+
+			store.On("Get", matchReq(req)).Once().Return(storedItem, true)
+
+			store.On("OnChange",
+				matchReq(req),
+				mock.MatchedBy(func(item gubernator.CacheItem) bool {
+					titem, ok := item.Value.(*gubernator.TokenBucketItem)
+					if !ok {
+						return false
+					}
+
+					return item.Algorithm == req.Algorithm &&
+						item.Key == req.HashKey() &&
+						titem.Limit == req.Limit &&
+						titem.Duration == req.Duration &&
+						titem.Remaining == expectedRemaining
+				}),
+			).
+				Once()
+
+			// Call code.
+			resp, err := client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
+				Requests: []*gubernator.RateLimitReq{req},
+			})
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			assert.Len(t, resp.Responses, 1)
+			assert.Equal(t, expectedRemaining, resp.Responses[0].Remaining)
+			assert.Equal(t, req.Limit, resp.Responses[0].Limit)
+			assert.Equal(t, gubernator.Status_UNDER_LIMIT, resp.Responses[0].Status)
+			store.AssertExpectations(t)
+		})
+
+		t.Run("Algorithm changed", func(t *testing.T) {
+			// Removes stored item, then creates new.
+			store, srv, client := setup()
+			defer tearDown(srv)
+
+			req := &gubernator.RateLimitReq{
+				Name:      "test_over_limit",
+				UniqueKey: "account:1234",
+				Algorithm: gubernator.Algorithm_TOKEN_BUCKET,
+				Duration:  gubernator.Second,
+				Limit:     10,
+				Hits:      1,
+			}
+
+			// Setup mocks.
+			expectedRemaining := req.Limit - req.Hits
+			now := gubernator.MillisecondNow()
+			expire := now + req.Duration
+			storedItem := gubernator.CacheItem{
+				Algorithm: req.Algorithm,
+				ExpireAt:  expire,
+				Key:       req.HashKey(),
+				Value:     &gubernator.LeakyBucketItem{},
+			}
+
+			store.On("Get", matchReq(req)).Once().Return(storedItem, true)
+			store.On("Remove", req.HashKey()).Once()
+
+			store.On("OnChange",
+				matchReq(req),
+				mock.MatchedBy(func(item gubernator.CacheItem) bool {
+					titem, ok := item.Value.(*gubernator.TokenBucketItem)
+					if !ok {
+						return false
+					}
+
+					return item.Algorithm == req.Algorithm &&
+						item.Key == req.HashKey() &&
+						titem.Limit == req.Limit &&
+						titem.Duration == req.Duration &&
+						titem.Remaining == expectedRemaining
+				}),
+			).
+				Once()
+
+			// Call code.
+			resp, err := client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
+				Requests: []*gubernator.RateLimitReq{req},
+			})
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			assert.Len(t, resp.Responses, 1)
+			assert.Equal(t, expectedRemaining, resp.Responses[0].Remaining)
+			assert.Equal(t, req.Limit, resp.Responses[0].Limit)
+			assert.Equal(t, gubernator.Status_UNDER_LIMIT, resp.Responses[0].Status)
+			store.AssertExpectations(t)
+		})
+
+		t.Run("Duration changed", func(t *testing.T) {
+			// Updates expiration timestamp in store.
+			store, srv, client := setup()
+			defer tearDown(srv)
+
+			oldDuration := int64(5000)
+			newDuration := int64(8000)
+			req := &gubernator.RateLimitReq{
+				Name:      "test_over_limit",
+				UniqueKey: "account:1234",
+				Algorithm: gubernator.Algorithm_TOKEN_BUCKET,
+				Duration:  newDuration,
+				Limit:     10,
+				Hits:      1,
+			}
+
+			// Setup mocks.
+			expectedRemaining := req.Limit - req.Hits
+			now := gubernator.MillisecondNow()
+			oldExpire := now + oldDuration
+			storedItem := gubernator.CacheItem{
+				Algorithm: req.Algorithm,
+				ExpireAt:  oldExpire,
+				Key:       req.HashKey(),
+				Value: &gubernator.TokenBucketItem{
+					Limit:     req.Limit,
+					Duration:  oldDuration,
+					CreatedAt: now,
+					Remaining: req.Limit,
+				},
+			}
+
+			store.On("Get", matchReq(req)).Once().Return(storedItem, true)
+
+			store.On("OnChange",
+				matchReq(req),
+				mock.MatchedBy(func(item gubernator.CacheItem) bool {
+					titem, ok := item.Value.(*gubernator.TokenBucketItem)
+					if !ok {
+						return false
+					}
+
+					return item.Algorithm == req.Algorithm &&
+						item.Key == req.HashKey() &&
+						item.ExpireAt == titem.CreatedAt+newDuration &&
+						titem.Limit == req.Limit &&
+						titem.Duration == req.Duration &&
+						titem.Remaining == expectedRemaining
+				}),
+			).
+				Once()
+
+			// Call code.
+			resp, err := client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
+				Requests: []*gubernator.RateLimitReq{req},
+			})
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			assert.Len(t, resp.Responses, 1)
+			assert.Equal(t, expectedRemaining, resp.Responses[0].Remaining)
+			assert.Equal(t, req.Limit, resp.Responses[0].Limit)
+			assert.Equal(t, gubernator.Status_UNDER_LIMIT, resp.Responses[0].Status)
+			store.AssertExpectations(t)
+		})
+
+		t.Run("Duration changed and immediately expired", func(t *testing.T) {
+			// Occurs when new duration is shorter and is immediately expired
+			// because CreatedAt + NewDuration < Now.
+			// Stores new item with renewed expiration and resets remaining.
+			store, srv, client := setup()
+			defer tearDown(srv)
+
+			oldDuration := int64(500000)
+			newDuration := int64(8000)
+			req := &gubernator.RateLimitReq{
+				Name:      "test_over_limit",
+				UniqueKey: "account:1234",
+				Algorithm: gubernator.Algorithm_TOKEN_BUCKET,
+				Duration:  newDuration,
+				Limit:     10,
+				Hits:      1,
+			}
+
+			// Setup mocks.
+			expectedRemaining := req.Limit - req.Hits
+			now := gubernator.MillisecondNow()
+			longTimeAgo := now - 100000
+			oldExpire := longTimeAgo + oldDuration
+			oldRemaining := int64(1)
+			storedItem := gubernator.CacheItem{
+				Algorithm: req.Algorithm,
+				ExpireAt:  oldExpire,
+				Key:       req.HashKey(),
+				Value: &gubernator.TokenBucketItem{
+					Limit:     req.Limit,
+					Duration:  oldDuration,
+					CreatedAt: longTimeAgo,
+					Remaining: oldRemaining,
+				},
+			}
+
+			store.On("Get", matchReq(req)).Once().Return(storedItem, true)
+
+			store.On("OnChange",
+				matchReq(req),
+				mock.MatchedBy(func(item gubernator.CacheItem) bool {
+					titem, ok := item.Value.(*gubernator.TokenBucketItem)
+					if !ok {
+						return false
+					}
+
+					return item.Algorithm == req.Algorithm &&
+						item.Key == req.HashKey() &&
+						item.ExpireAt == titem.CreatedAt+newDuration &&
+						titem.Limit == req.Limit &&
+						titem.Duration == req.Duration &&
+						titem.Remaining == expectedRemaining
+				}),
+			).
+				Once()
+
+			// Call code.
+			resp, err := client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
+				Requests: []*gubernator.RateLimitReq{req},
+			})
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			assert.Len(t, resp.Responses, 1)
+			assert.Equal(t, expectedRemaining, resp.Responses[0].Remaining)
+			assert.Equal(t, req.Limit, resp.Responses[0].Limit)
+			assert.Equal(t, gubernator.Status_UNDER_LIMIT, resp.Responses[0].Status)
+			store.AssertExpectations(t)
+		})
+	})
 }
 
 func getRemaining(item gubernator.CacheItem) int64 {

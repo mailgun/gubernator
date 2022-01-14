@@ -71,6 +71,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 	}
 
 	if ok {
+		// Item found in cache or store.
 		tracing.LogInfo(span, "Update existing rate limit")
 
 		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
@@ -107,8 +108,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 				tracing.LogInfo(span, "s.Remove()")
 			}
 
-			// FIXME: Eliminate recursion.
-			return tokenBucket(ctx, s, c, r)
+			return tokenBucketNewItem(ctx, s, c, r)
 		}
 
 		if s != nil {
@@ -118,10 +118,10 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			}()
 		}
 
-		// Update the limit if it changed
+		// Update the limit if it changed.
 		tracing.LogInfo(span, "Update the limit if changed")
 		if t.Limit != r.Limit {
-			// Add difference to remaining
+			// Add difference to remaining.
 			t.Remaining += r.Limit - t.Limit
 			if t.Remaining < 0 {
 				t.Remaining = 0
@@ -136,9 +136,9 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			ResetTime: item.ExpireAt,
 		}
 
-		// If the duration config changed, update the new ExpireAt
+		// If the duration config changed, update the new ExpireAt.
 		if t.Duration != r.Duration {
-			tracing.LogInfo(span, "Duration config changed")
+			tracing.LogInfo(span, "Duration changed")
 			expire := t.CreatedAt + r.Duration
 			if HasBehavior(r.Behavior, Behavior_DURATION_IS_GREGORIAN) {
 				expire, err = GregorianExpiration(clock.Now(), r.Duration)
@@ -147,31 +147,29 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 				}
 			}
 
-			// If our new duration means we are currently expired
-			if expire <= MillisecondNow() {
-				// Update this so s.OnChange() will get the new expire change
+			// If our new duration means we are currently expired.
+			now := MillisecondNow()
+			if expire <= now {
+				// Renew item.
 				tracing.LogInfo(span, "Limit has expired")
-				item.ExpireAt = expire
-
-				c.Remove(item.Key)
-				tracing.LogInfo(span, "c.Remove()")
-
-				// FIXME: tokenBucketNewItem creates a new item.  But, we want to
-				// preserve this item for its CreatedAt timestamp.
-				return tokenBucketNewItem(ctx, s, c, r)
+				expire = now + r.Duration
+				t.CreatedAt = now
+				t.Remaining = t.Limit
 			}
 
 			item.ExpireAt = expire
+			t.Duration = r.Duration
 			rl.ResetTime = expire
 		}
 
-		// Client is only interested in retrieving the current status or updating the rate limit config
+		// Client is only interested in retrieving the current status or
+		// updating the rate limit config.
 		if r.Hits == 0 {
 			tracing.LogInfo(span, "Return current status, apply no change")
 			return rl, nil
 		}
 
-		// If we are already at the limit
+		// If we are already at the limit.
 		if rl.Remaining == 0 {
 			tracing.LogInfo(span, "Already over the limit")
 			overLimitCounter.Add(1)
@@ -180,7 +178,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			return rl, nil
 		}
 
-		// If requested hits takes the remainder
+		// If requested hits takes the remainder.
 		if t.Remaining == r.Hits {
 			tracing.LogInfo(span, "At the limit")
 			t.Remaining = 0
@@ -188,7 +186,8 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			return rl, nil
 		}
 
-		// If requested is more than available, then return over the limit without updating the cache.
+		// If requested is more than available, then return over the limit
+		// without updating the cache.
 		if r.Hits > t.Remaining {
 			tracing.LogInfo(span, "Over the limit")
 			overLimitCounter.Add(1)
@@ -202,18 +201,32 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		return rl, nil
 	}
 
+	// Item is not found in cache or store, create new.
 	return tokenBucketNewItem(ctx, s, c, r)
 }
 
-// Called by tokenBucket() when the requested item is not found in cache or store.
+// Called by tokenBucket() when adding a new item in the store.
 func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
-	// Add a new rate limit to the cache
-	tracing.LogInfo(span, "Add a new rate limit to the cache")
 	now := MillisecondNow()
 	expire := now + r.Duration
+
+	item := CacheItem{
+		Algorithm: r.Algorithm,
+		Key:       r.HashKey(),
+		Value: &TokenBucketItem{
+			Limit:     r.Limit,
+			Duration:  r.Duration,
+			Remaining: r.Limit - r.Hits,
+			CreatedAt: now,
+		},
+		ExpireAt: expire,
+	}
+
+	// Add a new rate limit to the cache.
+	tracing.LogInfo(span, "Add a new rate limit to the cache")
 	if HasBehavior(r.Behavior, Behavior_DURATION_IS_GREGORIAN) {
 		expire, err = GregorianExpiration(clock.Now(), r.Duration)
 		if err != nil {
@@ -221,13 +234,7 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 		}
 	}
 
-	t := &TokenBucketItem{
-		Limit:     r.Limit,
-		Duration:  r.Duration,
-		Remaining: r.Limit - r.Hits,
-		CreatedAt: now,
-	}
-
+	t := item.Value.(*TokenBucketItem)
 	rl := &RateLimitResp{
 		Status:    Status_UNDER_LIMIT,
 		Limit:     r.Limit,
@@ -235,20 +242,13 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 		ResetTime: expire,
 	}
 
-	// Client could be requesting that we always return OVER_LIMIT
+	// Client could be requesting that we always return OVER_LIMIT.
 	if r.Hits > r.Limit {
 		tracing.LogInfo(span, "Over the limit")
 		overLimitCounter.Add(1)
 		rl.Status = Status_OVER_LIMIT
 		rl.Remaining = r.Limit
 		t.Remaining = r.Limit
-	}
-
-	item := CacheItem{
-		Algorithm: r.Algorithm,
-		Key:       r.HashKey(),
-		Value:     t,
-		ExpireAt:  expire,
 	}
 
 	c.Add(item)
@@ -258,6 +258,7 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 		s.OnChange(r, item)
 		tracing.LogInfo(span, "s.OnChange()")
 	}
+
 	return rl, nil
 }
 
@@ -357,6 +358,8 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			Status:    Status_UNDER_LIMIT,
 			ResetTime: now + (b.Limit-int64(b.Remaining))*int64(rate),
 		}
+
+		// TODO: Feature missing: check for Duration change between item/request.
 
 		if s != nil {
 			defer func() {

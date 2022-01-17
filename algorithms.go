@@ -32,7 +32,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 	tokenBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("tokenBucket"))
 	defer tokenBucketTimer.ObserveDuration()
 
-	// Get definition from cache.
+	// Get rate limit from cache.
 	hashKey := r.HashKey()
 	item, ok := c.GetItem(hashKey)
 	tracing.LogInfo(span, "c.GetItem()")
@@ -214,7 +214,7 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 	expire := now + r.Duration
 
 	item := CacheItem{
-		Algorithm: r.Algorithm,
+		Algorithm: Algorithm_TOKEN_BUCKET,
 		Key:       r.HashKey(),
 		Value: &TokenBucketItem{
 			Limit:     r.Limit,
@@ -274,33 +274,61 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 	}
 
 	now := MillisecondNow()
-	item, ok := c.GetItem(r.HashKey())
 
-	if s != nil {
-		if !ok {
-			// Check our store for the item
-			item, ok = s.Get(r)
-			tracing.LogInfo(span, "c.Get()")
-			if ok {
-				c.Add(item)
-				tracing.LogInfo(span, "c.Add()")
-			}
+	// Get rate limit from cache.
+	hashKey := r.HashKey()
+	item, ok := c.GetItem(hashKey)
+	tracing.LogInfo(span, "c.GetItem()")
+
+	if s != nil && !ok {
+		// Cache miss.
+		// Check our store for the item.
+		if item, ok = s.Get(r); ok {
+			tracing.LogInfo(span, "Check store for rate limit")
+			c.Add(item)
+			tracing.LogInfo(span, "c.Add()")
+		}
+	}
+
+	// Sanity checks.
+	if ok {
+		if item.Value == nil {
+			msgPart := "leakyBucket: Invalid cache item; Value is nil"
+			tracing.LogInfo(span, msgPart,
+				"hashKey", hashKey,
+				"key", r.UniqueKey,
+				"name", r.Name,
+			)
+			logrus.Error(msgPart)
+			ok = false
+		} else if item.Key != hashKey {
+			msgPart := "leakyBucket: Invalid cache item; key mismatch"
+			tracing.LogInfo(span, msgPart,
+				"itemKey", item.Key,
+				"hashKey", hashKey,
+				"name", r.Name,
+			)
+			logrus.Error(msgPart)
+			ok = false
 		}
 	}
 
 	if ok {
+		// Item found in cache or store.
+		tracing.LogInfo(span, "Update existing rate limit")
+
 		b, ok := item.Value.(*LeakyBucketItem)
 		if !ok {
 			// Client switched algorithms; perhaps due to a migration?
-			c.Remove(r.HashKey())
+			c.Remove(hashKey)
 			tracing.LogInfo(span, "c.Remove()")
 
 			if s != nil {
-				s.Remove(r.HashKey())
+				s.Remove(hashKey)
 				tracing.LogInfo(span, "s.Remove()")
 			}
 
-			return leakyBucket(ctx, s, c, r)
+			return leakyBucketNewItem(ctx, s, c, r)
 		}
 
 		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
@@ -399,8 +427,31 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		b.Remaining -= float64(r.Hits)
 		rl.Remaining = int64(b.Remaining)
 		rl.ResetTime = now + (rl.Limit-rl.Remaining)*int64(rate)
-		c.UpdateExpiration(r.HashKey(), now+duration)
+		c.UpdateExpiration(hashKey, now+duration)
 		return rl, nil
+	}
+
+	return leakyBucketNewItem(ctx, s, c, r)
+}
+
+// Called by leakyBucket() when adding a new item in the store.
+func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+	span, ctx := tracing.StartSpan(ctx)
+	defer span.Finish()
+
+	now := MillisecondNow()
+	expire := now + r.Duration
+
+	item := CacheItem{
+		Algorithm: Algorithm_LEAKY_BUCKET,
+		Key:       r.HashKey(),
+		Value: &TokenBucketItem{
+			Limit:     r.Limit,
+			Duration:  r.Duration,
+			Remaining: r.Limit - r.Hits,
+			CreatedAt: now,
+		},
+		ExpireAt: expire,
 	}
 
 	duration := r.Duration

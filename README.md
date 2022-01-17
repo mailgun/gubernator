@@ -140,6 +140,12 @@ Examples when using `Behavior = DURATION_IS_GREGORIAN`
 * If `Duration = 0` (Minutes) then the rate limit will reset to `Current = 0` at the end of the minute the rate limit was created.
 * If `Duration = 4` (Months) then the rate limit will reset to `Current = 0` at the end of the month the rate limit was created.
 
+## Reset Remaining Behavior
+Users may add behavior `Behavior_RESET_REMAINING` to the rate check request.
+This will reset the rate limit as if created new on first use.
+
+When using Reset Remaining, the `Hits` field should be 0.
+
 ## Gubernator as a library
 If you are using golang, you can use Gubernator as a library. This is useful if
 you wish to implement a rate limit service with your own company specific model

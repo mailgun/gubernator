@@ -365,6 +365,27 @@ func TestLeakyBucket(t *testing.T) {
 			Hits:      0,
 			Remaining: 10,
 			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Second * 60,
+		},
+		{
+			Name:      "should use up the limit and wait until 1 second before duration period",
+			Hits:      10,
+			Remaining: 0,
+			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Second * 29,
+		},
+		{
+			Name:      "should use up all hits one second before duration period",
+			Hits:      9,
+			Remaining: 0,
+			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Second * 3,
+		},
+		{
+			Name:      "only have 1 hit remaining",
+			Hits:      1,
+			Remaining: 0,
+			Status:    guber.Status_UNDER_LIMIT,
 			Sleep:     clock.Second,
 		},
 	}
@@ -391,7 +412,7 @@ func TestLeakyBucket(t *testing.T) {
 			assert.Equal(t, test.Status, rl.Status)
 			assert.Equal(t, test.Remaining, rl.Remaining)
 			assert.Equal(t, int64(10), rl.Limit)
-			assert.Equal(t, clock.Now().Unix() + (rl.Limit - rl.Remaining) * 3, rl.ResetTime/1000)
+			assert.Equal(t, clock.Now().Unix()+(rl.Limit-rl.Remaining)*3, rl.ResetTime/1000)
 			clock.Advance(test.Sleep)
 		})
 	}
@@ -498,7 +519,7 @@ func TestLeakyBucketWithBurst(t *testing.T) {
 			assert.Equal(t, test.Status, rl.Status)
 			assert.Equal(t, test.Remaining, rl.Remaining)
 			assert.Equal(t, int64(10), rl.Limit)
-			assert.Equal(t, clock.Now().Unix() + (rl.Limit - rl.Remaining) * 3, rl.ResetTime/1000)
+			assert.Equal(t, clock.Now().Unix()+(rl.Limit-rl.Remaining)*3, rl.ResetTime/1000)
 			clock.Advance(test.Sleep)
 		})
 	}

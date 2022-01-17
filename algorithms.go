@@ -292,6 +292,10 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 			duration = expire - (n.UnixNano() / 1000000)
 		}
 
+		if r.Hits != 0 {
+			c.UpdateExpiration(r.HashKey(), now+duration)
+		}
+
 		// Calculate how much leaked out of the bucket since the last time we leaked a hit
 		elapsed := now - b.UpdatedAt
 		leak := float64(elapsed) / rate
@@ -349,7 +353,6 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 		b.Remaining -= float64(r.Hits)
 		rl.Remaining = int64(b.Remaining)
 		rl.ResetTime = now + (rl.Limit-rl.Remaining)*int64(rate)
-		c.UpdateExpiration(hashKey, now+duration)
 		return rl, nil
 	}
 

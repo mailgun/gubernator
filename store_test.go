@@ -348,6 +348,8 @@ func TestStore(t *testing.T) {
 				store.AssertExpectations(t)
 			})
 
+			// Discovered a bug where changing the duration of rate limit caused infinite recursion.
+			// This test exercises that condition.  See PR #123.
 			// Duration changed logic implemented only in token bucket.
 			// TODO: Implement in leaky bucket.
 			if testCase.Algorithm == gubernator.Algorithm_TOKEN_BUCKET {

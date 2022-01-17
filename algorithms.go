@@ -213,15 +213,16 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 	now := MillisecondNow()
 	expire := now + r.Duration
 
+	t := &TokenBucketItem{
+		Limit:     r.Limit,
+		Duration:  r.Duration,
+		Remaining: r.Limit - r.Hits,
+		CreatedAt: now,
+	}
 	item := &CacheItem{
 		Algorithm: Algorithm_TOKEN_BUCKET,
 		Key:       r.HashKey(),
-		Value: &TokenBucketItem{
-			Limit:     r.Limit,
-			Duration:  r.Duration,
-			Remaining: r.Limit - r.Hits,
-			CreatedAt: now,
-		},
+		Value:     t,
 		ExpireAt: expire,
 	}
 
@@ -234,7 +235,6 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 		}
 	}
 
-	t := item.Value.(*TokenBucketItem)
 	rl := &RateLimitResp{
 		Status:    Status_UNDER_LIMIT,
 		Limit:     r.Limit,

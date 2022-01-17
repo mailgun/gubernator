@@ -29,16 +29,16 @@ type MockLoader2 struct {
 
 var _ guber.Loader = &MockLoader2{}
 
-func (m *MockLoader2) Load() (chan guber.CacheItem, error) {
+func (m *MockLoader2) Load() (chan *guber.CacheItem, error) {
 	args := m.Called()
-	var retval chan guber.CacheItem
-	if retval2, ok := args.Get(0).(chan guber.CacheItem); ok {
+	var retval chan *guber.CacheItem
+	if retval2, ok := args.Get(0).(chan *guber.CacheItem); ok {
 		retval = retval2
 	}
 	return retval, args.Error(1)
 }
 
-func (m *MockLoader2) Save(ch chan guber.CacheItem) error {
+func (m *MockLoader2) Save(ch chan *guber.CacheItem) error {
 	args := m.Called(ch)
 	return args.Error(0)
 }

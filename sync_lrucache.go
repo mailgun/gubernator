@@ -34,7 +34,7 @@ type SyncLRUCache struct {
 }
 
 type syncLRUCacheAddRequest struct {
-	Item CacheItem
+	Item *CacheItem
 }
 
 type syncLRUCacheAddResponse struct {
@@ -55,14 +55,14 @@ type syncLRUCacheGetItemRequest struct {
 }
 
 type syncLRUCacheGetItemResponse struct {
-	Item CacheItem
+	Item *CacheItem
 	Ok   bool
 }
 
 type syncLRUCacheEachRequest struct{}
 
 type syncLRUCacheEachResponse struct {
-	Each chan CacheItem
+	Each chan *CacheItem
 }
 
 type syncLRUCacheRemoveRequest struct {
@@ -129,7 +129,7 @@ func (c *SyncLRUCache) listen() {
 	}
 }
 
-func (c *SyncLRUCache) Add(item CacheItem) bool {
+func (c *SyncLRUCache) Add(item *CacheItem) bool {
 	c.addRequest <- syncLRUCacheAddRequest{Item: item}
 	response := <-c.addResponse
 	return response.Exists
@@ -141,13 +141,13 @@ func (c *SyncLRUCache) UpdateExpiration(key string, expireAt int64) bool {
 	return response.Ok
 }
 
-func (c *SyncLRUCache) GetItem(key string) (CacheItem, bool) {
+func (c *SyncLRUCache) GetItem(key string) (*CacheItem, bool) {
 	c.getItemRequest <- syncLRUCacheGetItemRequest{Key: key}
 	response := <-c.getItemResponse
 	return response.Item, response.Ok
 }
 
-func (c *SyncLRUCache) Each() chan CacheItem {
+func (c *SyncLRUCache) Each() chan *CacheItem {
 	c.eachRequest <- syncLRUCacheEachRequest{}
 	response := <-c.eachResponse
 	return response.Each

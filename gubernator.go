@@ -460,7 +460,7 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 	defer span.Finish()
 
 	for _, g := range r.Globals {
-		item := CacheItem{
+		item := &CacheItem{
 			ExpireAt:  g.Status.ResetTime,
 			Algorithm: g.Algorithm,
 			Value:     g.Status,

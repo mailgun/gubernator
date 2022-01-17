@@ -42,7 +42,7 @@ func TestLRUCache(t *testing.T) {
 		// Populate cache.
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
-			item := gubernator.CacheItem{
+			item := &gubernator.CacheItem{
 				Key:      key,
 				Value:    i,
 				ExpireAt: expireAt,
@@ -82,7 +82,7 @@ func TestLRUCache(t *testing.T) {
 		const key = "foobar"
 
 		// Add key.
-		item1 := gubernator.CacheItem{
+		item1 := &gubernator.CacheItem{
 			Key:      key,
 			Value:    "initial value",
 			ExpireAt: expireAt,
@@ -91,7 +91,7 @@ func TestLRUCache(t *testing.T) {
 		require.False(t, exists1)
 
 		// Update same key.
-		item2 := gubernator.CacheItem{
+		item2 := &gubernator.CacheItem{
 			Key:      key,
 			Value:    "new value",
 			ExpireAt: expireAt,
@@ -111,7 +111,7 @@ func TestLRUCache(t *testing.T) {
 		// Populate cache.
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
-			item := gubernator.CacheItem{
+			item := &gubernator.CacheItem{
 				Key:      key,
 				Value:    i,
 				ExpireAt: expireAt,
@@ -163,7 +163,7 @@ func TestLRUCache(t *testing.T) {
 
 				for i := 0; i < iterations; i++ {
 					key := strconv.Itoa(i)
-					item := gubernator.CacheItem{
+					item := &gubernator.CacheItem{
 						Key:      key,
 						Value:    i,
 						ExpireAt: expireAt,
@@ -186,7 +186,7 @@ func TestLRUCache(t *testing.T) {
 		// Populate cache.
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
-			item := gubernator.CacheItem{
+			item := &gubernator.CacheItem{
 				Key:      key,
 				Value:    i,
 				ExpireAt: expireAt,
@@ -225,7 +225,7 @@ func TestLRUCache(t *testing.T) {
 
 				for i := 0; i < iterations; i++ {
 					key := strconv.Itoa(i)
-					item := gubernator.CacheItem{
+					item := &gubernator.CacheItem{
 						Key:      key,
 						Value:    i,
 						ExpireAt: expireAt,
@@ -248,7 +248,7 @@ func TestLRUCache(t *testing.T) {
 		// Populate cache.
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
-			item := gubernator.CacheItem{
+			item := &gubernator.CacheItem{
 				Key:      key,
 				Value:    i,
 				ExpireAt: expireAt,
@@ -291,7 +291,7 @@ func TestLRUCache(t *testing.T) {
 				for i := 0; i < iterations; i++ {
 					// Add existing.
 					key := strconv.Itoa(i)
-					item := gubernator.CacheItem{
+					item := &gubernator.CacheItem{
 						Key:      key,
 						Value:    i,
 						ExpireAt: expireAt,
@@ -302,7 +302,7 @@ func TestLRUCache(t *testing.T) {
 
 					// Add new.
 					key2 := strconv.Itoa(rand.Intn(1000) + 20000)
-					item2 := gubernator.CacheItem{
+					item2 := &gubernator.CacheItem{
 						Key:      key2,
 						Value:    i,
 						ExpireAt: expireAt,
@@ -344,7 +344,7 @@ func BenchmarkLRUCache(b *testing.B) {
 		// Populate cache.
 		for i := 0; i < b.N; i++ {
 			key := strconv.Itoa(i)
-			item := gubernator.CacheItem{
+			item := &gubernator.CacheItem{
 				Key:      key,
 				Value:    i,
 				ExpireAt: expireAt,
@@ -373,7 +373,7 @@ func BenchmarkLRUCache(b *testing.B) {
 
 		for i := 0; i < b.N; i++ {
 			key := strconv.Itoa(i)
-			item := gubernator.CacheItem{
+			item := &gubernator.CacheItem{
 				Key:      key,
 				Value:    i,
 				ExpireAt: expireAt,
@@ -391,7 +391,7 @@ func BenchmarkLRUCache(b *testing.B) {
 		// Populate cache.
 		for i := 0; i < b.N; i++ {
 			key := strconv.Itoa(i)
-			item := gubernator.CacheItem{
+			item := &gubernator.CacheItem{
 				Key:      key,
 				Value:    i,
 				ExpireAt: expireAt,
@@ -437,7 +437,7 @@ func BenchmarkLRUCache(b *testing.B) {
 				defer doneWg.Done()
 				launchWg.Wait()
 
-				item := gubernator.CacheItem{
+				item := &gubernator.CacheItem{
 					Key:      key,
 					Value:    i,
 					ExpireAt: expireAt,
@@ -463,7 +463,7 @@ func BenchmarkLRUCache(b *testing.B) {
 		// Populate cache.
 		for i := 0; i < b.N; i++ {
 			key := strconv.Itoa(i)
-			item := gubernator.CacheItem{
+			item := &gubernator.CacheItem{
 				Key:      key,
 				Value:    i,
 				ExpireAt: expireAt,
@@ -489,7 +489,7 @@ func BenchmarkLRUCache(b *testing.B) {
 				defer doneWg.Done()
 				launchWg.Wait()
 
-				item := gubernator.CacheItem{
+				item := &gubernator.CacheItem{
 					Key:      key,
 					Value:    i,
 					ExpireAt: expireAt,
@@ -530,7 +530,7 @@ func BenchmarkLRUCache(b *testing.B) {
 				launchWg.Wait()
 
 				key := "z" + strconv.Itoa(i)
-				item := gubernator.CacheItem{
+				item := &gubernator.CacheItem{
 					Key:      key,
 					Value:    i,
 					ExpireAt: expireAt,

@@ -43,9 +43,9 @@ func TestGubernatorPool(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Setup mock data.
 			const NumCacheItems = 100
-			cacheItems := []guber.CacheItem{}
+			cacheItems := []*guber.CacheItem{}
 			for i := 0; i < NumCacheItems; i++ {
-				cacheItems = append(cacheItems, guber.CacheItem{
+				cacheItems = append(cacheItems, &guber.CacheItem{
 					Key:      fmt.Sprintf("Foobar%04d", i),
 					Value:    fmt.Sprintf("Stuff%04d", i),
 					ExpireAt: 4131978658000,
@@ -65,7 +65,7 @@ func TestGubernatorPool(t *testing.T) {
 				chp := guber.NewGubernatorPool(conf, testCase.concurrency)
 
 				// Mock Loader.
-				fakeLoadCh := make(chan guber.CacheItem, NumCacheItems)
+				fakeLoadCh := make(chan *guber.CacheItem, NumCacheItems)
 				for _, item := range cacheItems {
 					fakeLoadCh <- item
 				}
@@ -100,8 +100,8 @@ func TestGubernatorPool(t *testing.T) {
 				mockLoader.On("Save", mock.Anything).Once().Return(nil).
 					Run(func(args mock.Arguments) {
 						// Verify items sent over the channel passed to Save().
-						saveCh := args.Get(0).(chan guber.CacheItem)
-						savedItems := []guber.CacheItem{}
+						saveCh := args.Get(0).(chan *guber.CacheItem)
+						savedItems := []*guber.CacheItem{}
 						for item := range saveCh {
 							savedItems = append(savedItems, item)
 						}
@@ -114,7 +114,7 @@ func TestGubernatorPool(t *testing.T) {
 					})
 
 				// Mock Cache.
-				eachCh := make(chan guber.CacheItem, NumCacheItems)
+				eachCh := make(chan *guber.CacheItem, NumCacheItems)
 				for _, item := range cacheItems {
 					eachCh <- item
 				}

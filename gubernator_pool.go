@@ -70,7 +70,7 @@ type poolHashRingNode struct {
 type poolStoreRequest struct {
 	ctx      context.Context
 	response chan poolStoreResponse
-	out      chan<- CacheItem
+	out      chan<- *CacheItem
 }
 
 type poolStoreResponse struct{}
@@ -78,7 +78,7 @@ type poolStoreResponse struct{}
 type poolLoadRequest struct {
 	ctx      context.Context
 	response chan poolLoadResponse
-	in       <-chan CacheItem
+	in       <-chan *CacheItem
 }
 
 type poolLoadResponse struct{}
@@ -86,7 +86,7 @@ type poolLoadResponse struct{}
 type poolAddCacheItemRequest struct {
 	ctx      context.Context
 	response chan poolAddCacheItemResponse
-	item     CacheItem
+	item     *CacheItem
 }
 
 type poolAddCacheItemResponse struct {
@@ -100,7 +100,7 @@ type poolGetCacheItemRequest struct {
 }
 
 type poolGetCacheItemResponse struct {
-	item CacheItem
+	item *CacheItem
 	ok   bool
 }
 
@@ -340,7 +340,7 @@ func (chp *GubernatorPool) Load(ctx context.Context) error {
 	}
 
 	type loadChannel struct {
-		ch       chan CacheItem
+		ch       chan *CacheItem
 		worker   *poolWorker
 		respChan chan poolLoadResponse
 	}
@@ -351,7 +351,7 @@ func (chp *GubernatorPool) Load(ctx context.Context) error {
 	// Send each item to assigned channel's cache.
 mainloop:
 	for {
-		var item CacheItem
+		var item *CacheItem
 		var ok bool
 
 		select {
@@ -372,7 +372,7 @@ mainloop:
 		loadCh, exist := loadChMap[worker]
 		if !exist {
 			loadCh = loadChannel{
-				ch:       make(chan CacheItem),
+				ch:       make(chan *CacheItem),
 				worker:   worker,
 				respChan: make(chan poolLoadResponse),
 			}
@@ -422,7 +422,7 @@ func (chp *GubernatorPool) handleLoad(request poolLoadRequest, cache Cache) {
 
 mainloop:
 	for {
-		var item CacheItem
+		var item *CacheItem
 		var ok bool
 
 		select {
@@ -460,7 +460,7 @@ func (chp *GubernatorPool) Store(ctx context.Context) error {
 	defer span.Finish()
 
 	var wg sync.WaitGroup
-	out := make(chan CacheItem, 500)
+	out := make(chan *CacheItem, 500)
 
 	// Iterate each worker's cache to `out` channel.
 	for _, worker := range chp.workers {
@@ -543,7 +543,7 @@ func (chp *GubernatorPool) handleStore(request poolStoreRequest, cache Cache) {
 }
 
 // Add to worker's cache.
-func (chp *GubernatorPool) AddCacheItem(ctx context.Context, key string, item CacheItem) error {
+func (chp *GubernatorPool) AddCacheItem(ctx context.Context, key string, item *CacheItem) error {
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
@@ -596,7 +596,7 @@ func (chp *GubernatorPool) handleAddCacheItem(request poolAddCacheItemRequest, c
 }
 
 // Get item from worker's cache.
-func (chp *GubernatorPool) GetCacheItem(ctx context.Context, key string) (CacheItem, bool, error) {
+func (chp *GubernatorPool) GetCacheItem(ctx context.Context, key string) (*CacheItem, bool, error) {
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
 
@@ -621,13 +621,13 @@ func (chp *GubernatorPool) GetCacheItem(ctx context.Context, key string) (CacheI
 		case <-ctx.Done():
 			// Context canceled.
 			ext.LogError(span, ctx.Err())
-			return CacheItem{}, false, ctx.Err()
+			return nil, false, ctx.Err()
 		}
 
 	case <-ctx.Done():
 		// Context canceled.
 		ext.LogError(span, ctx.Err())
-		return CacheItem{}, false, ctx.Err()
+		return nil, false, ctx.Err()
 	}
 }
 

@@ -70,11 +70,11 @@ func NewLRUCache(maxSize int) *LRUCache {
 // It would be safer if this were done using an iterator or delegate pattern
 // that doesn't require a goroutine.
 // May need to reassess functional requirements.
-func (c *LRUCache) Each() chan CacheItem {
-	out := make(chan CacheItem)
+func (c *LRUCache) Each() chan *CacheItem {
+	out := make(chan *CacheItem)
 	go func() {
 		for _, ele := range c.cache {
-			out <- ele.Value.(CacheItem)
+			out <- ele.Value.(*CacheItem)
 		}
 		close(out)
 	}()
@@ -82,7 +82,7 @@ func (c *LRUCache) Each() chan CacheItem {
 }
 
 // Adds a value to the cache.
-func (c *LRUCache) Add(item CacheItem) bool {
+func (c *LRUCache) Add(item *CacheItem) bool {
 	// If the key already exist, set the new value
 	if ee, ok := c.cache[item.Key]; ok {
 		c.ll.MoveToFront(ee)
@@ -105,9 +105,9 @@ func MillisecondNow() int64 {
 }
 
 // GetItem returns the item stored in the cache
-func (c *LRUCache) GetItem(key string) (item CacheItem, ok bool) {
+func (c *LRUCache) GetItem(key string) (item *CacheItem, ok bool) {
 	if ele, hit := c.cache[key]; hit {
-		entry := ele.Value.(CacheItem)
+		entry := ele.Value.(*CacheItem)
 
 		now := MillisecondNow()
 		// If the entry is invalidated
@@ -150,7 +150,7 @@ func (c *LRUCache) removeOldest() {
 
 func (c *LRUCache) removeElement(e *list.Element) {
 	c.ll.Remove(e)
-	kv := e.Value.(CacheItem)
+	kv := e.Value.(*CacheItem)
 	delete(c.cache, kv.Key)
 	atomic.StoreInt64(&c.cacheLen, int64(c.ll.Len()))
 }
@@ -163,7 +163,7 @@ func (c *LRUCache) Size() int64 {
 // Update the expiration time for the key
 func (c *LRUCache) UpdateExpiration(key string, expireAt int64) bool {
 	if ele, hit := c.cache[key]; hit {
-		entry := ele.Value.(CacheItem)
+		entry := ele.Value.(*CacheItem)
 		entry.ExpireAt = expireAt
 		return true
 	}

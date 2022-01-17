@@ -161,7 +161,7 @@ func TestStore(t *testing.T) {
 	matchItem := func(algorithm gubernator.Algorithm, req *gubernator.RateLimitReq) interface{} {
 		switch algorithm {
 		case gubernator.Algorithm_TOKEN_BUCKET:
-			return mock.MatchedBy(func(item gubernator.CacheItem) bool {
+			return mock.MatchedBy(func(item *gubernator.CacheItem) bool {
 				titem, ok := item.Value.(*gubernator.TokenBucketItem)
 				if !ok {
 					return false
@@ -174,7 +174,7 @@ func TestStore(t *testing.T) {
 			})
 
 		case gubernator.Algorithm_LEAKY_BUCKET:
-			return mock.MatchedBy(func(item gubernator.CacheItem) bool {
+			return mock.MatchedBy(func(item *gubernator.CacheItem) bool {
 				litem, ok := item.Value.(*gubernator.LeakyBucketItem)
 				if !ok {
 					return false
@@ -240,7 +240,7 @@ func TestStore(t *testing.T) {
 				}
 
 				// Setup mocks.
-				store.On("Get", matchReq(req)).Once().Return(gubernator.CacheItem{}, false)
+				store.On("Get", matchReq(req)).Once().Return(nil, false)
 				store.On("OnChange", matchReq(req), matchItem(testCase.Algorithm, req)).Once()
 
 				// Call code.
@@ -287,7 +287,7 @@ func TestStore(t *testing.T) {
 				// Setup mocks.
 				now := gubernator.MillisecondNow()
 				expire := now + req.Duration
-				storedItem := gubernator.CacheItem{
+				storedItem := &gubernator.CacheItem{
 					Algorithm: req.Algorithm,
 					ExpireAt:  expire,
 					Key:       req.HashKey(),
@@ -326,7 +326,7 @@ func TestStore(t *testing.T) {
 				// Setup mocks.
 				now := gubernator.MillisecondNow()
 				expire := now + req.Duration
-				storedItem := gubernator.CacheItem{
+				storedItem := &gubernator.CacheItem{
 					Algorithm: req.Algorithm,
 					ExpireAt:  expire,
 					Key:       req.HashKey(),
@@ -379,7 +379,7 @@ func TestStore(t *testing.T) {
 					case gubernator.Algorithm_LEAKY_BUCKET:
 						bucketItem.(*gubernator.LeakyBucketItem).Duration = oldDuration
 					}
-					storedItem := gubernator.CacheItem{
+					storedItem := &gubernator.CacheItem{
 						Algorithm: req.Algorithm,
 						ExpireAt:  oldExpire,
 						Key:       req.HashKey(),
@@ -390,7 +390,7 @@ func TestStore(t *testing.T) {
 
 					store.On("OnChange",
 						matchReq(req),
-						mock.MatchedBy(func(item gubernator.CacheItem) bool {
+						mock.MatchedBy(func(item *gubernator.CacheItem) bool {
 							switch req.Algorithm {
 							case gubernator.Algorithm_TOKEN_BUCKET:
 								titem, ok := item.Value.(*gubernator.TokenBucketItem)
@@ -468,7 +468,7 @@ func TestStore(t *testing.T) {
 						bucketItem.(*gubernator.LeakyBucketItem).Duration = oldDuration
 						bucketItem.(*gubernator.LeakyBucketItem).UpdatedAt = longTimeAgo
 					}
-					storedItem := gubernator.CacheItem{
+					storedItem := &gubernator.CacheItem{
 						Algorithm: req.Algorithm,
 						ExpireAt:  oldExpire,
 						Key:       req.HashKey(),
@@ -479,7 +479,7 @@ func TestStore(t *testing.T) {
 
 					store.On("OnChange",
 						matchReq(req),
-						mock.MatchedBy(func(item gubernator.CacheItem) bool {
+						mock.MatchedBy(func(item *gubernator.CacheItem) bool {
 							switch req.Algorithm {
 							case gubernator.Algorithm_TOKEN_BUCKET:
 								titem, ok := item.Value.(*gubernator.TokenBucketItem)
@@ -529,7 +529,7 @@ func TestStore(t *testing.T) {
 	}
 }
 
-func getRemaining(item gubernator.CacheItem) int64 {
+func getRemaining(item *gubernator.CacheItem) int64 {
 	switch item.Algorithm {
 	case gubernator.Algorithm_TOKEN_BUCKET:
 		return item.Value.(*gubernator.TokenBucketItem).Remaining

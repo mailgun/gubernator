@@ -213,7 +213,7 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 	now := MillisecondNow()
 	expire := now + r.Duration
 
-	item := CacheItem{
+	item := &CacheItem{
 		Algorithm: Algorithm_TOKEN_BUCKET,
 		Key:       r.HashKey(),
 		Value: &TokenBucketItem{
@@ -440,20 +440,6 @@ func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 	defer span.Finish()
 
 	now := MillisecondNow()
-	expire := now + r.Duration
-
-	item := CacheItem{
-		Algorithm: Algorithm_LEAKY_BUCKET,
-		Key:       r.HashKey(),
-		Value: &TokenBucketItem{
-			Limit:     r.Limit,
-			Duration:  r.Duration,
-			Remaining: r.Limit - r.Hits,
-			CreatedAt: now,
-		},
-		ExpireAt: expire,
-	}
-
 	duration := r.Duration
 	rate := float64(duration) / float64(r.Limit)
 	if HasBehavior(r.Behavior, Behavior_DURATION_IS_GREGORIAN) {
@@ -492,7 +478,7 @@ func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 		b.Remaining = 0
 	}
 
-	item = CacheItem{
+	item := &CacheItem{
 		ExpireAt:  now + duration,
 		Algorithm: r.Algorithm,
 		Key:       r.HashKey(),

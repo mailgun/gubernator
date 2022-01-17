@@ -18,10 +18,10 @@ package gubernator
 
 // So algorithms can interface with different cache implementations
 type Cache interface {
-	Add(item CacheItem) bool
+	Add(item *CacheItem) bool
 	UpdateExpiration(key string, expireAt int64) bool
-	GetItem(key string) (value CacheItem, ok bool)
-	Each() chan CacheItem
+	GetItem(key string) (value *CacheItem, ok bool)
+	Each() chan *CacheItem
 	Remove(key string)
 	Size() int64
 	Close() error

@@ -29,14 +29,14 @@ type MockStore2 struct {
 
 var _ guber.Store = &MockStore2{}
 
-func (m *MockStore2) OnChange(r *guber.RateLimitReq, item guber.CacheItem) {
+func (m *MockStore2) OnChange(r *guber.RateLimitReq, item *guber.CacheItem) {
 	m.Called(r, item)
 }
 
-func (m *MockStore2) Get(r *guber.RateLimitReq) (guber.CacheItem, bool) {
+func (m *MockStore2) Get(r *guber.RateLimitReq) (*guber.CacheItem, bool) {
 	args := m.Called(r)
-	var retval guber.CacheItem
-	if retval2, ok := args.Get(0).(guber.CacheItem); ok {
+	var retval *guber.CacheItem
+	if retval2, ok := args.Get(0).(*guber.CacheItem); ok {
 		retval = retval2
 	}
 	return retval, args.Bool(1)

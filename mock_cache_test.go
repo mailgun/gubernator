@@ -29,7 +29,7 @@ type MockCache struct {
 
 var _ guber.Cache = &MockCache{}
 
-func (m *MockCache) Add(item guber.CacheItem) bool {
+func (m *MockCache) Add(item *guber.CacheItem) bool {
 	args := m.Called(item)
 	return args.Bool(0)
 }
@@ -39,19 +39,19 @@ func (m *MockCache) UpdateExpiration(key string, expireAt int64) bool {
 	return args.Bool(0)
 }
 
-func (m *MockCache) GetItem(key string) (value guber.CacheItem, ok bool) {
+func (m *MockCache) GetItem(key string) (value *guber.CacheItem, ok bool) {
 	args := m.Called(key)
-	var retval guber.CacheItem
-	if retval2, ok := args.Get(0).(guber.CacheItem); ok {
+	var retval *guber.CacheItem
+	if retval2, ok := args.Get(0).(*guber.CacheItem); ok {
 		retval = retval2
 	}
 	return retval, args.Bool(1)
 }
 
-func (m *MockCache) Each() chan guber.CacheItem {
+func (m *MockCache) Each() chan *guber.CacheItem {
 	args := m.Called()
-	var retval chan guber.CacheItem
-	if retval2, ok := args.Get(0).(chan guber.CacheItem); ok {
+	var retval chan *guber.CacheItem
+	if retval2, ok := args.Get(0).(chan *guber.CacheItem); ok {
 		retval = retval2
 	}
 	return retval

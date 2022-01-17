@@ -40,7 +40,7 @@ func TestSyncLRUCache(t *testing.T) {
 		// Populate cache.
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
-			item := gubernator.CacheItem{
+			item := &gubernator.CacheItem{
 				Key:      key,
 				Value:    i,
 				ExpireAt: expireAt,
@@ -77,7 +77,7 @@ func TestSyncLRUCache(t *testing.T) {
 		// Populate cache.
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
-			item := gubernator.CacheItem{
+			item := &gubernator.CacheItem{
 				Key:      key,
 				Value:    i,
 				ExpireAt: expireAt,
@@ -128,7 +128,7 @@ func TestSyncLRUCache(t *testing.T) {
 
 				for i := 0; i < iterations; i++ {
 					key := strconv.Itoa(i)
-					item := gubernator.CacheItem{
+					item := &gubernator.CacheItem{
 						Key:      key,
 						Value:    i,
 						ExpireAt: expireAt,
@@ -151,7 +151,7 @@ func TestSyncLRUCache(t *testing.T) {
 		// Populate cache.
 		for i := 0; i < iterations; i++ {
 			key := strconv.Itoa(i)
-			item := gubernator.CacheItem{
+			item := &gubernator.CacheItem{
 				Key:      key,
 				Value:    i,
 				ExpireAt: expireAt,
@@ -186,7 +186,7 @@ func TestSyncLRUCache(t *testing.T) {
 
 				for i := 0; i < iterations; i++ {
 					key := strconv.Itoa(i)
-					item := gubernator.CacheItem{
+					item := &gubernator.CacheItem{
 						Key:      key,
 						Value:    i,
 						ExpireAt: expireAt,
@@ -211,7 +211,7 @@ func BenchmarkSyncLRUCache(b *testing.B) {
 		// Populate cache.
 		for i := 0; i < b.N; i++ {
 			key := strconv.Itoa(i)
-			item := gubernator.CacheItem{
+			item := &gubernator.CacheItem{
 				Key:      key,
 				Value:    i,
 				ExpireAt: expireAt,
@@ -239,7 +239,7 @@ func BenchmarkSyncLRUCache(b *testing.B) {
 
 		for i := 0; i < b.N; i++ {
 			key := strconv.Itoa(i)
-			item := gubernator.CacheItem{
+			item := &gubernator.CacheItem{
 				Key:      key,
 				Value:    i,
 				ExpireAt: expireAt,
@@ -256,7 +256,7 @@ func BenchmarkSyncLRUCache(b *testing.B) {
 		// Populate cache.
 		for i := 0; i < b.N; i++ {
 			key := strconv.Itoa(i)
-			item := gubernator.CacheItem{
+			item := &gubernator.CacheItem{
 				Key:      key,
 				Value:    i,
 				ExpireAt: expireAt,
@@ -301,7 +301,7 @@ func BenchmarkSyncLRUCache(b *testing.B) {
 				defer doneWg.Done()
 				launchWg.Wait()
 
-				item := gubernator.CacheItem{
+				item := &gubernator.CacheItem{
 					Key:      key,
 					Value:    i,
 					ExpireAt: expireAt,
@@ -326,7 +326,7 @@ func BenchmarkSyncLRUCache(b *testing.B) {
 		// Populate cache.
 		for i := 0; i < b.N; i++ {
 			key := strconv.Itoa(i)
-			item := gubernator.CacheItem{
+			item := &gubernator.CacheItem{
 				Key:      key,
 				Value:    i,
 				ExpireAt: expireAt,
@@ -350,7 +350,7 @@ func BenchmarkSyncLRUCache(b *testing.B) {
 				defer doneWg.Done()
 				launchWg.Wait()
 
-				item := gubernator.CacheItem{
+				item := &gubernator.CacheItem{
 					Key:      key,
 					Value:    i,
 					ExpireAt: expireAt,
@@ -388,7 +388,7 @@ func BenchmarkSyncLRUCache(b *testing.B) {
 				launchWg.Wait()
 
 				key := "z" + strconv.Itoa(i)
-				item := gubernator.CacheItem{
+				item := &gubernator.CacheItem{
 					Key:      key,
 					Value:    i,
 					ExpireAt: expireAt,

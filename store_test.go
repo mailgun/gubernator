@@ -158,8 +158,8 @@ func TestStore(t *testing.T) {
 
 	// Create a mock argument matcher for CacheItem input.
 	// Verify item matches expected algorithm, limit, and duration.
-	matchItem := func(algorithm gubernator.Algorithm, req *gubernator.RateLimitReq) interface{} {
-		switch algorithm {
+	matchItem := func(req *gubernator.RateLimitReq) interface{} {
+		switch req.Algorithm {
 		case gubernator.Algorithm_TOKEN_BUCKET:
 			return mock.MatchedBy(func(item *gubernator.CacheItem) bool {
 				titem, ok := item.Value.(*gubernator.TokenBucketItem)
@@ -167,7 +167,7 @@ func TestStore(t *testing.T) {
 					return false
 				}
 
-				return item.Algorithm == algorithm &&
+				return item.Algorithm == req.Algorithm &&
 					item.Key == req.HashKey() &&
 					titem.Limit == req.Limit &&
 					titem.Duration == req.Duration
@@ -180,7 +180,7 @@ func TestStore(t *testing.T) {
 					return false
 				}
 
-				return item.Algorithm == algorithm &&
+				return item.Algorithm == req.Algorithm &&
 					item.Key == req.HashKey() &&
 					litem.Limit == req.Limit &&
 					litem.Duration == req.Duration
@@ -241,7 +241,7 @@ func TestStore(t *testing.T) {
 
 				// Setup mocks.
 				store.On("Get", matchReq(req)).Once().Return(nil, false)
-				store.On("OnChange", matchReq(req), matchItem(testCase.Algorithm, req)).Once()
+				store.On("OnChange", matchReq(req), matchItem(req)).Once()
 
 				// Call code.
 				resp, err := client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
@@ -256,7 +256,7 @@ func TestStore(t *testing.T) {
 
 				t.Run("Second rate check pulls from cache", func(t *testing.T) {
 					// Setup mocks.
-					store.On("OnChange", matchReq(req), matchItem(testCase.Algorithm, req)).Once()
+					store.On("OnChange", matchReq(req), matchItem(req)).Once()
 
 					// Call code.
 					resp, err := client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
@@ -295,7 +295,7 @@ func TestStore(t *testing.T) {
 				}
 
 				store.On("Get", matchReq(req)).Once().Return(storedItem, true)
-				store.On("OnChange", matchReq(req), matchItem(testCase.Algorithm, req)).Once()
+				store.On("OnChange", matchReq(req), matchItem(req)).Once()
 
 				// Call code.
 				resp, err := client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
@@ -335,7 +335,7 @@ func TestStore(t *testing.T) {
 
 				store.On("Get", matchReq(req)).Once().Return(storedItem, true)
 				store.On("Remove", req.HashKey()).Once()
-				store.On("OnChange", matchReq(req), matchItem(testCase.Algorithm, req)).Once()
+				store.On("OnChange", matchReq(req), matchItem(req)).Once()
 
 				// Call code.
 				resp, err := client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{

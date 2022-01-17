@@ -365,6 +365,27 @@ func TestLeakyBucket(t *testing.T) {
 			Hits:      0,
 			Remaining: 10,
 			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Second * 60,
+		},
+		{
+			Name:      "should use up the limit and wait until 1 second before duration period",
+			Hits:      10,
+			Remaining: 0,
+			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Second * 29,
+		},
+		{
+			Name:      "should use up all hits one second before duration period",
+			Hits:      9,
+			Remaining: 0,
+			Status:    guber.Status_UNDER_LIMIT,
+			Sleep:     clock.Second * 3,
+		},
+		{
+			Name:      "only have 1 hit remaining",
+			Hits:      1,
+			Remaining: 0,
+			Status:    guber.Status_UNDER_LIMIT,
 			Sleep:     clock.Second,
 		},
 	}

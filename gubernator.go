@@ -61,7 +61,7 @@ var getRateLimitCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
 }, []string{"calltype"})
 var funcTimeMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 	Name: "gubernator_func_duration",
-	Help: "The timings of key functions in Gubernator.",
+	Help: "The timings of key functions in Gubernator in seconds.",
 	Objectives: map[float64]float64{
 		0.99: 0.001,
 	},

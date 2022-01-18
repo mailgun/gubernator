@@ -330,3 +330,6 @@ See the `example.conf` for all available config options and their descriptions.
 See [architecture.md](/architecture.md) for a full description of the architecture and the inner 
 workings of gubernator.
 
+## Monitoring
+Gubernator publishes Prometheus metrics for realtime monitoring.  See
+[prometheus.md](prometheus.md) for details.

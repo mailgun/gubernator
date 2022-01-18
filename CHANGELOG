@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 instead of locking a shared mutex to process requests sequentially.
 * Rate checks now respect client's context deadline and will abort processing
 immediately if canceled.
-* Fixed stack overflow panic in token bucket rate checking.
+* Fixed stack overflow panic in token bucket ratelimit checking.
+* Fixed leaky bucket ratelimits expiring prematurely.
 
 ## [2.0.0-rc.12] - 2021-12-28
 ## Changes

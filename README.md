@@ -333,3 +333,7 @@ workings of gubernator.
 ## Monitoring
 Gubernator publishes Prometheus metrics for realtime monitoring.  See
 [prometheus.md](prometheus.md) for details.
+
+## Jaeger Tracing
+Gubernator supports tracing using Jaeger Tracing tools.  See
+[jaegertracing.md](jaegertracing.md) for details.

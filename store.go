@@ -41,8 +41,9 @@ type TokenBucketItem struct {
 }
 
 // Store interface allows implementors to off load storage of all or a subset of ratelimits to
-// some persistent store. Methods OnChange() and Get() should avoid blocking as much as possible as these
-// methods are called on every rate limit request and will effect the performance of gubernator.
+// some persistent store. Methods OnChange() and Remove() should avoid blocking where possible
+// to maximize performance of gubernator.
+// Implementations MUST be threadsafe.
 type Store interface {
 	// Called by gubernator *after* a rate limit item is updated. It's up to the store to
 	// decide if this rate limit item should be persisted in the store. It's up to the

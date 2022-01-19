@@ -42,7 +42,7 @@ type PeerPicker interface {
 	Get(string) (*PeerClient, error)
 	New() PeerPicker
 	Add(*PeerClient)
-	Size() int // TODO: Might not be useful?
+	Size() int
 }
 
 type peerStatus int

@@ -102,6 +102,10 @@ type Config struct {
 	// Should remain empty if not running in a multi cluster environment.
 	ClusterName string
 
+	// (Optional) This is the remote cluster config where replicas are declared and information about contacting
+	// remote cluster is held
+	RemoteClusters *RemoteClusterConfig
+
 	// (Optional) A Logger which implements the declared logger interface (typically *logrus.Entry)
 	Logger FieldLogger
 
@@ -194,6 +198,7 @@ type DaemonConfig struct {
 	// Defaults to `GRPCListenAddress`
 	AdvertiseAddress string
 
+	// TODO: Check if this is respected by the new GubernatorPool
 	// (Optional) The number of items in the cache. Defaults to 50,000
 	CacheSize int
 
@@ -453,6 +458,11 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 		if err := setupEtcdTLS(conf.EtcdPoolConf.EtcdConfig); err != nil {
 			return conf, err
 		}
+	}
+
+	// Get our cluster config if provided
+	if anyHasPrefix("GUBER_CLUSTER", os.Environ()) {
+
 	}
 
 	if DebugEnabled {

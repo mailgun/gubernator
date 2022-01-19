@@ -1175,7 +1175,7 @@ func TestGRPCGateway(t *testing.T) {
 func TestGetPeerRateLimits(t *testing.T) {
 	ctx := context.Background()
 	peerClient := gubernator.NewPeerClient(gubernator.PeerConfig{
-		Info: cluster.GetRandomPeer(cluster.DataCenterNone),
+		Info: cluster.GetRandomPeer(cluster.NameEmpty),
 	})
 
 	t.Run("Stable rate check request order", func(t *testing.T) {

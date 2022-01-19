@@ -46,7 +46,7 @@ const (
 type V1Instance struct {
 	UnimplementedV1Server
 	UnimplementedPeersV1Server
-	broadcast            *broadcastManager
+
 	remoteCluster        *remoteClusterManager
 	peerMutex            sync.RWMutex
 	log                  FieldLogger
@@ -481,8 +481,6 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 // UpdateRateLimits updates the local cache with a list of rate limits from another cluster
 func (s *V1Instance) UpdateRateLimits(ctx context.Context, r *UpdateRateLimitsReq) (*UpdateRateLimitsResp, error) {
 	log := s.log.WithField("method", "UpdateRateLimits()")
-	s.conf.Cache.Lock()
-	defer s.conf.Cache.Unlock()
 
 	var prl GetPeerRateLimitsReq
 	for _, rl := range r.RateLimits {
@@ -495,7 +493,7 @@ func (s *V1Instance) UpdateRateLimits(ctx context.Context, r *UpdateRateLimitsRe
 		if !HasBehavior(rl.Behavior, Behavior_HASH_COMPUTED) {
 			// Verify we own this rate limit as we could be receiving a batch of rate limits we don't own.
 			key := rl.Name + "_" + rl.UniqueKey
-			peer, err := s.GetPeer(key)
+			peer, err := s.GetPeer(ctx, key)
 			if err != nil {
 				log.WithError(err).Errorf("while creating rate limit")
 				continue

@@ -34,6 +34,15 @@ service V1 {
     };
   }
 
+  // Diagnostic tool to fetch the current state of a rate limit without modifying it
+  // will not forward the request to the owning instance, will only respond with a rate
+  // limit if the rate limit exists in the cache of the instance handling this request.
+  rpc InspectRateLimit (InspectRateLimitReq) returns (InspectRateLimitResp) {
+    option (google.api.http) = {
+      post: "/v1/InspectRateLimit"
+      body: "*"
+    };
+  }
 
   // This method is for round trip benchmarking and can be used by
   // the client to determine connectivity to the server
@@ -134,7 +143,7 @@ enum Behavior {
   // resource that is rate limited, since the request will be denied the hits should not be subtracted
   // from the remaining. However in some cases it might be useful to the client to subtract the hits of
   // the denied request from the remaining. Setting this flag enables that behavior. NOTE: Even when
-  // counting over the limit hits, the remaining should never be a negative number.
+  // counting over the limit hits, the remaining will never be a negative number.
   ALWAYS_COUNT_HITS = 10;
 }
 
@@ -201,4 +210,17 @@ message HealthCheckResp {
   string message = 2;
   // The number of peers we know about
   int32 peer_count = 3;
+}
+
+message InspectRateLimitReq {
+  // The name of the rate limit IE: 'requests_per_second', 'gets_per_minute`
+  string name = 1;
+
+  // Uniquely identifies this rate limit IE: 'ip:10.2.10.7' or 'account:123445'
+  string unique_key = 2;
+}
+
+message InspectRateLimitResp {
+  // The rate limit we found in the cache
+  RateLimitResp response = 1;
 }

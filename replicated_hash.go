@@ -32,7 +32,7 @@ type HashString64 func(data string) uint64
 
 var defaultHashString64 HashString64 = fnv1.HashString64
 
-// Implements PeerPicker
+// ReplicatedConsistentHash Implements PeerPicker interface
 type ReplicatedConsistentHash struct {
 	hashFunc HashString64
 	peerKeys []peerInfo
@@ -74,7 +74,7 @@ func (ch *ReplicatedConsistentHash) Peers() []*PeerClient {
 	return results
 }
 
-// Adds a peer to the hash
+// Add a peer to the picker
 func (ch *ReplicatedConsistentHash) Add(peer *PeerClient) {
 	ch.peers[peer.Info().GRPCAddress] = peer
 
@@ -90,17 +90,17 @@ func (ch *ReplicatedConsistentHash) Add(peer *PeerClient) {
 	sort.Slice(ch.peerKeys, func(i, j int) bool { return ch.peerKeys[i].hash < ch.peerKeys[j].hash })
 }
 
-// Returns number of peers in the picker
+// Size returns number of peers in the picker
 func (ch *ReplicatedConsistentHash) Size() int {
 	return len(ch.peers)
 }
 
-// Returns the peer by hostname
+// GetByPeerInfo returns the peer by hostname
 func (ch *ReplicatedConsistentHash) GetByPeerInfo(peer PeerInfo) *PeerClient {
 	return ch.peers[peer.GRPCAddress]
 }
 
-// Given a key, return the peer that key is assigned too
+// Get returns the peer that key is assigned too
 func (ch *ReplicatedConsistentHash) Get(key string) (*PeerClient, error) {
 	if ch.Size() == 0 {
 		return nil, errors.New("unable to pick a peer; pool is empty")

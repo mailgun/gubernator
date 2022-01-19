@@ -73,7 +73,7 @@ type Config struct {
 	Behaviors BehaviorConfig
 
 	// (Optional) The cache implementation
-	CacheFactory func() Cache
+	CacheFactory func(maxSize int) Cache
 
 	// (Optional) A persistent store implementation. Allows the implementor the ability to store the rate limits this
 	// instance of gubernator owns. It's up to the implementor to decide what rate limits to persist.
@@ -134,8 +134,8 @@ func (c *Config) SetDefaults() error {
 	setter.SetDefault(&c.PoolWorkers, numCpus)
 
 	if c.CacheFactory == nil {
-		c.CacheFactory = func() Cache {
-			return NewSyncLRUCache(0)
+		c.CacheFactory = func(maxSize int) Cache {
+			return NewSyncLRUCache(maxSize)
 		}
 	}
 

@@ -56,13 +56,13 @@ func TestGubernatorPool(t *testing.T) {
 				mockLoader := &MockLoader2{}
 				mockCache := &MockCache{}
 				conf := &guber.Config{
-					CacheFactory: func() guber.Cache {
+					CacheFactory: func(maxSize int) guber.Cache {
 						return mockCache
 					},
 					Loader: mockLoader,
 				}
 				conf.SetDefaults()
-				chp := guber.NewGubernatorPool(conf, testCase.concurrency)
+				chp := guber.NewGubernatorPool(conf, testCase.concurrency, 0)
 
 				// Mock Loader.
 				fakeLoadCh := make(chan *guber.CacheItem, NumCacheItems)
@@ -88,13 +88,13 @@ func TestGubernatorPool(t *testing.T) {
 				mockLoader := &MockLoader2{}
 				mockCache := &MockCache{}
 				conf := &guber.Config{
-					CacheFactory: func() guber.Cache {
+					CacheFactory: func(maxSize int) guber.Cache {
 						return mockCache
 					},
 					Loader: mockLoader,
 				}
 				conf.SetDefaults()
-				chp := guber.NewGubernatorPool(conf, testCase.concurrency)
+				chp := guber.NewGubernatorPool(conf, testCase.concurrency, 0)
 
 				// Mock Loader.
 				mockLoader.On("Save", mock.Anything).Once().Return(nil).

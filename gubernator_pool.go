@@ -35,13 +35,15 @@ import (
 
 	"github.com/OneOfOne/xxhash"
 	"github.com/mailgun/gubernator/v2/tracing"
+	"github.com/mailgun/holster/v4/setter"
 	"github.com/opentracing/opentracing-go/ext"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
 type GubernatorPool struct {
-	workers []*poolWorker
+	workers         []*poolWorker
+	workerCacheSize int
 
 	// Workers in the hash ring.  Must be sorted by hash value.
 	hashRing []poolHashRingNode
@@ -107,10 +109,13 @@ type poolGetCacheItemResponse struct {
 var _ io.Closer = &GubernatorPool{}
 var poolWorkerCounter int64
 
-func NewGubernatorPool(conf *Config, concurrency int) *GubernatorPool {
+func NewGubernatorPool(conf *Config, concurrency int, cacheSize int) *GubernatorPool {
+	setter.SetDefault(&cacheSize, 50_000)
+
 	chp := &GubernatorPool{
-		conf: conf,
-		done: make(chan struct{}),
+		workerCacheSize: cacheSize / concurrency,
+		conf:            conf,
+		done:            make(chan struct{}),
 	}
 
 	for i := 0; i < concurrency; i++ {
@@ -131,7 +136,7 @@ func (chp *GubernatorPool) addWorker() *poolWorker {
 	const commandChannelSize = 10000
 
 	worker := &poolWorker{
-		cache:               chp.conf.CacheFactory(),
+		cache:               chp.conf.CacheFactory(chp.workerCacheSize),
 		getRateLimitRequest: make(chan *request, commandChannelSize),
 		storeRequest:        make(chan poolStoreRequest, commandChannelSize),
 		loadRequest:         make(chan poolLoadRequest, commandChannelSize),

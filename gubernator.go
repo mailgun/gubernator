@@ -123,7 +123,7 @@ func NewV1Instance(conf Config) (*V1Instance, error) {
 	}
 	setter.SetDefault(&s.log, logrus.WithField("category", "gubernator"))
 
-	s.gubernatorPool = NewGubernatorPool(&conf, conf.PoolWorkers)
+	s.gubernatorPool = NewGubernatorPool(&conf, conf.PoolWorkers, 0)
 	s.global = newGlobalManager(conf.Behaviors, &s)
 	s.mutliRegion = newMultiRegionManager(conf.Behaviors, &s)
 

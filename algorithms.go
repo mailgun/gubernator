@@ -223,7 +223,7 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 		Algorithm: Algorithm_TOKEN_BUCKET,
 		Key:       r.HashKey(),
 		Value:     t,
-		ExpireAt: expire,
+		ExpireAt:  expire,
 	}
 
 	// Add a new rate limit to the cache.

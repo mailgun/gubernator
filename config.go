@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -103,6 +104,10 @@ type Config struct {
 	// (Optional) The TLS config used when connecting to gubernator peers
 	PeerTLS *tls.Config
 
+	// (Optional) Number of worker goroutines to launch for request processing in GubernatorPool.
+	// Default is set to number of CPUs.
+	PoolWorkers int
+
 	// Number of nodes to add to hashring per worker.
 	// Higher number means more even distribution of hash ranges, but incurs
 	// potential performance burden in `getWorker()`.
@@ -124,6 +129,9 @@ func (c *Config) SetDefaults() error {
 
 	setter.SetDefault(&c.LocalPicker, NewReplicatedConsistentHash(nil, defaultReplicas))
 	setter.SetDefault(&c.RegionPicker, NewRegionPicker(nil))
+
+	numCpus := runtime.NumCPU()
+	setter.SetDefault(&c.PoolWorkers, numCpus)
 
 	if c.CacheFactory == nil {
 		c.CacheFactory = func() Cache {

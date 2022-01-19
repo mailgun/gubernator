@@ -19,7 +19,6 @@ package gubernator
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -124,8 +123,7 @@ func NewV1Instance(conf Config) (*V1Instance, error) {
 	}
 	setter.SetDefault(&s.log, logrus.WithField("category", "gubernator"))
 
-	numCpus := runtime.NumCPU()
-	s.gubernatorPool = NewGubernatorPool(&conf, numCpus)
+	s.gubernatorPool = NewGubernatorPool(&conf, conf.PoolWorkers)
 	s.global = newGlobalManager(conf.Behaviors, &s)
 	s.mutliRegion = newMultiRegionManager(conf.Behaviors, &s)
 

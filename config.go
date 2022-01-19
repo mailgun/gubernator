@@ -160,6 +160,13 @@ type DaemonConfig struct {
 	// (Required) The `address:port` that will accept HTTP requests
 	HTTPListenAddress string
 
+	// (Optional) The `address:port` that will accept HTTP requests for /v1/HealthCheck
+	// without verifying client certificates. Only starts listener when TLS config is provided.
+	// TLS config is identical to what is applied on HTTPListenAddress, except that server
+	// Does not attempt to verify client certificate. Useful when your health probes cannot
+	// provide client certificate but you want to enforce mTLS in other RPCs (like in K8s)
+	HTTPStatusListenAddress string
+
 	// (Optional) Defines the max age connection from client in seconds.
 	// Default is infinity
 	GRPCMaxConnectionAgeSeconds int
@@ -244,6 +251,7 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 	// Main config
 	setter.SetDefault(&conf.GRPCListenAddress, os.Getenv("GUBER_GRPC_ADDRESS"), "localhost:81")
 	setter.SetDefault(&conf.HTTPListenAddress, os.Getenv("GUBER_HTTP_ADDRESS"), "localhost:80")
+	setter.SetDefault(&conf.HTTPStatusListenAddress, os.Getenv("GUBER_STATUS_HTTP_ADDRESS"), "")
 	setter.SetDefault(&conf.GRPCMaxConnectionAgeSeconds, getEnvInteger(log, "GUBER_GRPC_MAX_CONN_AGE_SEC"), 0)
 	setter.SetDefault(&conf.CacheSize, getEnvInteger(log, "GUBER_CACHE_SIZE"), 50_000)
 	setter.SetDefault(&conf.AdvertiseAddress, os.Getenv("GUBER_ADVERTISE_ADDRESS"), conf.GRPCListenAddress)

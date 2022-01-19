@@ -88,7 +88,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 	s.promRegister.Register(cacheCollector)
 
 	cacheFactory := func(maxSize int) Cache {
-		cache := NewSyncLRUCache(maxSize)
+		cache := NewLRUCache(maxSize)
 		cacheCollector.AddCache(cache)
 		return cache
 	}

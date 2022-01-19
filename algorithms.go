@@ -111,13 +111,6 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			return tokenBucketNewItem(ctx, s, c, r)
 		}
 
-		if s != nil {
-			defer func() {
-				s.OnChange(r, item)
-				tracing.LogInfo(span, "defer s.OnChange()")
-			}()
-		}
-
 		// Update the limit if it changed.
 		tracing.LogInfo(span, "Update the limit if changed")
 		if t.Limit != r.Limit {
@@ -160,6 +153,13 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			item.ExpireAt = expire
 			t.Duration = r.Duration
 			rl.ResetTime = expire
+		}
+
+		if s != nil {
+			defer func() {
+				s.OnChange(r, item)
+				tracing.LogInfo(span, "defer s.OnChange()")
+			}()
 		}
 
 		// Client is only interested in retrieving the current status or

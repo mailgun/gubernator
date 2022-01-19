@@ -184,24 +184,16 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 		if err != nil {
 			err2 := errors.Wrap(err, "Error in GetPeerRateLimits")
 			ext.LogError(span, err2)
-			return nil, err2
+			return nil, c.setLastErr(err2)
 		}
 		return resp.RateLimits[0], nil
 	}
 
 	rateLimitResp, err := c.getPeerRateLimitsBatch(ctx, r)
 	if err != nil {
-		errPart := "Error in getPeerRateLimitsBatch"
-		logrus.
-			WithError(errors.WithStack(err)).
-			WithFields(logrus.Fields{
-				"request":  r,
-				"peerAddr": c.conf.Info.GRPCAddress,
-			}).
-			Error(errPart)
-		err2 := errors.Wrap(err, errPart)
+		err2 := errors.Wrap(err, "Error in getPeerRateLimitsBatch")
 		ext.LogError(span, err2)
-		return nil, err2
+		return nil, c.setLastErr(err2)
 	}
 
 	return rateLimitResp, nil
@@ -217,7 +209,7 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 		err2 := errors.Wrap(err, "Error in connect")
 		ext.LogError(span, err2)
 		checkErrorCounter.WithLabelValues("Connect error").Add(1)
-		return nil, err2
+		return nil, c.setLastErr(err2)
 	}
 
 	// NOTE: This must be done within the RLock since calling Wait() in Shutdown() causes
@@ -236,7 +228,7 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 		err2 := errors.Wrap(err, "Error in client.GetPeerRateLimits")
 		ext.LogError(span, err2)
 		// checkErrorCounter is updated within client.GetPeerRateLimits().
-		return nil, err2
+		return nil, c.setLastErr(err2)
 	}
 
 	// Unlikely, but this avoids a panic if something wonky happens
@@ -244,7 +236,7 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 		err = errors.New("number of rate limits in peer response does not match request")
 		ext.LogError(span, err)
 		checkErrorCounter.WithLabelValues("Item mismatch").Add(1)
-		return nil, err
+		return nil, c.setLastErr(err)
 	}
 	return resp, nil
 }
@@ -255,7 +247,7 @@ func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 	defer span.Finish()
 
 	if err := c.connect(ctx); err != nil {
-		return nil, err
+		return nil, c.setLastErr(err)
 	}
 
 	// See NOTE above about RLock and wg.Add(1)
@@ -320,7 +312,7 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	if err := c.connect(ctx); err != nil {
 		err2 := errors.Wrap(err, "Error in connect")
 		ext.LogError(span, err2)
-		return nil, err2
+		return nil, c.setLastErr(err2)
 	}
 
 	// See NOTE above about RLock and wg.Add(1)
@@ -329,7 +321,7 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	if c.status == peerClosing {
 		err2 := &PeerErr{err: errors.New("already disconnecting")}
 		ext.LogError(span, err2)
-		return nil, err2
+		return nil, c.setLastErr(err2)
 	}
 	req := request{
 		request: r,
@@ -366,13 +358,12 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 		if resp.err != nil {
 			err2 := errors.Wrap(c.setLastErr(resp.err), "Request error")
 			ext.LogError(span, err2)
-			return nil, err2
+			return nil, c.setLastErr(err2)
 		}
 		return resp.rl, nil
 	case <-ctx2.Done():
-		err2 := c.setLastErr(ctx2.Err())
-		ext.LogError(span, err2)
-		return nil, err2
+		ext.LogError(span, ctx2.Err())
+		return nil, ctx2.Err()
 	}
 }
 
@@ -397,6 +388,7 @@ func (c *PeerClient) run() {
 				return
 			}
 
+			// Wrap logic in anon function so we can use defer.
 			func() {
 				// Use context of the request for opentracing span.
 				reqSpan, reqCtx := tracing.StartSpan(r.ctx)

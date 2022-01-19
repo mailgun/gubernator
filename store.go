@@ -16,6 +16,8 @@ limitations under the License.
 
 package gubernator
 
+import "context"
+
 // PERSISTENT STORE DETAILS
 
 // The storage interfaces defined here allows the implementor flexibility in storage options. Depending on the
@@ -49,17 +51,17 @@ type Store interface {
 	// decide if this rate limit item should be persisted in the store. It's up to the
 	// store to expire old rate limit items. The CacheItem represents the current state of
 	// the rate limit item *after* the RateLimitReq has been applied.
-	OnChange(r *RateLimitReq, item *CacheItem)
+	OnChange(ctx context.Context, r *RateLimitReq, item *CacheItem)
 
 	// Called by gubernator when a rate limit is missing from the cache. It's up to the store
 	// to decide if this request is fulfilled. Should return true if the request is fulfilled
 	// and false if the request is not fulfilled or doesn't exist in the store.
-	Get(r *RateLimitReq) (*CacheItem, bool)
+	Get(ctx context.Context, r *RateLimitReq) (*CacheItem, bool)
 
 	// Called by gubernator when an existing rate limit should be removed from the store.
 	// NOTE: This is NOT called when an rate limit expires from the cache, store implementors
 	// must expire rate limits in the store.
-	Remove(key string)
+	Remove(ctx context.Context, key string)
 }
 
 // Loader interface allows implementors to store all or a subset of ratelimits into a persistent
@@ -93,18 +95,18 @@ type MockStore struct {
 
 var _ Store = &MockStore{}
 
-func (ms *MockStore) OnChange(r *RateLimitReq, item *CacheItem) {
+func (ms *MockStore) OnChange(ctx context.Context, r *RateLimitReq, item *CacheItem) {
 	ms.Called["OnChange()"] += 1
 	ms.CacheItems[item.Key] = item
 }
 
-func (ms *MockStore) Get(r *RateLimitReq) (*CacheItem, bool) {
+func (ms *MockStore) Get(ctx context.Context, r *RateLimitReq) (*CacheItem, bool) {
 	ms.Called["Get()"] += 1
 	item, ok := ms.CacheItems[r.HashKey()]
 	return item, ok
 }
 
-func (ms *MockStore) Remove(key string) {
+func (ms *MockStore) Remove(ctx context.Context, key string) {
 	ms.Called["Remove()"] += 1
 	delete(ms.CacheItems, key)
 }

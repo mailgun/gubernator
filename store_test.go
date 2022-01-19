@@ -126,6 +126,7 @@ func TestLoader(t *testing.T) {
 }
 
 func TestStore(t *testing.T) {
+	ctx := context.Background()
 	setup := func() (*MockStore2, *v1Server, gubernator.V1Client) {
 		store := &MockStore2{}
 
@@ -240,11 +241,11 @@ func TestStore(t *testing.T) {
 				}
 
 				// Setup mocks.
-				store.On("Get", matchReq(req)).Once().Return(nil, false)
-				store.On("OnChange", matchReq(req), matchItem(req)).Once()
+				store.On("Get", mock.Anything, matchReq(req)).Once().Return(nil, false)
+				store.On("OnChange", mock.Anything, matchReq(req), matchItem(req)).Once()
 
 				// Call code.
-				resp, err := client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
+				resp, err := client.GetRateLimits(ctx, &gubernator.GetRateLimitsReq{
 					Requests: []*gubernator.RateLimitReq{req},
 				})
 				require.NoError(t, err)
@@ -256,10 +257,10 @@ func TestStore(t *testing.T) {
 
 				t.Run("Second rate check pulls from cache", func(t *testing.T) {
 					// Setup mocks.
-					store.On("OnChange", matchReq(req), matchItem(req)).Once()
+					store.On("OnChange", mock.Anything, matchReq(req), matchItem(req)).Once()
 
 					// Call code.
-					resp, err := client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
+					resp, err := client.GetRateLimits(ctx, &gubernator.GetRateLimitsReq{
 						Requests: []*gubernator.RateLimitReq{req},
 					})
 					require.NoError(t, err)
@@ -294,11 +295,11 @@ func TestStore(t *testing.T) {
 					Value:     createBucketItem(req),
 				}
 
-				store.On("Get", matchReq(req)).Once().Return(storedItem, true)
-				store.On("OnChange", matchReq(req), matchItem(req)).Once()
+				store.On("Get", mock.Anything, matchReq(req)).Once().Return(storedItem, true)
+				store.On("OnChange", mock.Anything, matchReq(req), matchItem(req)).Once()
 
 				// Call code.
-				resp, err := client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
+				resp, err := client.GetRateLimits(ctx, &gubernator.GetRateLimitsReq{
 					Requests: []*gubernator.RateLimitReq{req},
 				})
 				require.NoError(t, err)
@@ -333,12 +334,12 @@ func TestStore(t *testing.T) {
 					Value:     &struct{}{},
 				}
 
-				store.On("Get", matchReq(req)).Once().Return(storedItem, true)
-				store.On("Remove", req.HashKey()).Once()
-				store.On("OnChange", matchReq(req), matchItem(req)).Once()
+				store.On("Get", mock.Anything, matchReq(req)).Once().Return(storedItem, true)
+				store.On("Remove", mock.Anything, req.HashKey()).Once()
+				store.On("OnChange", mock.Anything, matchReq(req), matchItem(req)).Once()
 
 				// Call code.
-				resp, err := client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
+				resp, err := client.GetRateLimits(ctx, &gubernator.GetRateLimitsReq{
 					Requests: []*gubernator.RateLimitReq{req},
 				})
 				require.NoError(t, err)
@@ -388,9 +389,10 @@ func TestStore(t *testing.T) {
 						Value:     bucketItem,
 					}
 
-					store.On("Get", matchReq(req)).Once().Return(storedItem, true)
+					store.On("Get", mock.Anything, matchReq(req)).Once().Return(storedItem, true)
 
 					store.On("OnChange",
+						mock.Anything,
 						matchReq(req),
 						mock.MatchedBy(func(item *gubernator.CacheItem) bool {
 							switch req.Algorithm {
@@ -427,7 +429,7 @@ func TestStore(t *testing.T) {
 						Once()
 
 					// Call code.
-					resp, err := client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
+					resp, err := client.GetRateLimits(ctx, &gubernator.GetRateLimitsReq{
 						Requests: []*gubernator.RateLimitReq{req},
 					})
 					require.NoError(t, err)
@@ -477,9 +479,10 @@ func TestStore(t *testing.T) {
 						Value:     bucketItem,
 					}
 
-					store.On("Get", matchReq(req)).Once().Return(storedItem, true)
+					store.On("Get", mock.Anything, matchReq(req)).Once().Return(storedItem, true)
 
 					store.On("OnChange",
+						mock.Anything,
 						matchReq(req),
 						mock.MatchedBy(func(item *gubernator.CacheItem) bool {
 							switch req.Algorithm {
@@ -516,7 +519,7 @@ func TestStore(t *testing.T) {
 						Once()
 
 					// Call code.
-					resp, err := client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
+					resp, err := client.GetRateLimits(ctx, &gubernator.GetRateLimitsReq{
 						Requests: []*gubernator.RateLimitReq{req},
 					})
 					require.NoError(t, err)

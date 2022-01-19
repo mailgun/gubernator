@@ -40,7 +40,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 	if s != nil && !ok {
 		// Cache miss.
 		// Check our store for the item.
-		if item, ok = s.Get(r); ok {
+		if item, ok = s.Get(ctx, r); ok {
 			tracing.LogInfo(span, "Check store for rate limit")
 			c.Add(item)
 			tracing.LogInfo(span, "c.Add()")
@@ -79,7 +79,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			tracing.LogInfo(span, "c.Remove()")
 
 			if s != nil {
-				s.Remove(hashKey)
+				s.Remove(ctx, hashKey)
 				tracing.LogInfo(span, "s.Remove()")
 			}
 			return &RateLimitResp{
@@ -104,7 +104,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			tracing.LogInfo(span, "c.Remove()")
 
 			if s != nil {
-				s.Remove(hashKey)
+				s.Remove(ctx, hashKey)
 				tracing.LogInfo(span, "s.Remove()")
 			}
 
@@ -157,7 +157,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 		if s != nil {
 			defer func() {
-				s.OnChange(r, item)
+				s.OnChange(ctx, r, item)
 				tracing.LogInfo(span, "defer s.OnChange()")
 			}()
 		}
@@ -255,7 +255,7 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 	tracing.LogInfo(span, "c.Add()")
 
 	if s != nil {
-		s.OnChange(r, item)
+		s.OnChange(ctx, r, item)
 		tracing.LogInfo(span, "s.OnChange()")
 	}
 
@@ -283,7 +283,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 	if s != nil && !ok {
 		// Cache miss.
 		// Check our store for the item.
-		if item, ok = s.Get(r); ok {
+		if item, ok = s.Get(ctx, r); ok {
 			tracing.LogInfo(span, "Check store for rate limit")
 			c.Add(item)
 			tracing.LogInfo(span, "c.Add()")
@@ -324,7 +324,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			tracing.LogInfo(span, "c.Remove()")
 
 			if s != nil {
-				s.Remove(hashKey)
+				s.Remove(ctx, hashKey)
 				tracing.LogInfo(span, "s.Remove()")
 			}
 
@@ -395,7 +395,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 		if s != nil {
 			defer func() {
-				s.OnChange(r, item)
+				s.OnChange(ctx, r, item)
 				tracing.LogInfo(span, "s.OnChange()")
 			}()
 		}
@@ -492,7 +492,7 @@ func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 	tracing.LogInfo(span, "c.Add()")
 
 	if s != nil {
-		s.OnChange(r, item)
+		s.OnChange(ctx, r, item)
 		tracing.LogInfo(span, "s.OnChange()")
 	}
 

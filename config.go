@@ -135,7 +135,7 @@ func (c *Config) SetDefaults() error {
 
 	if c.CacheFactory == nil {
 		c.CacheFactory = func(maxSize int) Cache {
-			return NewSyncLRUCache(maxSize)
+			return NewLRUCache(maxSize)
 		}
 	}
 

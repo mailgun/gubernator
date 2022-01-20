@@ -107,11 +107,6 @@ type Config struct {
 	// (Optional) Number of worker goroutines to launch for request processing in GubernatorPool.
 	// Default is set to number of CPUs.
 	PoolWorkers int
-
-	// Number of nodes to add to hashring per worker.
-	// Higher number means more even distribution of hash ranges, but incurs
-	// potential performance burden in `getWorker()`.
-	PoolWorkerHashRingRedundancy int
 }
 
 func (c *Config) SetDefaults() error {
@@ -147,8 +142,6 @@ func (c *Config) SetDefaults() error {
 	if c.PeerTLS != nil {
 		c.PeerTLS = c.PeerTLS.Clone()
 	}
-
-	setter.SetDefault(&c.PoolWorkerHashRingRedundancy, 4)
 
 	return nil
 }

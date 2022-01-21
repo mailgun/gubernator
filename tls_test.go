@@ -278,8 +278,9 @@ func TestTLSClusterWithClientAuthentication(t *testing.T) {
 
 func TestHTTPSClientAuth(t *testing.T) {
 	conf := gubernator.DaemonConfig{
-		GRPCListenAddress: "127.0.0.1:9695",
-		HTTPListenAddress: "127.0.0.1:9685",
+		GRPCListenAddress:       "127.0.0.1:9695",
+		HTTPListenAddress:       "127.0.0.1:9685",
+		HTTPStatusListenAddress: "127.0.0.1:9686",
 		TLS: &gubernator.TLSConfig{
 			CaFile:     "certs/ca.pem",
 			CertFile:   "certs/gubernator.pem",
@@ -291,17 +292,40 @@ func TestHTTPSClientAuth(t *testing.T) {
 	d := spawnDaemon(t, conf)
 	defer d.Close()
 
-	client := &http.Client{
+	clientWithCert := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: conf.TLS.ClientTLS,
 		},
 	}
 
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://%s/v1/HealthCheck", conf.HTTPListenAddress), nil)
+	clientWithoutCert := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: conf.TLS.ServerTLS.RootCAs,
+			},
+		},
+	}
+
+	reqCertRequired, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://%s/v1/HealthCheck", conf.HTTPListenAddress), nil)
 	require.NoError(t, err)
-	resp, err := client.Do(req)
+	reqNoClientCertRequired, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://%s/v1/HealthCheck", conf.HTTPStatusListenAddress), nil)
+	require.NoError(t, err)
+
+	// Test that a client without a cert can access /v1/HealthCheck at status address
+	resp, err := clientWithoutCert.Do(reqNoClientCertRequired)
 	require.NoError(t, err)
 	b, err := ioutil.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, `{"status":"healthy","message":"","peer_count":1}`, strings.ReplaceAll(string(b), " ", ""))
+
+	// Verify we get an error when we try to access existing HTTPListenAddress without cert
+	_, err = clientWithoutCert.Do(reqCertRequired)
+	assert.Error(t, err)
+
+	// Check that with a valid client cert we can access /v1/HealthCheck at existing HTTPListenAddress
+	resp, err = clientWithCert.Do(reqCertRequired)
+	require.NoError(t, err)
+	b, err = ioutil.ReadAll(resp.Body)
 	require.NoError(t, err)
 	assert.Equal(t, `{"status":"healthy","message":"","peer_count":1}`, strings.ReplaceAll(string(b), " ", ""))
 }

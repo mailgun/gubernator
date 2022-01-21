@@ -18,6 +18,7 @@ package gubernator
 
 import (
 	"context"
+	"crypto/tls"
 	"log"
 	"net"
 	"net/http"
@@ -47,16 +48,17 @@ type Daemon struct {
 	HTTPListener  net.Listener
 	V1Server      *V1Instance
 
-	log          logrus.FieldLogger
-	pool         PoolInterface
-	conf         DaemonConfig
-	httpSrv      *http.Server
-	grpcSrvs     []*grpc.Server
-	wg           syncutil.WaitGroup
-	statsHandler *GRPCStatsHandler
-	promRegister *prometheus.Registry
-	gwCancel     context.CancelFunc
-	gubeConfig   Config
+	log           logrus.FieldLogger
+	pool          PoolInterface
+	conf          DaemonConfig
+	httpSrv       *http.Server
+	httpSrvNoMTLS *http.Server
+	grpcSrvs      []*grpc.Server
+	wg            syncutil.WaitGroup
+	statsHandler  *GRPCStatsHandler
+	promRegister  *prometheus.Registry
+	gwCancel      context.CancelFunc
+	gubeConfig    Config
 }
 
 // SpawnDaemon starts a new gubernator daemon according to the provided DaemonConfig.
@@ -279,7 +281,37 @@ func (s *Daemon) Start(ctx context.Context) error {
 		return errors.Wrap(err, "while starting HTTP listener")
 	}
 
+	addrs := []string{s.conf.HTTPListenAddress}
+
 	if s.conf.ServerTLS() != nil {
+
+		// If configured, start another listener at configured address and server only
+		// /v1/HealthCheck while not requesting or verifying client certificate.
+		if s.conf.HTTPStatusListenAddress != "" {
+			addrs = append(addrs, s.conf.HTTPStatusListenAddress)
+			muxNoMTLS := http.NewServeMux()
+			muxNoMTLS.Handle("/v1/HealthCheck", gateway)
+			s.httpSrvNoMTLS = &http.Server{
+				Addr:      s.conf.HTTPStatusListenAddress,
+				Handler:   muxNoMTLS,
+				ErrorLog:  log,
+				TLSConfig: s.conf.ServerTLS().Clone(),
+			}
+			s.httpSrvNoMTLS.TLSConfig.ClientAuth = tls.NoClientCert
+			httpListener, err := net.Listen("tcp", s.conf.HTTPStatusListenAddress)
+			if err != nil {
+				return errors.Wrap(err, "while starting HTTP listener for health metric")
+			}
+			s.wg.Go(func() {
+				s.log.Infof("HTTPS Status Handler Listening on %s ...", s.conf.HTTPStatusListenAddress)
+				if err := s.httpSrvNoMTLS.ServeTLS(httpListener, "", ""); err != nil {
+					if err != http.ErrServerClosed {
+						s.log.WithError(err).Error("while starting TLS Status HTTP server")
+					}
+				}
+			})
+		}
+
 		// This is to avoid any race conditions that might occur
 		// since the tls config is a shared pointer.
 		s.httpSrv.TLSConfig = s.conf.ServerTLS().Clone()
@@ -303,7 +335,6 @@ func (s *Daemon) Start(ctx context.Context) error {
 	}
 
 	// Validate we can reach the GRPC and HTTP endpoints before returning
-	addrs := []string{s.conf.HTTPListenAddress}
 	for _, l := range s.GRPCListeners {
 		addrs = append(addrs, l.Addr().String())
 	}
@@ -316,7 +347,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 
 // Close gracefully closes all server connections and listening sockets
 func (s *Daemon) Close() {
-	if s.httpSrv == nil {
+	if s.httpSrv == nil && s.httpSrvNoMTLS == nil {
 		return
 	}
 
@@ -326,6 +357,10 @@ func (s *Daemon) Close() {
 
 	s.log.Infof("HTTP Gateway close for %s ...", s.conf.HTTPListenAddress)
 	s.httpSrv.Shutdown(context.Background())
+	if s.httpSrvNoMTLS != nil {
+		s.log.Infof("HTTP Status Gateway close for %s ...", s.conf.HTTPStatusListenAddress)
+		s.httpSrvNoMTLS.Shutdown(context.Background())
+	}
 	for i, srv := range s.grpcSrvs {
 		s.log.Infof("GRPC close for %s ...", s.GRPCListeners[i].Addr())
 		srv.GracefulStop()
@@ -334,6 +369,7 @@ func (s *Daemon) Close() {
 	s.statsHandler.Close()
 	s.gwCancel()
 	s.httpSrv = nil
+	s.httpSrvNoMTLS = nil
 	s.grpcSrvs = nil
 }
 

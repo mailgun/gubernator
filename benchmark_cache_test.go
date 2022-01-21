@@ -11,14 +11,14 @@ import (
 )
 
 func BenchmarkCache(b *testing.B) {
-	testCases := []struct{
-		Name string
+	testCases := []struct {
+		Name         string
 		NewTestCache func() gubernator.Cache
 		LockRequired bool
 	}{
 		{
 			Name: "LRUCache",
-			NewTestCache: func() gubernator.Cache{
+			NewTestCache: func() gubernator.Cache {
 				return gubernator.NewLRUCache(0)
 			},
 			LockRequired: true,
@@ -41,8 +41,8 @@ func BenchmarkCache(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					key := strconv.Itoa(i)
 					item := &gubernator.CacheItem{
-						Key: key,
-						Value: i,
+						Key:      key,
+						Value:    i,
 						ExpireAt: expire,
 					}
 					cache.Add(item)
@@ -66,8 +66,8 @@ func BenchmarkCache(b *testing.B) {
 
 				for i := 0; i < b.N; i++ {
 					item := &gubernator.CacheItem{
-						Key: strconv.Itoa(i),
-						Value: i,
+						Key:      strconv.Itoa(i),
+						Value:    i,
 						ExpireAt: expire,
 					}
 					cache.Add(item)
@@ -81,8 +81,8 @@ func BenchmarkCache(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					key := strconv.Itoa(i)
 					item := &gubernator.CacheItem{
-						Key: key,
-						Value: i,
+						Key:      key,
+						Value:    i,
 						ExpireAt: expire,
 					}
 					cache.Add(item)
@@ -132,8 +132,8 @@ func BenchmarkCache(b *testing.B) {
 						mutex.Lock()
 						defer mutex.Unlock()
 						item := &gubernator.CacheItem{
-							Key: strconv.Itoa(i),
-							Value: i,
+							Key:      strconv.Itoa(i),
+							Value:    i,
 							ExpireAt: expire,
 						}
 						cache.Add(item)
@@ -142,8 +142,8 @@ func BenchmarkCache(b *testing.B) {
 				} else {
 					task = func(i int) {
 						item := &gubernator.CacheItem{
-							Key: strconv.Itoa(i),
-							Value: i,
+							Key:      strconv.Itoa(i),
+							Value:    i,
 							ExpireAt: expire,
 						}
 						cache.Add(item)

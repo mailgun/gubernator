@@ -31,10 +31,7 @@ var _ guber.Loader = &MockLoader2{}
 
 func (m *MockLoader2) Load() (chan *guber.CacheItem, error) {
 	args := m.Called()
-	var retval chan *guber.CacheItem
-	if retval2, ok := args.Get(0).(chan *guber.CacheItem); ok {
-		retval = retval2
-	}
+	retval := args.Get(0).(chan *guber.CacheItem)
 	return retval, args.Error(1)
 }
 

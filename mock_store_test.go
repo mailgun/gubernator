@@ -37,10 +37,7 @@ func (m *MockStore2) OnChange(ctx context.Context, r *guber.RateLimitReq, item *
 
 func (m *MockStore2) Get(ctx context.Context, r *guber.RateLimitReq) (*guber.CacheItem, bool) {
 	args := m.Called(ctx, r)
-	var retval *guber.CacheItem
-	if retval2, ok := args.Get(0).(*guber.CacheItem); ok {
-		retval = retval2
-	}
+	retval, _ := args.Get(0).(*guber.CacheItem)
 	return retval, args.Bool(1)
 }
 

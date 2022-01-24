@@ -41,19 +41,13 @@ func (m *MockCache) UpdateExpiration(key string, expireAt int64) bool {
 
 func (m *MockCache) GetItem(key string) (value *guber.CacheItem, ok bool) {
 	args := m.Called(key)
-	var retval *guber.CacheItem
-	if retval2, ok := args.Get(0).(*guber.CacheItem); ok {
-		retval = retval2
-	}
+	retval, _ := args.Get(0).(*guber.CacheItem)
 	return retval, args.Bool(1)
 }
 
 func (m *MockCache) Each() chan *guber.CacheItem {
 	args := m.Called()
-	var retval chan *guber.CacheItem
-	if retval2, ok := args.Get(0).(chan *guber.CacheItem); ok {
-		retval = retval2
-	}
+	retval, _ := args.Get(0).(chan *guber.CacheItem)
 	return retval
 }
 

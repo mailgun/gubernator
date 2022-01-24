@@ -1,5 +1,5 @@
 /*
-Copyright 2018-2019 Mailgun Technologies Inc
+Copyright 2018-2022 Mailgun Technologies Inc
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/mailgun/gubernator/v2/tracing"
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
@@ -94,7 +95,6 @@ func NewEtcdPool(conf EtcdPoolConfig) (*EtcdPool, error) {
 }
 
 func (e *EtcdPool) run(peer PeerInfo) error {
-
 	// Register our instance with etcd
 	if err := e.register(peer); err != nil {
 		return err
@@ -139,7 +139,7 @@ func (e *EtcdPool) watchPeers() error {
 }
 
 func (e *EtcdPool) collectPeers(revision *int64) error {
-	ctx, cancel := context.WithTimeout(e.ctx, etcdTimeout)
+	ctx, cancel := tracing.ContextWithTimeout(e.ctx, etcdTimeout)
 	defer cancel()
 
 	resp, err := e.conf.Client.Get(ctx, e.conf.KeyPrefix, etcd.WithPrefix())
@@ -232,7 +232,7 @@ func (e *EtcdPool) register(peer PeerInfo) error {
 	var lease *etcd.LeaseGrantResponse
 
 	register := func() error {
-		ctx, cancel := context.WithTimeout(e.ctx, etcdTimeout)
+		ctx, cancel := tracing.ContextWithTimeout(e.ctx, etcdTimeout)
 		defer cancel()
 		var err error
 
@@ -296,7 +296,7 @@ func (e *EtcdPool) register(peer PeerInfo) error {
 			}
 			lastKeepAlive = clock.Now()
 		case <-done:
-			ctx, cancel := context.WithTimeout(context.Background(), etcdTimeout)
+			ctx, cancel := tracing.ContextWithTimeout(context.Background(), etcdTimeout)
 			if _, err := e.conf.Client.Delete(ctx, instanceKey); err != nil {
 				e.log.WithError(err).
 					Warn("during etcd delete")

@@ -1,5 +1,5 @@
 /*
-Copyright 2018-2019 Mailgun Technologies Inc
+Copyright 2018-2022 Mailgun Technologies Inc
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/mailgun/gubernator/v2/tracing"
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/prometheus/client_golang/prometheus"
@@ -79,6 +80,9 @@ func (gm *globalManager) runAsyncHits() {
 	hits := make(map[string]*RateLimitReq)
 
 	gm.wg.Until(func(done chan struct{}) bool {
+		span, ctx := tracing.StartSpan(context.Background())
+		defer span.Finish()
+
 		select {
 		case r := <-gm.asyncQueue:
 			// Aggregate the hits into a single request
@@ -92,7 +96,7 @@ func (gm *globalManager) runAsyncHits() {
 
 			// Send the hits if we reached our batch limit
 			if len(hits) == gm.conf.GlobalBatchLimit {
-				gm.sendHits(hits)
+				gm.sendHits(ctx, hits)
 				hits = make(map[string]*RateLimitReq)
 				return true
 			}
@@ -105,7 +109,7 @@ func (gm *globalManager) runAsyncHits() {
 
 		case <-interval.C:
 			if len(hits) != 0 {
-				gm.sendHits(hits)
+				gm.sendHits(ctx, hits)
 				hits = make(map[string]*RateLimitReq)
 			}
 		case <-done:
@@ -117,7 +121,7 @@ func (gm *globalManager) runAsyncHits() {
 
 // sendHits takes the hits collected by runAsyncHits and sends them to their
 // owning peers
-func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
+func (gm *globalManager) sendHits(ctx context.Context, hits map[string]*RateLimitReq) {
 	type pair struct {
 		client *PeerClient
 		req    GetPeerRateLimitsReq
@@ -127,7 +131,7 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 
 	// Assign each request to a peer
 	for _, r := range hits {
-		peer, err := gm.instance.GetPeer(r.HashKey())
+		peer, err := gm.instance.GetPeer(ctx, r.HashKey())
 		if err != nil {
 			gm.log.WithError(err).Errorf("while getting peer for hash key '%s'", r.HashKey())
 			continue
@@ -146,7 +150,7 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 
 	// Send the rate limit requests to their respective owning peers.
 	for _, p := range peerRequests {
-		ctx, cancel := context.WithTimeout(context.Background(), gm.conf.GlobalTimeout)
+		ctx, cancel := tracing.ContextWithTimeout(context.Background(), gm.conf.GlobalTimeout)
 		_, err := p.client.GetPeerRateLimits(ctx, &p.req)
 		cancel()
 
@@ -165,13 +169,16 @@ func (gm *globalManager) runBroadcasts() {
 	updates := make(map[string]*RateLimitReq)
 
 	gm.wg.Until(func(done chan struct{}) bool {
+		span, ctx := tracing.StartSpan(context.Background())
+		defer span.Finish()
+
 		select {
 		case r := <-gm.broadcastQueue:
 			updates[r.HashKey()] = r
 
 			// Send the hits if we reached our batch limit
 			if len(updates) == gm.conf.GlobalBatchLimit {
-				gm.broadcastPeers(updates)
+				gm.broadcastPeers(ctx, updates)
 				updates = make(map[string]*RateLimitReq)
 				return true
 			}
@@ -184,7 +191,7 @@ func (gm *globalManager) runBroadcasts() {
 
 		case <-interval.C:
 			if len(updates) != 0 {
-				gm.broadcastPeers(updates)
+				gm.broadcastPeers(ctx, updates)
 				updates = make(map[string]*RateLimitReq)
 			}
 		case <-done:
@@ -195,7 +202,7 @@ func (gm *globalManager) runBroadcasts() {
 }
 
 // broadcastPeers broadcasts global rate limit statuses to all other peers
-func (gm *globalManager) broadcastPeers(updates map[string]*RateLimitReq) {
+func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]*RateLimitReq) {
 	var req UpdatePeerGlobalsReq
 	start := clock.Now()
 
@@ -207,7 +214,7 @@ func (gm *globalManager) broadcastPeers(updates map[string]*RateLimitReq) {
 		SetBehavior(&rl.Behavior, Behavior_GLOBAL, false)
 		rl.Hits = 0
 
-		status, err := gm.instance.getRateLimit(rl)
+		status, err := gm.instance.getRateLimit(ctx, rl)
 		if err != nil {
 			gm.log.WithError(err).Errorf("while broadcasting update to peers for: '%s'", rl.HashKey())
 			continue
@@ -226,7 +233,7 @@ func (gm *globalManager) broadcastPeers(updates map[string]*RateLimitReq) {
 			continue
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), gm.conf.GlobalTimeout)
+		ctx, cancel := tracing.ContextWithTimeout(context.Background(), gm.conf.GlobalTimeout)
 		_, err := peer.UpdatePeerGlobals(ctx, &req)
 		cancel()
 

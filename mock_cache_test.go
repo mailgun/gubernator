@@ -16,31 +16,51 @@ limitations under the License.
 
 package gubernator_test
 
-// Mock implementation of Store.
+// Mock implementation of Cache.
 
 import (
-	"context"
-
 	guber "github.com/mailgun/gubernator/v2"
 	"github.com/stretchr/testify/mock"
 )
 
-type MockStore2 struct {
+type MockCache struct {
 	mock.Mock
 }
 
-var _ guber.Store = &MockStore2{}
+var _ guber.Cache = &MockCache{}
 
-func (m *MockStore2) OnChange(ctx context.Context, r *guber.RateLimitReq, item *guber.CacheItem) {
-	m.Called(ctx, r, item)
+func (m *MockCache) Add(item *guber.CacheItem) bool {
+	args := m.Called(item)
+	return args.Bool(0)
 }
 
-func (m *MockStore2) Get(ctx context.Context, r *guber.RateLimitReq) (*guber.CacheItem, bool) {
-	args := m.Called(ctx, r)
+func (m *MockCache) UpdateExpiration(key string, expireAt int64) bool {
+	args := m.Called(key, expireAt)
+	return args.Bool(0)
+}
+
+func (m *MockCache) GetItem(key string) (value *guber.CacheItem, ok bool) {
+	args := m.Called(key)
 	retval, _ := args.Get(0).(*guber.CacheItem)
 	return retval, args.Bool(1)
 }
 
-func (m *MockStore2) Remove(ctx context.Context, key string) {
-	m.Called(ctx, key)
+func (m *MockCache) Each() chan *guber.CacheItem {
+	args := m.Called()
+	retval, _ := args.Get(0).(chan *guber.CacheItem)
+	return retval
+}
+
+func (m *MockCache) Remove(key string) {
+	m.Called(key)
+}
+
+func (m *MockCache) Size() int64 {
+	args := m.Called()
+	return int64(args.Int(0))
+}
+
+func (m *MockCache) Close() error {
+	args := m.Called()
+	return args.Error(0)
 }

@@ -6,3 +6,5 @@ gubernator.egg-info/
 .DS_Store
 *.iml
 googleapis/
+coverage.out
+coverage.html

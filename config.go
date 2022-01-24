@@ -1,5 +1,5 @@
 /*
-Copyright 2018-2019 Mailgun Technologies Inc
+Copyright 2018-2022 Mailgun Technologies Inc
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -72,7 +73,7 @@ type Config struct {
 	Behaviors BehaviorConfig
 
 	// (Optional) The cache implementation
-	Cache Cache
+	CacheFactory func(maxSize int) Cache
 
 	// (Optional) A persistent store implementation. Allows the implementor the ability to store the rate limits this
 	// instance of gubernator owns. It's up to the implementor to decide what rate limits to persist.
@@ -102,6 +103,10 @@ type Config struct {
 
 	// (Optional) The TLS config used when connecting to gubernator peers
 	PeerTLS *tls.Config
+
+	// (Optional) Number of worker goroutines to launch for request processing in GubernatorPool.
+	// Default is set to number of CPUs.
+	PoolWorkers int
 }
 
 func (c *Config) SetDefaults() error {
@@ -119,7 +124,15 @@ func (c *Config) SetDefaults() error {
 
 	setter.SetDefault(&c.LocalPicker, NewReplicatedConsistentHash(nil, defaultReplicas))
 	setter.SetDefault(&c.RegionPicker, NewRegionPicker(nil))
-	setter.SetDefault(&c.Cache, NewLRUCache(0))
+
+	numCpus := runtime.NumCPU()
+	setter.SetDefault(&c.PoolWorkers, numCpus)
+
+	if c.CacheFactory == nil {
+		c.CacheFactory = func(maxSize int) Cache {
+			return NewLRUCache(maxSize)
+		}
+	}
 
 	if c.Behaviors.BatchLimit > maxBatchSize {
 		return fmt.Errorf("Behaviors.BatchLimit cannot exceed '%d'", maxBatchSize)

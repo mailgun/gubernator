@@ -1,5 +1,5 @@
 /*
-Copyright 2018-2020 Mailgun Technologies Inc
+Copyright 2018-2022 Mailgun Technologies Inc
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,9 +26,12 @@ import (
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/mailgun/gubernator/v2/tracing"
 	"github.com/mailgun/holster/v4/etcdutil"
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
+	otgrpc "github.com/opentracing-contrib/go-grpc"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -55,12 +58,16 @@ type Daemon struct {
 	statsHandler  *GRPCStatsHandler
 	promRegister  *prometheus.Registry
 	gwCancel      context.CancelFunc
+	gubeConfig    Config
 }
 
 // SpawnDaemon starts a new gubernator daemon according to the provided DaemonConfig.
 // This function will block until the daemon responds to connections as specified
 // by GRPCListenAddress and HTTPListenAddress
 func SpawnDaemon(ctx context.Context, conf DaemonConfig) (*Daemon, error) {
+	span, ctx := tracing.StartSpan(ctx)
+	defer span.Finish()
+
 	s := Daemon{
 		log:  conf.Logger,
 		conf: conf,
@@ -76,12 +83,17 @@ func SpawnDaemon(ctx context.Context, conf DaemonConfig) (*Daemon, error) {
 func (s *Daemon) Start(ctx context.Context) error {
 	var err error
 
-	// The LRU cache we store rate limits in
-	cache := NewLRUCache(s.conf.CacheSize)
-
-	// cache also implements prometheus.Collector interface
 	s.promRegister = prometheus.NewRegistry()
-	s.promRegister.Register(cache)
+
+	// The LRU cache for storing rate limits.
+	cacheCollector := NewLRUCacheCollector()
+	s.promRegister.Register(cacheCollector)
+
+	cacheFactory := func(maxSize int) Cache {
+		cache := NewLRUCache(maxSize)
+		cacheCollector.AddCache(cache)
+		return cache
+	}
 
 	// Handler to collect duration and API access metrics for GRPC
 	s.statsHandler = NewGRPCStatsHandler()
@@ -103,22 +115,34 @@ func (s *Daemon) Start(ctx context.Context) error {
 		return err
 	}
 
+	// Opentracing on gRPC endpoints.
+	tracer := opentracing.GlobalTracer()
+	tracingUnaryInterceptor := otgrpc.OpenTracingServerInterceptor(tracer)
+	tracingStreamInterceptor := otgrpc.OpenTracingStreamServerInterceptor(tracer)
+
+	opts = append(opts,
+		grpc.UnaryInterceptor(tracingUnaryInterceptor),
+		grpc.StreamInterceptor(tracingStreamInterceptor),
+	)
+
 	if s.conf.ServerTLS() != nil {
 		// Create two GRPC server instances, one for TLS and the other for the API Gateway
-		s.grpcSrvs = append(s.grpcSrvs, grpc.NewServer(append(opts, grpc.Creds(credentials.NewTLS(s.conf.ServerTLS())))...))
+		opts2 := append(opts, grpc.Creds(credentials.NewTLS(s.conf.ServerTLS())))
+		s.grpcSrvs = append(s.grpcSrvs, grpc.NewServer(opts2...))
 	}
 	s.grpcSrvs = append(s.grpcSrvs, grpc.NewServer(opts...))
 
 	// Registers a new gubernator instance with the GRPC server
-	s.V1Server, err = NewV1Instance(Config{
-		PeerTLS:     s.conf.ClientTLS(),
-		DataCenter:  s.conf.DataCenter,
-		LocalPicker: s.conf.Picker,
-		GRPCServers: s.grpcSrvs,
-		Logger:      s.log,
-		Cache:       cache,
-		Behaviors:   s.conf.Behaviors,
-	})
+	s.gubeConfig = Config{
+		PeerTLS:      s.conf.ClientTLS(),
+		DataCenter:   s.conf.DataCenter,
+		LocalPicker:  s.conf.Picker,
+		GRPCServers:  s.grpcSrvs,
+		Logger:       s.log,
+		CacheFactory: cacheFactory,
+		Behaviors:    s.conf.Behaviors,
+	}
+	s.V1Server, err = NewV1Instance(s.gubeConfig)
 	if err != nil {
 		return errors.Wrap(err, "while creating new gubernator instance")
 	}

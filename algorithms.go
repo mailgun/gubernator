@@ -17,42 +17,70 @@ limitations under the License.
 package gubernator
 
 import (
+	"context"
+
+	"github.com/mailgun/gubernator/v2/tracing"
 	"github.com/mailgun/holster/v4/clock"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 )
 
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket
-func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+	span, ctx := tracing.StartSpan(ctx)
+	defer span.Finish()
+	tokenBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("tokenBucket"))
+	defer tokenBucketTimer.ObserveDuration()
+
 	// Get rate limit from cache.
 	hashKey := r.HashKey()
 	item, ok := c.GetItem(hashKey)
+	tracing.LogInfo(span, "c.GetItem()")
 
 	if s != nil && !ok {
 		// Cache miss.
 		// Check our store for the item.
-		if item, ok = s.Get(r); ok {
+		if item, ok = s.Get(ctx, r); ok {
+			tracing.LogInfo(span, "Check store for rate limit")
 			c.Add(item)
+			tracing.LogInfo(span, "c.Add()")
 		}
 	}
 
 	// Sanity checks.
 	if ok {
 		if item.Value == nil {
-			logrus.Error("tokenBucket: Invalid cache item; Value is nil")
+			msgPart := "tokenBucket: Invalid cache item; Value is nil"
+			tracing.LogInfo(span, msgPart,
+				"hashKey", hashKey,
+				"key", r.UniqueKey,
+				"name", r.Name,
+			)
+			logrus.Error(msgPart)
 			ok = false
 		} else if item.Key != hashKey {
-			logrus.Error("tokenBucket: Invalid cache item; key mismatch")
+			msgPart := "tokenBucket: Invalid cache item; key mismatch"
+			tracing.LogInfo(span, msgPart,
+				"itemKey", item.Key,
+				"hashKey", hashKey,
+				"name", r.Name,
+			)
+			logrus.Error(msgPart)
 			ok = false
 		}
 	}
 
 	if ok {
 		// Item found in cache or store.
+		tracing.LogInfo(span, "Update existing rate limit")
+
 		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
 			c.Remove(hashKey)
+			tracing.LogInfo(span, "c.Remove()")
 
 			if s != nil {
-				s.Remove(hashKey)
+				s.Remove(ctx, hashKey)
+				tracing.LogInfo(span, "s.Remove()")
 			}
 			return &RateLimitResp{
 				Status:    Status_UNDER_LIMIT,
@@ -70,22 +98,21 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 		t, ok := item.Value.(*TokenBucketItem)
 		if !ok {
 			// Client switched algorithms; perhaps due to a migration?
+			tracing.LogInfo(span, "Client switched algorithms; perhaps due to a migration?")
+
 			c.Remove(hashKey)
+			tracing.LogInfo(span, "c.Remove()")
 
 			if s != nil {
-				s.Remove(hashKey)
+				s.Remove(ctx, hashKey)
+				tracing.LogInfo(span, "s.Remove()")
 			}
 
-			return tokenBucketNewItem(s, c, r)
-		}
-
-		if s != nil {
-			defer func() {
-				s.OnChange(r, item)
-			}()
+			return tokenBucketNewItem(ctx, s, c, r)
 		}
 
 		// Update the limit if it changed.
+		tracing.LogInfo(span, "Update the limit if changed")
 		if t.Limit != r.Limit {
 			// Add difference to remaining.
 			t.Remaining += r.Limit - t.Limit
@@ -104,6 +131,7 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 
 		// If the duration config changed, update the new ExpireAt.
 		if t.Duration != r.Duration {
+			tracing.LogInfo(span, "Duration changed")
 			expire := t.CreatedAt + r.Duration
 			if HasBehavior(r.Behavior, Behavior_DURATION_IS_GREGORIAN) {
 				expire, err = GregorianExpiration(clock.Now(), r.Duration)
@@ -116,6 +144,7 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 			now := MillisecondNow()
 			if expire <= now {
 				// Renew item.
+				tracing.LogInfo(span, "Limit has expired")
 				expire = now + r.Duration
 				t.CreatedAt = now
 				t.Remaining = t.Limit
@@ -126,14 +155,24 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 			rl.ResetTime = expire
 		}
 
+		if s != nil {
+			defer func() {
+				s.OnChange(ctx, r, item)
+				tracing.LogInfo(span, "defer s.OnChange()")
+			}()
+		}
+
 		// Client is only interested in retrieving the current status or
 		// updating the rate limit config.
 		if r.Hits == 0 {
+			tracing.LogInfo(span, "Return current status, apply no change")
 			return rl, nil
 		}
 
 		// If we are already at the limit.
 		if rl.Remaining == 0 {
+			tracing.LogInfo(span, "Already over the limit")
+			overLimitCounter.Add(1)
 			rl.Status = Status_OVER_LIMIT
 			t.Status = rl.Status
 			return rl, nil
@@ -141,6 +180,7 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 
 		// If requested hits takes the remainder.
 		if t.Remaining == r.Hits {
+			tracing.LogInfo(span, "At the limit")
 			t.Remaining = 0
 			rl.Remaining = 0
 			return rl, nil
@@ -149,21 +189,27 @@ func tokenBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 		// If requested is more than available, then return over the limit
 		// without updating the cache.
 		if r.Hits > t.Remaining {
+			tracing.LogInfo(span, "Over the limit")
+			overLimitCounter.Add(1)
 			rl.Status = Status_OVER_LIMIT
 			return rl, nil
 		}
 
+		tracing.LogInfo(span, "Under the limit")
 		t.Remaining -= r.Hits
 		rl.Remaining = t.Remaining
 		return rl, nil
 	}
 
 	// Item is not found in cache or store, create new.
-	return tokenBucketNewItem(s, c, r)
+	return tokenBucketNewItem(ctx, s, c, r)
 }
 
 // Called by tokenBucket() when adding a new item in the store.
-func tokenBucketNewItem(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+	span, ctx := tracing.StartSpan(ctx)
+	defer span.Finish()
+
 	now := MillisecondNow()
 	expire := now + r.Duration
 
@@ -181,6 +227,7 @@ func tokenBucketNewItem(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp,
 	}
 
 	// Add a new rate limit to the cache.
+	tracing.LogInfo(span, "Add a new rate limit to the cache")
 	if HasBehavior(r.Behavior, Behavior_DURATION_IS_GREGORIAN) {
 		expire, err = GregorianExpiration(clock.Now(), r.Duration)
 		if err != nil {
@@ -197,22 +244,31 @@ func tokenBucketNewItem(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp,
 
 	// Client could be requesting that we always return OVER_LIMIT.
 	if r.Hits > r.Limit {
+		tracing.LogInfo(span, "Over the limit")
+		overLimitCounter.Add(1)
 		rl.Status = Status_OVER_LIMIT
 		rl.Remaining = r.Limit
 		t.Remaining = r.Limit
 	}
 
 	c.Add(item)
+	tracing.LogInfo(span, "c.Add()")
 
 	if s != nil {
-		s.OnChange(r, item)
+		s.OnChange(ctx, r, item)
+		tracing.LogInfo(span, "s.OnChange()")
 	}
 
 	return rl, nil
 }
 
 // Implements leaky bucket algorithm for rate limiting https://en.wikipedia.org/wiki/Leaky_bucket
-func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+	span, ctx := tracing.StartSpan(ctx)
+	defer span.Finish()
+	leakyBucketTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit_leakyBucket"))
+	defer leakyBucketTimer.ObserveDuration()
+
 	if r.Burst == 0 {
 		r.Burst = r.Limit
 	}
@@ -222,38 +278,57 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 	// Get rate limit from cache.
 	hashKey := r.HashKey()
 	item, ok := c.GetItem(hashKey)
+	tracing.LogInfo(span, "c.GetItem()")
 
 	if s != nil && !ok {
 		// Cache miss.
 		// Check our store for the item.
-		if item, ok = s.Get(r); ok {
+		if item, ok = s.Get(ctx, r); ok {
+			tracing.LogInfo(span, "Check store for rate limit")
 			c.Add(item)
+			tracing.LogInfo(span, "c.Add()")
 		}
 	}
 
 	// Sanity checks.
 	if ok {
 		if item.Value == nil {
-			logrus.Error("leakyBucket: Invalid cache item; Value is nil")
+			msgPart := "leakyBucket: Invalid cache item; Value is nil"
+			tracing.LogInfo(span, msgPart,
+				"hashKey", hashKey,
+				"key", r.UniqueKey,
+				"name", r.Name,
+			)
+			logrus.Error(msgPart)
 			ok = false
 		} else if item.Key != hashKey {
-			logrus.Error("leakyBucket: Invalid cache item; key mismatch")
+			msgPart := "leakyBucket: Invalid cache item; key mismatch"
+			tracing.LogInfo(span, msgPart,
+				"itemKey", item.Key,
+				"hashKey", hashKey,
+				"name", r.Name,
+			)
+			logrus.Error(msgPart)
 			ok = false
 		}
 	}
 
 	if ok {
 		// Item found in cache or store.
+		tracing.LogInfo(span, "Update existing rate limit")
+
 		b, ok := item.Value.(*LeakyBucketItem)
 		if !ok {
 			// Client switched algorithms; perhaps due to a migration?
 			c.Remove(hashKey)
+			tracing.LogInfo(span, "c.Remove()")
 
 			if s != nil {
-				s.Remove(hashKey)
+				s.Remove(ctx, hashKey)
+				tracing.LogInfo(span, "s.Remove()")
 			}
 
-			return leakyBucketNewItem(s, c, r)
+			return leakyBucketNewItem(ctx, s, c, r)
 		}
 
 		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
@@ -320,12 +395,14 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 
 		if s != nil {
 			defer func() {
-				s.OnChange(r, item)
+				s.OnChange(ctx, r, item)
+				tracing.LogInfo(span, "s.OnChange()")
 			}()
 		}
 
 		// If we are already at the limit
 		if int64(b.Remaining) == 0 {
+			overLimitCounter.Add(1)
 			rl.Status = Status_OVER_LIMIT
 			return rl, nil
 		}
@@ -341,6 +418,7 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 		// If requested is more than available, then return over the limit
 		// without updating the bucket.
 		if r.Hits > int64(b.Remaining) {
+			overLimitCounter.Add(1)
 			rl.Status = Status_OVER_LIMIT
 			return rl, nil
 		}
@@ -356,11 +434,14 @@ func leakyBucket(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err er
 		return rl, nil
 	}
 
-	return leakyBucketNewItem(s, c, r)
+	return leakyBucketNewItem(ctx, s, c, r)
 }
 
 // Called by leakyBucket() when adding a new item in the store.
-func leakyBucketNewItem(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+	span, ctx := tracing.StartSpan(ctx)
+	defer span.Finish()
+
 	now := MillisecondNow()
 	duration := r.Duration
 	rate := float64(duration) / float64(r.Limit)
@@ -393,6 +474,7 @@ func leakyBucketNewItem(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp,
 
 	// Client could be requesting that we start with the bucket OVER_LIMIT
 	if r.Hits > r.Burst {
+		overLimitCounter.Add(1)
 		rl.Status = Status_OVER_LIMIT
 		rl.Remaining = 0
 		rl.ResetTime = now + (rl.Limit-rl.Remaining)*int64(rate)
@@ -407,9 +489,11 @@ func leakyBucketNewItem(s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp,
 	}
 
 	c.Add(item)
+	tracing.LogInfo(span, "c.Add()")
 
 	if s != nil {
-		s.OnChange(r, item)
+		s.OnChange(ctx, r, item)
+		tracing.LogInfo(span, "s.OnChange()")
 	}
 
 	return &rl, nil

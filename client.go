@@ -1,5 +1,5 @@
 /*
-Copyright 2018-2019 Mailgun Technologies Inc
+Copyright 2018-2022 Mailgun Technologies Inc
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/mailgun/holster/v4/clock"
+	otgrpc "github.com/opentracing-contrib/go-grpc"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -43,9 +45,19 @@ func DialV1Server(server string, tls *tls.Config) (V1Client, error) {
 		return nil, errors.New("server is empty; must provide a server")
 	}
 
-	opts := []grpc.DialOption{grpc.WithInsecure()}
+	// Setup Opentracing interceptor to propagate spans.
+	tracer := opentracing.GlobalTracer()
+	tracingUnaryInterceptor := otgrpc.OpenTracingClientInterceptor(tracer)
+	tracingStreamInterceptor := otgrpc.OpenTracingStreamClientInterceptor(tracer)
+
+	opts := []grpc.DialOption{
+		grpc.WithUnaryInterceptor(tracingUnaryInterceptor),
+		grpc.WithStreamInterceptor(tracingStreamInterceptor),
+	}
 	if tls != nil {
-		opts = []grpc.DialOption{grpc.WithTransportCredentials(credentials.NewTLS(tls))}
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tls)))
+	} else {
+		opts = append(opts, grpc.WithInsecure())
 	}
 
 	conn, err := grpc.Dial(server, opts...)

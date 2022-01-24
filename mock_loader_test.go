@@ -16,31 +16,26 @@ limitations under the License.
 
 package gubernator_test
 
-// Mock implementation of Store.
+// Mock implementation of Loader.
 
 import (
-	"context"
-
 	guber "github.com/mailgun/gubernator/v2"
 	"github.com/stretchr/testify/mock"
 )
 
-type MockStore2 struct {
+type MockLoader2 struct {
 	mock.Mock
 }
 
-var _ guber.Store = &MockStore2{}
+var _ guber.Loader = &MockLoader2{}
 
-func (m *MockStore2) OnChange(ctx context.Context, r *guber.RateLimitReq, item *guber.CacheItem) {
-	m.Called(ctx, r, item)
+func (m *MockLoader2) Load() (chan *guber.CacheItem, error) {
+	args := m.Called()
+	retval := args.Get(0).(chan *guber.CacheItem)
+	return retval, args.Error(1)
 }
 
-func (m *MockStore2) Get(ctx context.Context, r *guber.RateLimitReq) (*guber.CacheItem, bool) {
-	args := m.Called(ctx, r)
-	retval, _ := args.Get(0).(*guber.CacheItem)
-	return retval, args.Bool(1)
-}
-
-func (m *MockStore2) Remove(ctx context.Context, key string) {
-	m.Called(ctx, key)
+func (m *MockLoader2) Save(ch chan *guber.CacheItem) error {
+	args := m.Called(ch)
+	return args.Error(0)
 }

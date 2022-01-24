@@ -1,5 +1,5 @@
 /*
-Copyright 2018-2019 Mailgun Technologies Inc
+Copyright 2018-2022 Mailgun Technologies Inc
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -50,12 +50,15 @@ func NewGRPCStatsHandler() *GRPCStatsHandler {
 	c := &GRPCStatsHandler{
 		grpcRequestCount: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "gubernator_grpc_request_counts",
-			Help: "GRPC requests by status.",
+			Help: "The count of gRPC requests.",
 		}, []string{"status", "method"}),
 		grpcRequestDuration: prometheus.NewSummaryVec(prometheus.SummaryOpts{
-			Name:       "gubernator_grpc_request_duration",
-			Help:       "GRPC request durations in seconds",
-			Objectives: map[float64]float64{0.5: 0.05, 0.99: 0.001},
+			Name: "gubernator_grpc_request_duration",
+			Help: "The timings of gRPC requests in seconds",
+			Objectives: map[float64]float64{
+				0.5:  0.05,
+				0.99: 0.001,
+			},
 		}, []string{"method"}),
 	}
 	c.run()

@@ -25,7 +25,7 @@ package gubernator
 // processes requests sequentially.
 //
 // Request workflow:
-// - A 64-bit hash is generated from an incoming request by its Key/Name values.
+// - A 63-bit hash is generated from an incoming request by its Key/Name values. (Actually 64 bit, but we toss out one bit to properly calculate the next step.)
 // - Workers are assigned equal size hash ranges.  The worker is selected by choosing the worker index associated with that linear hash value range.
 // - The worker has command channels for each method call.  The request is enqueued to the appropriate channel.
 // - The worker pulls the request from the appropriate channel and executes the business logic for that method.  Then, it sends a response back using the requester's provided response channel.
@@ -49,6 +49,7 @@ import (
 type GubernatorPool struct {
 	workers         []*poolWorker
 	workerCacheSize int
+	hasher          ipoolHasher
 	hashRingStep    uint64
 	conf            *Config
 	done            chan struct{}
@@ -63,6 +64,15 @@ type poolWorker struct {
 	loadRequest         chan poolLoadRequest
 	addCacheItemRequest chan poolAddCacheItemRequest
 	getCacheItemRequest chan poolGetCacheItemRequest
+}
+
+type ipoolHasher interface {
+	// Return a 63-bit hash derived from input.
+	ComputeHash63(input string) uint64
+}
+
+// Standard implementation of ipoolHasher.
+type poolHasher struct {
 }
 
 // Method request/response structs.
@@ -104,15 +114,20 @@ type poolGetCacheItemResponse struct {
 }
 
 var _ io.Closer = &GubernatorPool{}
+var _ ipoolHasher = &poolHasher{}
+
 var poolWorkerCounter int64
 
 func NewGubernatorPool(conf *Config, concurrency int, cacheSize int) *GubernatorPool {
 	setter.SetDefault(&cacheSize, 50_000)
 
+	// Compute hashRingStep as interval between workers' 63-bit hash ranges.
+	// 64th bit is used here as a max value that is just out of range of 63-bit space to calculate the step.
 	chp := &GubernatorPool{
 		workers:         make([]*poolWorker, concurrency),
 		workerCacheSize: cacheSize / concurrency,
-		hashRingStep:    ^uint64(0) / uint64(concurrency),
+		hasher:          newPoolHasher(),
+		hashRingStep:    uint64(1 << 63) / uint64(concurrency),
 		conf:            conf,
 		done:            make(chan struct{}),
 	}
@@ -124,6 +139,14 @@ func NewGubernatorPool(conf *Config, concurrency int, cacheSize int) *Gubernator
 	}
 
 	return chp
+}
+
+func newPoolHasher() *poolHasher {
+	return &poolHasher{}
+}
+
+func (ph *poolHasher) ComputeHash63(input string) uint64 {
+	return xxhash.ChecksumString64S(input, 0) >> 1
 }
 
 func (chp *GubernatorPool) Close() error {
@@ -151,7 +174,7 @@ func (chp *GubernatorPool) newWorker() *poolWorker {
 // Returns the request channel associated with the key.
 // Hash the key, then lookup hash ring to find the worker.
 func (chp *GubernatorPool) getWorker(key string) *poolWorker {
-	hash := xxhash.ChecksumString64S(key, 0)
+	hash := chp.hasher.ComputeHash63(key)
 	idx := hash / chp.hashRingStep
 	return chp.workers[idx]
 }

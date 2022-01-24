@@ -23,13 +23,6 @@ func BenchmarkCache(b *testing.B) {
 			},
 			LockRequired: true,
 		},
-		// {
-		// 	Name: "SyncLRUCache",
-		// 	NewTestCache: func() gubernator.Cache{
-		// 		return gubernator.NewSyncLRUCache(0)
-		// 	},
-		// 	LockRequired: false,
-		// },
 	}
 
 	for _, testCase := range testCases {

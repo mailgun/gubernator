@@ -25,10 +25,16 @@ package gubernator
 // processes requests sequentially.
 //
 // Request workflow:
-// - A 63-bit hash is generated from an incoming request by its Key/Name values. (Actually 64 bit, but we toss out one bit to properly calculate the next step.)
-// - Workers are assigned equal size hash ranges.  The worker is selected by choosing the worker index associated with that linear hash value range.
-// - The worker has command channels for each method call.  The request is enqueued to the appropriate channel.
-// - The worker pulls the request from the appropriate channel and executes the business logic for that method.  Then, it sends a response back using the requester's provided response channel.
+// - A 63-bit hash is generated from an incoming request by its Key/Name
+//   values. (Actually 64 bit, but we toss out one bit to properly calculate
+//   the next step.)
+// - Workers are assigned equal size hash ranges.  The worker is selected by
+//   choosing the worker index associated with that linear hash value range.
+// - The worker has command channels for each method call.  The request is
+//   enqueued to the appropriate channel.
+// - The worker pulls the request from the appropriate channel and executes the
+//   business logic for that method.  Then, it sends a response back using the
+//   requester's provided response channel.
 
 import (
 	"context"

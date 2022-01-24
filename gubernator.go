@@ -385,7 +385,8 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 				WithError(err).
 				WithField("key", req.Key).
 				Error("Error fetching rate limit from peer")
-			// countError(err, "Error in GetPeerRateLimit")
+			// Not calling `countError()` because we expect the remote end to
+			// report this error.
 			ext.LogError(span, err2)
 			resp.Resp = &RateLimitResp{Error: err2.Error()}
 			break

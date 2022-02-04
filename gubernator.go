@@ -481,8 +481,6 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 
 	span.SetTag("numRequests", len(r.Requests))
 
-	var resp GetPeerRateLimitsResp
-
 	if len(r.Requests) > maxBatchSize {
 		err2 := fmt.Errorf("'PeerRequest.rate_limits' list too large; max size is '%d'", maxBatchSize)
 		ext.LogError(span, err2)
@@ -490,18 +488,36 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 		return nil, status.Error(codes.OutOfRange, err2.Error())
 	}
 
+	var wg sync.WaitGroup
+	respChan := make(chan *RateLimitResp, len(r.Requests))
+
 	for _, req := range r.Requests {
-		rl, err := s.getRateLimit(ctx, req)
-		if err != nil {
-			// Return the error for this request
-			err2 := errors.Wrap(err, "Error in getRateLimit")
-			ext.LogError(span, err2)
-			rl = &RateLimitResp{Error: err2.Error()}
-			// checkErrorCounter is updated within getRateLimit().
-		}
+		wg.Add(1)
+		go func(req *RateLimitReq) {
+			defer wg.Done()
+			rl, err := s.getRateLimit(ctx, req)
+			if err != nil {
+				// Return the error for this request
+				err2 := errors.Wrap(err, "Error in getRateLimit")
+				ext.LogError(span, err2)
+				rl = &RateLimitResp{Error: err2.Error()}
+				// checkErrorCounter is updated within getRateLimit().
+			}
+
+			respChan <- rl
+		}(req)
+	}
+
+	wg.Wait()
+	close(respChan)
+
+	resp := new(GetPeerRateLimitsResp)
+
+	for rl := range respChan {
 		resp.RateLimits = append(resp.RateLimits, rl)
 	}
-	return &resp, nil
+
+	return resp, nil
 }
 
 // HealthCheck Returns the health of our instance.

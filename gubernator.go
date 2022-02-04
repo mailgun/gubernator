@@ -488,6 +488,7 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 		return nil, status.Error(codes.OutOfRange, err2.Error())
 	}
 
+	// Invoke each rate limit request in parallel.
 	var wg sync.WaitGroup
 	respChan := make(chan *RateLimitResp, len(r.Requests))
 

@@ -490,7 +490,7 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 
 	// Invoke each rate limit request in parallel.
 	var wg sync.WaitGroup
-	respChan := make(chan *RateLimitResp, len(r.Requests))
+	respChan := make(chan *RateLimitResp)
 
 	for _, req := range r.Requests {
 		wg.Add(1)
@@ -509,14 +509,29 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 		}(req)
 	}
 
+	// Capture each response.
+	resp := new(GetPeerRateLimitsResp)
+	var respWg sync.WaitGroup
+	respWg.Add(1)
+	go func() {
+		for rl := range respChan {
+			resp.RateLimits = append(resp.RateLimits, rl)
+		}
+
+		respWg.Done()
+	}()
+
+	// Wait for all requests to be handled, then close response handler.
 	wg.Wait()
 	close(respChan)
+	respWg.Wait()
 
-	resp := new(GetPeerRateLimitsResp)
-
-	for rl := range respChan {
-		resp.RateLimits = append(resp.RateLimits, rl)
-	}
+	logrus.WithContext(ctx).
+		WithFields(logrus.Fields{
+			"batchSizeIn": len(r.Requests),
+			"batchSizeOut": len(resp.RateLimits),
+		}).
+		Info("GetPeerRateLimits()")
 
 	return resp, nil
 }

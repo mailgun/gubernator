@@ -436,6 +436,8 @@ func (c *PeerClient) sendQueue(ctx context.Context, queue []*request) {
 	span.SetTag("queueLen", len(queue))
 	span.SetTag("peer.grpcAddress", c.conf.Info.GRPCAddress)
 
+	batchSendTimer := prometheus.NewTimer(batchSendDurationMetric.WithLabelValues(c.conf.Info.GRPCAddress))
+	defer batchSendTimer.ObserveDuration()
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("PeerClient.sendQueue"))
 	defer funcTimer.ObserveDuration()
 

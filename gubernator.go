@@ -71,7 +71,7 @@ var asyncRequestRetriesCounter = prometheus.NewCounterVec(prometheus.CounterOpts
 }, []string{"name"})
 var queueLengthMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 	Name: "gubernator_queue_length",
-	Help: "The getRateLimitsBatch() queue length in PeerClient.",
+	Help: "The getRateLimitsBatch() queue length in PeerClient.  This represents rate checks queued by for batching to a remote peer.",
 	Objectives: map[float64]float64{
 		0.99: 0.001,
 	},
@@ -102,6 +102,13 @@ var poolWorkerQueueLength = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 		0.99: 0.001,
 	},
 }, []string{"method", "worker"})
+var batchSendDurationMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+	Name: "gubernator_batch_send_duration",
+	Help: "The timings of batch send operations to a remote peer.",
+	Objectives: map[float64]float64{
+		0.99: 0.001,
+	},
+}, []string{"peerAddr"})
 
 // NewV1Instance instantiate a single instance of a gubernator peer and registers this
 // instance with the provided GRPCServer.
@@ -759,6 +766,7 @@ func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
 	overLimitCounter.Describe(ch)
 	checkCounter.Describe(ch)
 	poolWorkerQueueLength.Describe(ch)
+	batchSendDurationMetric.Describe(ch)
 }
 
 // Collect fetches metrics from the server for use by prometheus
@@ -774,6 +782,7 @@ func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
 	overLimitCounter.Collect(ch)
 	checkCounter.Collect(ch)
 	poolWorkerQueueLength.Collect(ch)
+	batchSendDurationMetric.Collect(ch)
 }
 
 // HasBehavior returns true if the provided behavior is set

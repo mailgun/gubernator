@@ -18,6 +18,7 @@ Finally, configure a Prometheus job to scrape the server's `/metrics` URI.
 | -------------------------------------- | ------- | ----------- |
 | `gubernator_async_durations`           | Summary | The timings of GLOBAL async sends in seconds. |
 | `gubernator_asyncrequest_retries`      | Counter | The count of retries occurred in asyncRequests() forwarding a request to another peer. |
+| `gubernator_batch_send_duration`       | Summary | The timings of batch send operations to a remote peer. |
 | `gubernator_broadcast_durations`       | Summary | The timings of GLOBAL broadcasts to peers in seconds. |
 | `gubernator_cache_access_count`        | Counter | The count of LRUCache accesses during rate checks. |
 | `gubernator_cache_size`                | Gauge   | The number of items in LRU Cache which holds the rate limits. |

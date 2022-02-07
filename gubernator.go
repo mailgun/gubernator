@@ -533,13 +533,6 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	close(respChan)
 	respWg.Wait()
 
-	logrus.WithContext(ctx).
-		WithFields(logrus.Fields{
-			"batchSizeIn": len(r.Requests),
-			"batchSizeOut": len(resp.RateLimits),
-		}).
-		Info("GetPeerRateLimits()")
-
 	return resp, nil
 }
 

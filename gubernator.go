@@ -495,15 +495,40 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 		return nil, status.Error(codes.OutOfRange, err2.Error())
 	}
 
-	// Invoke each rate limit request in parallel.
-	var wg sync.WaitGroup
-	respChan := make(chan *RateLimitResp)
+	// Invoke each rate limit request.
+	type reqIn struct {
+		idx int
+		req *RateLimitReq
+	}
+	type respOut struct {
+		idx int
+		rl  *RateLimitResp
+	}
 
-	for _, req := range r.Requests {
-		wg.Add(1)
-		go func(req *RateLimitReq) {
-			defer wg.Done()
-			rl, err := s.getRateLimit(ctx, req)
+	const concurrencyPerRequest = 10
+
+	resp := &GetPeerRateLimitsResp{
+		RateLimits: make([]*RateLimitResp, len(r.Requests)),
+	}
+	respChan := make(chan respOut)
+	var respWg sync.WaitGroup
+	respWg.Add(1)
+
+	go func() {
+		// Capture each response and keep in stable order.
+		for out := range respChan {
+			resp.RateLimits[out.idx] = out.rl
+		}
+
+		respWg.Done()
+	}()
+
+	// Fan out requests.
+	fan := syncutil.NewFanOut(concurrencyPerRequest)
+	for idx, req := range r.Requests {
+		fan.Run(func(in interface{}) error {
+			rin := in.(reqIn)
+			rl, err := s.getRateLimit(ctx, rin.req)
 			if err != nil {
 				// Return the error for this request
 				err2 := errors.Wrap(err, "Error in getRateLimit")
@@ -512,24 +537,13 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 				// checkErrorCounter is updated within getRateLimit().
 			}
 
-			respChan <- rl
-		}(req)
+			respChan <- respOut{idx, rl}
+			return nil
+		}, reqIn{idx, req})
 	}
 
-	// Capture each response.
-	resp := new(GetPeerRateLimitsResp)
-	var respWg sync.WaitGroup
-	respWg.Add(1)
-	go func() {
-		for rl := range respChan {
-			resp.RateLimits = append(resp.RateLimits, rl)
-		}
-
-		respWg.Done()
-	}()
-
-	// Wait for all requests to be handled, then close response handler.
-	wg.Wait()
+	// Wait for all requests to be handled, then clean up.
+	_ = fan.Wait()
 	close(respChan)
 	respWg.Wait()
 

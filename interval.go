@@ -24,6 +24,8 @@ import (
 	"github.com/mailgun/holster/v4/syncutil"
 )
 
+// Interval is a one-shot ticker.  Call `Next()` to trigger the start of an
+// interval.  Read the `C` channel for tick event.
 type Interval struct {
 	C  chan struct{}
 	in chan struct{}

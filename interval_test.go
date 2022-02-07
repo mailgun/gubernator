@@ -18,11 +18,32 @@ package gubernator_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestInterval(t *testing.T) {
+	t.Run("Happy path", func(t *testing.T) {
+		interval := gubernator.NewInterval(10 * time.Millisecond)
+		defer interval.Stop()
+		interval.Next()
+
+		assert.Empty(t, interval.C)
+
+		time.Sleep(10 * time.Millisecond)
+
+		// Wait for tick.
+		select {
+		case <-interval.C:
+		case <-time.After(100 * time.Millisecond):
+			require.Fail(t, "timeout")
+		}
+	})
+}
 
 func TestGregorianExpirationMinute(t *testing.T) {
 	// Validate calculation assumption

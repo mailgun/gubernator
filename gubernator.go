@@ -505,8 +505,6 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 		rl  *RateLimitResp
 	}
 
-	const concurrencyPerRequest = 10
-
 	resp := &GetPeerRateLimitsResp{
 		RateLimits: make([]*RateLimitResp, len(r.Requests)),
 	}
@@ -524,7 +522,8 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	}()
 
 	// Fan out requests.
-	fan := syncutil.NewFanOut(concurrencyPerRequest)
+	concurrencyLimit := s.conf.PoolWorkers
+	fan := syncutil.NewFanOut(concurrencyLimit)
 	for idx, req := range r.Requests {
 		fan.Run(func(in interface{}) error {
 			rin := in.(reqIn)

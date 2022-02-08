@@ -27,6 +27,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mailgun/gubernator/v2"
 	guber "github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/gubernator/v2/cluster"
 	"github.com/mailgun/holster/v4/clock"
@@ -1026,6 +1027,52 @@ func TestGRPCGateway(t *testing.T) {
 	assert.Equal(t, int32(10), hc.PeerCount)
 
 	require.NoError(t, err)
+}
+
+func TestGetPeerRateLimits(t *testing.T) {
+	ctx := context.Background()
+	peerClient := gubernator.NewPeerClient(gubernator.PeerConfig{
+		Info: cluster.GetRandomPeer(cluster.DataCenterNone),
+	})
+
+	t.Run("Stable rate check request order", func(t *testing.T) {
+		// Ensure response order matches rate check request order.
+		// Try various batch sizes.
+		testCases := []int{1, 2, 5, 10, 100, 1000}
+
+		for _, n := range testCases {
+			t.Run(fmt.Sprintf("Batch size %d", n), func(t *testing.T) {
+				// Build request.
+				req := &gubernator.GetPeerRateLimitsReq{
+					Requests: make([]*gubernator.RateLimitReq, n),
+				}
+				for i := 0; i < n; i++ {
+					req.Requests[i] = &gubernator.RateLimitReq{
+						Name: "Foobar",
+						UniqueKey: fmt.Sprintf("%08x", i),
+						Hits: 0,
+						Limit: 1000 + int64(i),
+						Duration: 1000,
+						Algorithm: gubernator.Algorithm_TOKEN_BUCKET,
+						Behavior: gubernator.Behavior_BATCHING,
+					}
+				}
+
+				// Send request.
+				resp, err := peerClient.GetPeerRateLimits(ctx, req)
+
+				// Verify.
+				require.NoError(t, err)
+				require.NotNil(t, resp)
+				assert.Len(t, resp.RateLimits, n)
+
+				for i, item := range resp.RateLimits {
+					// Identify response by its unique limit.
+					assert.Equal(t, req.Requests[i].Limit, item.Limit)
+				}
+			})
+		}
+	})
 }
 
 // TODO: Add a test for sending no rate limits RateLimitReqList.RateLimits = nil

@@ -537,7 +537,7 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 				// checkErrorCounter is updated within getRateLimit().
 			}
 
-			respChan <- respOut{idx, rl}
+			respChan <- respOut{rin.idx, rl}
 			return nil
 		}, reqIn{idx, req})
 	}

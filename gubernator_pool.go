@@ -322,7 +322,7 @@ func (chp *GubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cac
 				"Key": handlerRequest.request.UniqueKey,
 				"Duration": handlerRequest.request.Duration,
 				"Limit": handlerRequest.request.Limit,
-			}).Info("Rate over limit")
+			}).Warn("Rate over limit")
 		}
 	}
 

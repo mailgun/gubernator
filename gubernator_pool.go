@@ -315,6 +315,17 @@ func (chp *GubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cac
 		checkErrorCounter.WithLabelValues("Invalid algorithm").Add(1)
 	}
 
+	if err == nil {
+		if rlResponse.Status == Status_OVER_LIMIT {
+			logrus.WithFields(logrus.Fields{
+				"Name": handlerRequest.request.Name,
+				"Key": handlerRequest.request.UniqueKey,
+				"Duration": handlerRequest.request.Duration,
+				"Limit": handlerRequest.request.Limit,
+			}).Info("Rate over limit")
+		}
+	}
+
 	handlerResponse := &response{
 		rl:  rlResponse,
 		err: err,

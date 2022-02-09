@@ -191,7 +191,7 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (*Ra
 
 	rateLimitResp, err := c.getPeerRateLimitsBatch(ctx, r)
 	if err != nil {
-		err2 := errors.Wrap(err, "Error in getPeerRateLimitsBatch")
+		err2 := errors.Wrapf(err, "Error in getPeerRateLimitsBatch while sending batch to peer %s", c.conf.Info.GRPCAddress)
 		ext.LogError(span, err2)
 		return nil, c.setLastErr(err2)
 	}

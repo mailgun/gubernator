@@ -29,6 +29,7 @@ import (
 	"github.com/opentracing/opentracing-go/ext"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/rs/xid"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -53,6 +54,8 @@ type V1Instance struct {
 	getRateLimitsCounter int64
 	gubernatorPool       *GubernatorPool
 }
+
+type requestIdKey struct{}
 
 var getRateLimitCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Name: "gubernator_getratelimit_counter",
@@ -195,6 +198,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.GetRateLimits"))
 	defer funcTimer.ObserveDuration()
 
+	ctx = context.WithValue(ctx, requestIdKey{}, generateId())
 	concurrentCounter := atomic.AddInt64(&s.getRateLimitsCounter, 1)
 	defer atomic.AddInt64(&s.getRateLimitsCounter, -1)
 	span.SetTag("concurrentCounter", concurrentCounter)
@@ -834,4 +838,9 @@ func isDeadlineExceeded(err error) bool {
 
 		err = errors.Unwrap(err)
 	}
+}
+
+// generateId generates a unique request id string.
+func generateId() string {
+	return xid.New().String()
 }

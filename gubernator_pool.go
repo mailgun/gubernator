@@ -324,6 +324,7 @@ func (chp *GubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cac
 			name := handlerRequest.request.Name
 			key := handlerRequest.request.UniqueKey
 			occurrences := incrementOverLimitCounter(name, key)
+			requestId, _ := ctx.Value(requestIdKey{}).(string)
 
 			logrus.WithFields(logrus.Fields{
 				"name": name,
@@ -331,6 +332,7 @@ func (chp *GubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cac
 				"duration": handlerRequest.request.Duration,
 				"limit": handlerRequest.request.Limit,
 				"occurrences": occurrences,
+				"requestId": requestId,
 			}).Warn("Rate over limit")
 		}
 	}

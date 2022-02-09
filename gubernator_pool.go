@@ -123,7 +123,10 @@ var _ io.Closer = &GubernatorPool{}
 var _ ipoolHasher = &poolHasher{}
 
 var poolWorkerCounter int64
+
+// Map ratelimit key->name->counter.
 var overlimitCounter = map[string]map[string]int{}
+var overLimitCounterMutex sync.Mutex
 
 func NewGubernatorPool(conf *Config, concurrency int, cacheSize int) *GubernatorPool {
 	setter.SetDefault(&cacheSize, 50_000)
@@ -320,7 +323,7 @@ func (chp *GubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cac
 		if rlResponse.Status == Status_OVER_LIMIT {
 			name := handlerRequest.request.Name
 			key := handlerRequest.request.UniqueKey
-			occurrences := addOverlimitCounter(name, key)
+			occurrences := incrementOverLimitCounter(name, key)
 
 			logrus.WithFields(logrus.Fields{
 				"name": name,
@@ -668,19 +671,21 @@ func (chp *GubernatorPool) handleGetCacheItem(request poolGetCacheItemRequest, c
 	}
 }
 
-func addOverlimitCounter(name, key string) int {
+func incrementOverLimitCounter(name, key string) int {
+	overLimitCounterMutex.Lock()
+	defer overLimitCounterMutex.Unlock()
 	occurrences := int(1)
 
-	if nameMap, ok := overlimitCounter[name]; ok {
-		if value, ok := nameMap[key]; ok {
+	if keyMap, ok := overlimitCounter[key]; ok {
+		if value, ok := keyMap[name]; ok {
 			occurrences += value
-			nameMap[key] = occurrences
+			keyMap[name] = occurrences
 		} else {
-			nameMap[key] = occurrences
+			keyMap[name] = occurrences
 		}
 	} else {
-		overlimitCounter[name] = map[string]int{
-			key: occurrences,
+		overlimitCounter[key] = map[string]int{
+			name: occurrences,
 		}
 	}
 

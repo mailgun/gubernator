@@ -17,6 +17,7 @@ limitations under the License.
 package gubernator_test
 
 import (
+	"fmt"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -28,6 +29,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	dto "github.com/prometheus/client_model/go"
 )
 
 func TestLRUCache(t *testing.T) {
@@ -331,6 +334,97 @@ func TestLRUCache(t *testing.T) {
 		// Wait for goroutines to finish.
 		launchWg.Done()
 		doneWg.Wait()
+	})
+
+	t.Run("Check gubernator_unexpired_evictions_count metric is not incremented when expired item is evicted", func(t *testing.T) {
+		defer clock.Freeze(clock.Now()).Unfreeze()
+
+		promRegister := prometheus.NewRegistry()
+
+		// The LRU cache for storing rate limits.
+		cacheCollector := gubernator.NewLRUCacheCollector()
+		err := promRegister.Register(cacheCollector)
+		require.NoError(t, err)
+
+		cache := gubernator.NewLRUCache(10)
+		cacheCollector.AddCache(cache)
+
+		// fill cache with short duration cache items
+		for i := 0; i < 10; i++ {
+			cache.Add(&gubernator.CacheItem{
+				Algorithm: gubernator.Algorithm_LEAKY_BUCKET,
+				Key:       fmt.Sprintf("short-expiry-%d", i),
+				Value:     "bar",
+				ExpireAt:  clock.Now().Add(5 * time.Minute).UnixMilli(),
+			})
+		}
+
+		// jump forward in time to expire all short duration keys
+		clock.Advance(6 * time.Minute)
+
+		// add a new cache item to force eviction
+		cache.Add(&gubernator.CacheItem{
+			Algorithm: gubernator.Algorithm_LEAKY_BUCKET,
+			Key:       "evict1",
+			Value:     "bar",
+			ExpireAt:  clock.Now().Add(1 * time.Hour).UnixMilli(),
+		})
+
+		collChan := make(chan prometheus.Metric, 64)
+		cacheCollector.Collect(collChan)
+		// Check metrics to verify evicted cache key is expired
+		<-collChan
+		<-collChan
+		<-collChan
+		m := <-collChan // gubernator_unexpired_evictions_count
+		met := new(dto.Metric)
+		m.Write(met)
+		assert.Contains(t, m.Desc().String(), "gubernator_unexpired_evictions_count")
+		assert.Equal(t, 0, int(*met.Counter.Value))
+	})
+
+	t.Run("Check gubernator_unexpired_evictions_count metric is incremented when unexpired item is evicted", func(t *testing.T) {
+		defer clock.Freeze(clock.Now()).Unfreeze()
+
+		promRegister := prometheus.NewRegistry()
+
+		// The LRU cache for storing rate limits.
+		cacheCollector := gubernator.NewLRUCacheCollector()
+		err := promRegister.Register(cacheCollector)
+		require.NoError(t, err)
+
+		cache := gubernator.NewLRUCache(10)
+		cacheCollector.AddCache(cache)
+
+		// fill cache with long duration cache items
+		for i := 0; i < 10; i++ {
+			cache.Add(&gubernator.CacheItem{
+				Algorithm: gubernator.Algorithm_LEAKY_BUCKET,
+				Key:       fmt.Sprintf("long-expiry-%d", i),
+				Value:     "bar",
+				ExpireAt:  clock.Now().Add(1 * time.Hour).UnixMilli(),
+			})
+		}
+
+		// add a new cache item to force eviction
+		cache.Add(&gubernator.CacheItem{
+			Algorithm: gubernator.Algorithm_LEAKY_BUCKET,
+			Key:       "evict2",
+			Value:     "bar",
+			ExpireAt:  clock.Now().Add(1 * time.Hour).UnixMilli(),
+		})
+
+		// Check metrics to verify evicted cache key is *NOT* expired
+		collChan := make(chan prometheus.Metric, 64)
+		cacheCollector.Collect(collChan)
+		<-collChan
+		<-collChan
+		<-collChan
+		m := <-collChan // gubernator_unexpired_evictions_count
+		met := new(dto.Metric)
+		m.Write(met)
+		assert.Contains(t, m.Desc().String(), "gubernator_unexpired_evictions_count")
+		assert.Equal(t, 1, int(*met.Counter.Value))
 	})
 }
 

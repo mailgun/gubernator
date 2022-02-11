@@ -235,6 +235,15 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 				return
 			}
 
+			if ctx2.Err() != nil {
+				err = errors.Wrap(ctx2.Err(), "Error while iterating request items")
+				ext.LogError(span, err)
+				resp.Responses[i] = &RateLimitResp{
+					Error: err.Error(),
+				}
+				return
+			}
+
 			peer, err = s.GetPeer(ctx2, key)
 			if err != nil {
 				countError(err, "Error in GetPeer")
@@ -726,11 +735,6 @@ func (s *V1Instance) GetPeer(ctx context.Context, key string) (*PeerClient, erro
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.GetPeer"))
 	defer funcTimer.ObserveDuration()
 	lockTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.GetPeer_RLock"))
-
-	if ctx.Err() != nil {
-		ext.LogError(span, ctx.Err())
-		return nil, ctx.Err()
-	}
 
 	s.peerMutex.RLock()
 	defer s.peerMutex.RUnlock()

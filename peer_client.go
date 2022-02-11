@@ -362,8 +362,9 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 		}
 		return resp.rl, nil
 	case <-ctx2.Done():
-		ext.LogError(span, ctx2.Err())
-		return nil, ctx2.Err()
+		err := errors.Wrap(ctx2.Err(), "Error while waiting for response")
+		ext.LogError(span, err)
+		return nil, err
 	}
 }
 

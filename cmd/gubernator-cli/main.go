@@ -23,6 +23,7 @@ import (
 	"math/rand"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	guber "github.com/mailgun/gubernator/v2"
@@ -38,23 +39,26 @@ import (
 	"golang.org/x/time/rate"
 )
 
-var log *logrus.Logger
-var configFile, grpcAddress string
-var concurrency uint64
-var checksPerRequest uint64
-var reqRate float64
-var quiet bool
+var (
+	log                     *logrus.Logger
+	configFile, grpcAddress string
+	concurrency             uint64
+	timeout                 time.Duration
+	checksPerRequest        uint64
+	reqRate                 float64
+	quiet                   bool
+)
 
 func main() {
 	log = logrus.StandardLogger()
-	flags := flag.NewFlagSet("gubernator", flag.ContinueOnError)
-	flags.StringVar(&configFile, "config", "", "Environment config file")
-	flags.StringVar(&grpcAddress, "e", "", "Gubernator GRPC endpoint address")
-	flags.Uint64Var(&concurrency, "concurrency", 1, "Concurrent threads (default 1)")
-	flags.Uint64Var(&checksPerRequest, "checks", 1, "Rate checks per request (default 1)")
-	flags.Float64Var(&reqRate, "rate", 0, "Request rate overall, 0 = no rate limit")
-	flags.BoolVar(&quiet, "q", false, "Quiet logging")
-	checkErr(flags.Parse(os.Args[1:]))
+	flag.StringVar(&configFile, "config", "", "Environment config file")
+	flag.StringVar(&grpcAddress, "e", "", "Gubernator GRPC endpoint address")
+	flag.Uint64Var(&concurrency, "concurrency", 1, "Concurrent threads (default 1)")
+	flag.DurationVar(&timeout, "timeout", 100*time.Millisecond, "Request timeout (default 100ms)")
+	flag.Uint64Var(&checksPerRequest, "checks", 1, "Rate checks per request (default 1)")
+	flag.Float64Var(&reqRate, "rate", 0, "Request rate overall, 0 = no rate limit")
+	flag.BoolVar(&quiet, "q", false, "Quiet logging")
+	flag.Parse()
 
 	ctx := context.Background()
 	err := initTracing()
@@ -154,7 +158,7 @@ func randInt(min, max int) int {
 func sendRequest(ctx context.Context, client guber.V1Client, req *guber.GetRateLimitsReq) {
 	span, ctx := tracing.StartSpan(ctx)
 	defer span.Finish()
-	ctx, cancel := tracing.ContextWithTimeout(ctx, clock.Millisecond*500)
+	ctx, cancel := tracing.ContextWithTimeout(ctx, timeout)
 
 	// Now hit our cluster with the rate limits
 	resp, err := client.GetRateLimits(ctx, req)

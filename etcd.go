@@ -332,3 +332,22 @@ func (e *EtcdPool) callOnUpdate() {
 
 	e.conf.OnUpdate(peers)
 }
+
+// Get peers list from etcd.
+func (e *EtcdPool) GetPeers(ctx context.Context) ([]PeerInfo, error) {
+	keyPrefix := e.conf.KeyPrefix
+
+	resp, err := e.conf.Client.Get(ctx, keyPrefix, etcd.WithPrefix())
+	if err != nil {
+		return nil, errors.Wrapf(err, "while fetching peer listing from '%s'", keyPrefix)
+	}
+
+	var peers []PeerInfo
+
+	for _, v := range resp.Kvs {
+		p := e.unMarshallValue(v.Value)
+		peers = append(peers, p)
+	}
+
+	return peers, nil
+}

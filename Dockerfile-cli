@@ -2,6 +2,9 @@
 FROM --platform=$BUILDPLATFORM golang:1.17 as build
 ARG BUILDPLATFORM
 ARG TARGETPLATFORM
+# https://github.com/docker/buildx/issues/510#issuecomment-768432329
+ENV BUILDPLATFORM=${BUILDPLATFORM:-linux/amd64}
+ENV TARGETPLATFORM=${TARGETPLATFORM:-linux/amd64}
 
 WORKDIR /go/src
 

@@ -1,5 +1,10 @@
 # Build image
-FROM golang:1.17 as build
+FROM --platform=$BUILDPLATFORM golang:1.17 as build
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
+# https://github.com/docker/buildx/issues/510#issuecomment-768432329
+ENV BUILDPLATFORM=${BUILDPLATFORM:-linux/amd64}
+ENV TARGETPLATFORM=${TARGETPLATFORM:-linux/amd64}
 
 WORKDIR /go/src
 
@@ -14,7 +19,7 @@ ADD . /go/src
 ARG VERSION
 
 # Build the server inside the container
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo \
+RUN CGO_ENABLED=0 GOOS=${TARGETPLATFORM%/*} GOARCH=${TARGETPLATFORM#*/} go build -a -installsuffix cgo \
     -ldflags "-w -s -X main.Version=$VERSION" -o /gubernator-cli /go/src/cmd/gubernator-cli/main.go
 
 # Create our deploy image

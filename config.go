@@ -247,6 +247,8 @@ func (d *DaemonConfig) ServerTLS() *tls.Config {
 func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, error) {
 	log := logrus.NewEntry(logger)
 	var conf DaemonConfig
+	var advAddr, advPort string
+	var err error
 
 	if configFile != "" {
 		log.Infof("Loading env config: %s", configFile)
@@ -271,15 +273,24 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 	setter.SetDefault(&conf.DataCenter, os.Getenv("GUBER_DATA_CENTER"), "")
 	setter.SetDefault(&conf.MetricFlags, getEnvMetricFlags(log, "GUBER_METRIC_FLAGS"))
 
-	advAddr, advPort, err := net.SplitHostPort(conf.AdvertiseAddress)
-	if err != nil {
-		return conf, errors.Wrap(err, "GUBER_ADVERTISE_ADDRESS is invalid; expected format is `address:port`")
+	choices := []string{"member-list", "k8s", "etcd", "dns"}
+	setter.SetDefault(&conf.PeerDiscoveryType, os.Getenv("GUBER_PEER_DISCOVERY_TYPE"), "member-list")
+	if !slice.ContainsString(conf.PeerDiscoveryType, choices, nil) {
+		return conf, fmt.Errorf("GUBER_PEER_DISCOVERY_TYPE is invalid; choices are [%s]`", strings.Join(choices, ","))
 	}
-	advAddr, err = ResolveHostIP(advAddr)
-	if err != nil {
-		return conf, errors.Wrap(err, "failed to discover host ip for GUBER_ADVERTISE_ADDRESS")
+
+	// AdvertiseAddress is not used in k8s discovery method. Skip processing and auto-discovery
+	if conf.PeerDiscoveryType != "k8s" {
+		advAddr, advPort, err = net.SplitHostPort(conf.AdvertiseAddress)
+		if err != nil {
+			return conf, errors.Wrap(err, "GUBER_ADVERTISE_ADDRESS is invalid; expected format is `address:port`")
+		}
+		advAddr, err = ResolveHostIP(advAddr)
+		if err != nil {
+			return conf, errors.Wrap(err, "failed to discover host ip for GUBER_ADVERTISE_ADDRESS")
+		}
+		conf.AdvertiseAddress = net.JoinHostPort(advAddr, advPort)
 	}
-	conf.AdvertiseAddress = net.JoinHostPort(advAddr, advPort)
 
 	// Behaviors
 	setter.SetDefault(&conf.Behaviors.BatchTimeout, getEnvDuration(log, "GUBER_BATCH_TIMEOUT"))
@@ -293,12 +304,6 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 	setter.SetDefault(&conf.Behaviors.MultiRegionTimeout, getEnvDuration(log, "GUBER_MULTI_REGION_TIMEOUT"))
 	setter.SetDefault(&conf.Behaviors.MultiRegionBatchLimit, getEnvInteger(log, "GUBER_MULTI_REGION_BATCH_LIMIT"))
 	setter.SetDefault(&conf.Behaviors.MultiRegionSyncWait, getEnvDuration(log, "GUBER_MULTI_REGION_SYNC_WAIT"))
-
-	choices := []string{"member-list", "k8s", "etcd", "dns"}
-	setter.SetDefault(&conf.PeerDiscoveryType, os.Getenv("GUBER_PEER_DISCOVERY_TYPE"), "member-list")
-	if !slice.ContainsString(conf.PeerDiscoveryType, choices, nil) {
-		return conf, fmt.Errorf("GUBER_PEER_DISCOVERY_TYPE is invalid; choices are [%s]`", strings.Join(choices, ","))
-	}
 
 	// TLS Config
 	if anyHasPrefix("GUBER_TLS_", os.Environ()) {
@@ -328,6 +333,7 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 		setter.SetDefault(&conf.TLS.ClientAuthCertFile, os.Getenv("GUBER_TLS_CLIENT_AUTH_CERT"))
 		setter.SetDefault(&conf.TLS.ClientAuthCaFile, os.Getenv("GUBER_TLS_CLIENT_AUTH_CA_CERT"))
 		setter.SetDefault(&conf.TLS.InsecureSkipVerify, getEnvBool(log, "GUBER_TLS_INSECURE_SKIP_VERIFY"))
+		setter.SetDefault(&conf.TLS.ClientAuthServerName, os.Getenv("GUBER_TLS_CLIENT_AUTH_SERVER_NAME"))
 	}
 
 	// ETCD Config

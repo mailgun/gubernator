@@ -78,9 +78,18 @@ func TestSetupTLS(t *testing.T) {
 		{
 			name: "user provided certificates",
 			tls: &gubernator.TLSConfig{
-				CaFile:   "certs/ca.pem",
+				CaFile:   "certs/ca.cert",
 				CertFile: "certs/gubernator.pem",
 				KeyFile:  "certs/gubernator.key",
+			},
+		},
+		{
+			name: "user provided certificate without IP SANs",
+			tls: &gubernator.TLSConfig{
+				CaFile:               "certs/ca.cert",
+				CertFile:             "certs/gubernator_no_ip_san.pem",
+				KeyFile:              "certs/gubernator_no_ip_san.key",
+				ClientAuthServerName: "gubernator",
 			},
 		},
 		{
@@ -92,7 +101,7 @@ func TestSetupTLS(t *testing.T) {
 		{
 			name: "generate server certs with user provided ca",
 			tls: &gubernator.TLSConfig{
-				CaFile:    "certs/ca.pem",
+				CaFile:    "certs/ca.cert",
 				CaKeyFile: "certs/ca.key",
 				AutoTLS:   true,
 			},
@@ -100,7 +109,7 @@ func TestSetupTLS(t *testing.T) {
 		{
 			name: "client auth enabled",
 			tls: &gubernator.TLSConfig{
-				CaFile:     "certs/ca.pem",
+				CaFile:     "certs/ca.cert",
 				CaKeyFile:  "certs/ca.key",
 				AutoTLS:    true,
 				ClientAuth: tls.RequireAndVerifyClientCert,
@@ -118,7 +127,7 @@ func TestSetupTLS(t *testing.T) {
 
 			d := spawnDaemon(t, conf)
 
-			client, err := gubernator.DialV1Server(conf.GRPCListenAddress, tt.tls.ServerTLS)
+			client, err := gubernator.DialV1Server(conf.GRPCListenAddress, tt.tls.ClientTLS)
 			require.NoError(t, err)
 
 			resp, err := client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
@@ -149,7 +158,7 @@ func TestSetupTLSSkipVerify(t *testing.T) {
 		GRPCListenAddress: "127.0.0.1:9695",
 		HTTPListenAddress: "127.0.0.1:9685",
 		TLS: &gubernator.TLSConfig{
-			CaFile:   "certs/ca.pem",
+			CaFile:   "certs/ca.cert",
 			CertFile: "certs/gubernator.pem",
 			KeyFile:  "certs/gubernator.key",
 		},
@@ -173,7 +182,7 @@ func TestSetupTLSSkipVerify(t *testing.T) {
 
 func TestSetupTLSClientAuth(t *testing.T) {
 	serverTLS := gubernator.TLSConfig{
-		CaFile:           "certs/ca.pem",
+		CaFile:           "certs/ca.cert",
 		CertFile:         "certs/gubernator.pem",
 		KeyFile:          "certs/gubernator.key",
 		ClientAuth:       tls.RequireAndVerifyClientCert,
@@ -222,7 +231,7 @@ func TestSetupTLSClientAuth(t *testing.T) {
 
 func TestTLSClusterWithClientAuthentication(t *testing.T) {
 	serverTLS := gubernator.TLSConfig{
-		CaFile:     "certs/ca.pem",
+		CaFile:     "certs/ca.cert",
 		CertFile:   "certs/gubernator.pem",
 		KeyFile:    "certs/gubernator.key",
 		ClientAuth: tls.RequireAndVerifyClientCert,
@@ -282,7 +291,7 @@ func TestHTTPSClientAuth(t *testing.T) {
 		HTTPListenAddress:       "127.0.0.1:9685",
 		HTTPStatusListenAddress: "127.0.0.1:9686",
 		TLS: &gubernator.TLSConfig{
-			CaFile:     "certs/ca.pem",
+			CaFile:     "certs/ca.cert",
 			CertFile:   "certs/gubernator.pem",
 			KeyFile:    "certs/gubernator.key",
 			ClientAuth: tls.RequireAndVerifyClientCert,

@@ -108,6 +108,9 @@ type TLSConfig struct {
 	// (Optional) The client auth Certificate in PEM format. Used if ClientAuthCertFile is unset.
 	ClientAuthCertPEM *bytes.Buffer
 
+	// (Optional) the server name to check when validating the provided certificate
+	ClientAuthServerName string
+
 	// (Optional) The config created for use by the gubernator server. If set, all other
 	// fields in this struct are ignored and this config is used. If unset, gubernator.SetupTLS()
 	// will create a config using the above fields.
@@ -274,6 +277,7 @@ func SetupTLS(conf *TLSConfig) error {
 		}
 	}
 
+	conf.ClientTLS.ServerName = conf.ClientAuthServerName
 	conf.ClientTLS.InsecureSkipVerify = conf.InsecureSkipVerify
 	return nil
 }

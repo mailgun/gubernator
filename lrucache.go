@@ -53,6 +53,10 @@ var accessMetric = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Name: "gubernator_cache_access_count",
 	Help: "Cache access counts.  Label \"type\" = hit|miss.",
 }, []string{"type"})
+var unexpiredEvictionsMetric = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "gubernator_unexpired_evictions_count",
+	Help: "Count the number of cache items which were evicted while unexpired.",
+})
 
 // New creates a new Cache with a maximum size.
 func NewLRUCache(maxSize int) *LRUCache {
@@ -144,6 +148,12 @@ func (c *LRUCache) Remove(key string) {
 func (c *LRUCache) removeOldest() {
 	ele := c.ll.Back()
 	if ele != nil {
+		entry := ele.Value.(*CacheItem)
+
+		if MillisecondNow() < entry.ExpireAt {
+			unexpiredEvictionsMetric.Add(1)
+		}
+
 		c.removeElement(ele)
 	}
 }
@@ -192,6 +202,7 @@ func (collector *LRUCacheCollector) AddCache(cache Cache) {
 func (collector *LRUCacheCollector) Describe(ch chan<- *prometheus.Desc) {
 	sizeMetric.Describe(ch)
 	accessMetric.Describe(ch)
+	unexpiredEvictionsMetric.Describe(ch)
 }
 
 // Collect fetches metric counts and gauges from the cache
@@ -199,6 +210,7 @@ func (collector *LRUCacheCollector) Collect(ch chan<- prometheus.Metric) {
 	sizeMetric.Set(collector.getSize())
 	sizeMetric.Collect(ch)
 	accessMetric.Collect(ch)
+	unexpiredEvictionsMetric.Collect(ch)
 }
 
 func (collector *LRUCacheCollector) getSize() float64 {

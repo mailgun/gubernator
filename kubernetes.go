@@ -17,6 +17,7 @@ limitations under the License.
 package gubernator
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 
@@ -33,12 +34,14 @@ import (
 )
 
 type K8sPool struct {
-	informer cache.SharedIndexInformer
-	client   *kubernetes.Clientset
-	wg       syncutil.WaitGroup
-	log      logrus.FieldLogger
-	conf     K8sPoolConfig
-	done     chan struct{}
+	informer    cache.SharedIndexInformer
+	client      *kubernetes.Clientset
+	wg          syncutil.WaitGroup
+	log         logrus.FieldLogger
+	conf        K8sPoolConfig
+	watchCtx    context.Context
+	watchCancel func()
+	done        chan struct{}
 }
 
 type WatchMechanism string
@@ -82,11 +85,15 @@ func NewK8sPool(conf K8sPoolConfig) (*K8sPool, error) {
 		return nil, errors.Wrap(err, "during NewForConfig()")
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	pool := &K8sPool{
-		done:   make(chan struct{}),
-		log:    conf.Logger,
-		client: client,
-		conf:   conf,
+		done:        make(chan struct{}),
+		log:         conf.Logger,
+		client:      client,
+		conf:        conf,
+		watchCtx:    ctx,
+		watchCancel: cancel,
 	}
 	setter.SetDefault(&pool.log, logrus.WithField("category", "gubernator"))
 
@@ -156,11 +163,11 @@ func (e *K8sPool) startPodWatch() error {
 	listWatch := &cache.ListWatch{
 		ListFunc: func(options meta_v1.ListOptions) (runtime.Object, error) {
 			options.LabelSelector = e.conf.Selector
-			return e.client.CoreV1().Pods(e.conf.Namespace).List(options)
+			return e.client.CoreV1().Pods(e.conf.Namespace).List(context.Background(), options)
 		},
 		WatchFunc: func(options meta_v1.ListOptions) (watch.Interface, error) {
 			options.LabelSelector = e.conf.Selector
-			return e.client.CoreV1().Pods(e.conf.Namespace).Watch(options)
+			return e.client.CoreV1().Pods(e.conf.Namespace).Watch(e.watchCtx, options)
 		},
 	}
 	return e.startGenericWatch(&api_v1.Pod{}, listWatch, e.updatePeersFromPods)
@@ -170,11 +177,11 @@ func (e *K8sPool) startEndpointWatch() error {
 	listWatch := &cache.ListWatch{
 		ListFunc: func(options meta_v1.ListOptions) (runtime.Object, error) {
 			options.LabelSelector = e.conf.Selector
-			return e.client.CoreV1().Endpoints(e.conf.Namespace).List(options)
+			return e.client.CoreV1().Endpoints(e.conf.Namespace).List(context.Background(), options)
 		},
 		WatchFunc: func(options meta_v1.ListOptions) (watch.Interface, error) {
 			options.LabelSelector = e.conf.Selector
-			return e.client.CoreV1().Endpoints(e.conf.Namespace).Watch(options)
+			return e.client.CoreV1().Endpoints(e.conf.Namespace).Watch(e.watchCtx, options)
 		},
 	}
 	return e.startGenericWatch(&api_v1.Endpoints{}, listWatch, e.updatePeersFromEndpoints)
@@ -237,5 +244,6 @@ func (e *K8sPool) updatePeersFromEndpoints() {
 }
 
 func (e *K8sPool) Close() {
+	e.watchCancel()
 	close(e.done)
 }

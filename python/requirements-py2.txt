@@ -8,7 +8,7 @@ grpcio==1.18.0
 more-itertools==5.0.0
 pathlib2==2.3.3
 pluggy==0.8.1
-protobuf==3.6.1
+protobuf==3.15.0
 py==1.10.0
 pytest==4.2.0
 scandir==1.9.0

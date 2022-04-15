@@ -44,8 +44,7 @@ gubernator:
     create: false
 #    name: "teste"
 
-  nodeSelector:
-    group: apps
+  nodeSelector: {}
 
   resources:
     requests:

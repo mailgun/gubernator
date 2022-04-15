@@ -99,7 +99,7 @@ HTTP Port
 - name: GUBER_PEER_DISCOVERY_TYPE
   value: "k8s"
 - name: GUBER_K8S_POD_PORT
-  value: {{ include "gubernator.grpc.port" . }}
+  value: "{{ include "gubernator.grpc.port" . }}"
 - name: GUBER_K8S_ENDPOINTS_SELECTOR
   value: "app=gubernator"
 {{- if .Values.gubernator.debug }}

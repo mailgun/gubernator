@@ -20,4 +20,4 @@ spec:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: {{ .Values.gubernator.autoscaling.cpuAverageUsage }}
+          averageUtilization: {{ .Values.gubernator.autoscaling.cpuAverageUtilization }}

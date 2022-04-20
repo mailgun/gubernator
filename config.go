@@ -164,6 +164,11 @@ func (p PeerInfo) HashKey() string {
 
 type UpdateFunc func([]PeerInfo)
 
+type LogConfig struct {
+	LogLevel  uint32
+	LogFormat string
+}
+
 var DebugEnabled = false
 
 type DaemonConfig struct {
@@ -247,6 +252,7 @@ func (d *DaemonConfig) ServerTLS() *tls.Config {
 func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, error) {
 	log := logrus.NewEntry(logger)
 	var conf DaemonConfig
+	var logConfig LogConfig
 	var advAddr, advPort string
 	var err error
 
@@ -257,10 +263,28 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 		}
 	}
 
+	// Log config
+	setter.SetDefault(&logConfig.LogFormat, os.Getenv("GUBER_LOG_FORMAT"))
+	if logConfig.LogFormat != "" {
+		switch logConfig.LogFormat {
+		case "json":
+			logger.SetFormatter(&logrus.JSONFormatter{})
+		case "text":
+			logger.SetFormatter(&logrus.TextFormatter{})
+		default:
+			return conf, errors.New("GUBER_LOG_FORMAT is invalid; expected value is either json or text")
+		}
+	}
+
 	setter.SetDefault(&DebugEnabled, getEnvBool(log, "GUBER_DEBUG"))
 	if DebugEnabled {
 		logger.SetLevel(logrus.DebugLevel)
 		log.Debug("Debug enabled")
+	}
+
+	setter.SetDefault(&logConfig.LogLevel, uint32(getEnvInteger(log, "GUBER_LOG_LEVEL")))
+	if !DebugEnabled {
+		logger.SetLevel(logrus.Level(logConfig.LogLevel))
 	}
 
 	// Main config

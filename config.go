@@ -273,13 +273,11 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 	}
 
 	setter.SetDefault(&DebugEnabled, getEnvBool(log, "GUBER_DEBUG"))
+	setter.SetDefault(&logLevel, os.Getenv("GUBER_LOG_LEVEL"))
 	if DebugEnabled {
 		logger.SetLevel(logrus.DebugLevel)
 		log.Debug("Debug enabled")
-	}
-
-	setter.SetDefault(&logLevel, os.Getenv("GUBER_LOG_LEVEL"))
-	if !DebugEnabled && logLevel != "" {
+	} else if logLevel != "" {
 		logrusLogLevel, err := logrus.ParseLevel(logLevel)
 		if err != nil {
 			return conf, errors.Wrap(err, "invalid log level")

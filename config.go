@@ -247,6 +247,8 @@ func (d *DaemonConfig) ServerTLS() *tls.Config {
 func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, error) {
 	log := logrus.NewEntry(logger)
 	var conf DaemonConfig
+	var logLevel string
+	var logFormat string
 	var advAddr, advPort string
 	var err error
 
@@ -257,10 +259,31 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 		}
 	}
 
+	// Log config
+	setter.SetDefault(&logFormat, os.Getenv("GUBER_LOG_FORMAT"))
+	if logFormat != "" {
+		switch logFormat {
+		case "json":
+			logger.SetFormatter(&logrus.JSONFormatter{})
+		case "text":
+			logger.SetFormatter(&logrus.TextFormatter{})
+		default:
+			return conf, errors.New("GUBER_LOG_FORMAT is invalid; expected value is either json or text")
+		}
+	}
+
 	setter.SetDefault(&DebugEnabled, getEnvBool(log, "GUBER_DEBUG"))
+	setter.SetDefault(&logLevel, os.Getenv("GUBER_LOG_LEVEL"))
 	if DebugEnabled {
 		logger.SetLevel(logrus.DebugLevel)
 		log.Debug("Debug enabled")
+	} else if logLevel != "" {
+		logrusLogLevel, err := logrus.ParseLevel(logLevel)
+		if err != nil {
+			return conf, errors.Wrap(err, "invalid log level")
+		}
+
+		logger.SetLevel(logrusLogLevel)
 	}
 
 	// Main config

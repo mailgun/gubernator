@@ -13,7 +13,11 @@ jobs:
         uses: actions/checkout@v2
         
       - name: Update 'version' file
-        run: echo "${{ github.event.release.tag_name }}" > version
+        run: |
+          export VERSION="${{ github.event.release.tag_name }}"
+          echo "$VERSION" > version
+          sed -i "s/^version:.*$/version: ${VERSION:1}/" charts/gubernator/Chart.yaml
+          sed -i "s/^appVersion:.*$/appVersion: ${VERSION:1}/" charts/gubernator/Chart.yaml
    
       # Buildx Needs QEMU
       - name: Set up QEMU
@@ -47,4 +51,10 @@ jobs:
           default_author: github_actions
           message: 'Update version number'
           branch: master
-          add: 'version'
+          add: '["version", "charts/gubernator/Chart.yaml"]'
+
+      # Publish the Helm chart
+      - name: Publish Helm chart
+        uses: stefanprodan/helm-gh-pages@v1.5.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}

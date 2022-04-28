@@ -38,7 +38,8 @@ jobs:
             ghcr.io/mailgun/gubernator:latest
           build-args: |
             VERSION=${{ github.event.release.tag_name }}
-          push: true           
+          pull: true
+          push: true
       
       # Commit the updated 'version' file
       - name: Commit changes

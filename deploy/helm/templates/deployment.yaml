@@ -38,7 +38,6 @@ spec:
           {{- include "gubernator.env" . | nindent 10 }}
           image: {{ .Values.gubernator.image.repository }}:{{ .Values.gubernator.image.tag | default .Chart.AppVersion }}
           imagePullPolicy: {{ .Values.gubernator.image.pullPolicy }}
-          imagePullPolicy: {{ .Values.gubernator.image.pullPolicy }}
           ports:
             - name: grpc
               containerPort: {{ include "gubernator.grpc.port" .  }}

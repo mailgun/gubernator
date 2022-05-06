@@ -28,11 +28,16 @@ spec:
       {{ else }}
       serviceAccountName: {{ .Values.gubernator.serviceAccount.name }}
       {{- end}}
+      {{- with $.Values.gubernator.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: gubernator
           env:
           {{- include "gubernator.env" . | nindent 10 }}
           image: {{ .Values.gubernator.image.repository }}:{{ .Values.gubernator.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.gubernator.image.pullPolicy }}
           imagePullPolicy: {{ .Values.gubernator.image.pullPolicy }}
           ports:
             - name: grpc

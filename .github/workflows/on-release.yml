@@ -31,13 +31,14 @@ jobs:
           password: ${{ github.token }}
       -
         name: Build and push
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v3
         with:
           tags: |
             ghcr.io/mailgun/gubernator:${{ github.event.release.tag_name }}
             ghcr.io/mailgun/gubernator:latest
           build-args: |
             VERSION=${{ github.event.release.tag_name }}
+          platforms: linux/amd64,linux/arm64
           push: true           
       
       # Commit the updated 'version' file

@@ -28,6 +28,10 @@ spec:
       {{ else }}
       serviceAccountName: {{ .Values.gubernator.serviceAccount.name }}
       {{- end}}
+      {{- with $.Values.gubernator.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: gubernator
           env:

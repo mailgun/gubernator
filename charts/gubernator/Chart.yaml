@@ -1,9 +1,9 @@
 apiVersion: v2
-name: helm
+name: gubernator
 description: A Helm Chart for gubernator
 
 type: application
 
-version: 1.0.0
+version: 2.0.0-rc.19
 
-appVersion: "1.0.0"
+appVersion: 2.0.0-rc.19

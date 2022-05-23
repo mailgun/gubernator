@@ -2,6 +2,16 @@ apiVersion: v1
 entries:
   gubernator:
   - apiVersion: v2
+    appVersion: 2.0.0-rc.23
+    created: "2022-05-23T17:23:13.562956748Z"
+    description: A Helm Chart for gubernator
+    digest: d16fd24c367fcdb7a2460f68414072c01118cfba011fae6c3d46574c6441a6c9
+    name: gubernator
+    type: application
+    urls:
+    - https://mailgun.github.io/gubernator/gubernator-2.0.0-rc.23.tgz
+    version: 2.0.0-rc.23
+  - apiVersion: v2
     appVersion: 2.0.0-rc.22
     created: "2022-05-18T15:55:46.480148977Z"
     description: A Helm Chart for gubernator
@@ -31,4 +41,4 @@ entries:
     urls:
     - https://mailgun.github.io/gubernator/gubernator-2.0.0-rc.19.tgz
     version: 2.0.0-rc.19
-generated: "2022-05-18T15:55:46.479362967Z"
+generated: "2022-05-23T17:23:13.562403949Z"

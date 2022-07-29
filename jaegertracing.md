@@ -1,22 +1,25 @@
-# Jaeger Tracing
-Gubernator supports [OpenTracing](https://opentracing.io) for generating
-detailed traces of server behavior using [Jaeger
-Tracing](https://www.jaegertracing.io/) tools.
+# OpenTelemetry Tracing with Jaeger
+Gubernator supports [OpenTelemetry](https://opentelemetry.io) for generating
+detailed traces of application behavior and sending to [Jaeger
+Tracing](https://www.jaegertracing.io/) server.
+
+Read more at:
+[https://github.com/mailgun/holster/blob/master/tracing/README.md](https://github.com/mailgun/holster/blob/master/tracing/README.md)
 
 ## Enabling Jaeger
 Jaeger is enabled by default and sends traces to localhost port 6831/udp.
 
 Configure with environment variables, such as:
 
-| Name                   | Description |
-| ---------------------- | ----------- |
-| `JAEGER_SERVICE_NAME`  | Service name. |
-| `JAEGER_AGENT_HOST`    | Jaeger server hostname or IP. |
-| `JAEGER_SAMPLER_TYPE`  | The sampler type: `remote`, `const`, `probablistic`, or `ratelimiting`. |
-| `JAEGER_SAMPLER_PARAM` | The sampler parameter. |
-| `JAEGER_DISABLED`      | Set to `true` to disable sending Jaeger traces. |
+| Name                                 | Description |
+| ------------------------------------ | ----------- |
+| `OTEL_EXPORTER_JAEGER_AGENT_HOST`    | Jaeger server hostname or IP. |
+| `OTEL_EXPORTER_JAEGER_SAMPLER_TYPE`  | The sampler type: `remote`, `const`, `probablistic`, or `ratelimiting`. |
+| `OTEL_EXPORTER_JAEGER_SAMPLER_PARAM` | The sampler parameter. |
+| `OTEL_EXPORTER_JAEGER_DISABLED`      | Set to `true` to disable sending Jaeger traces. |
 
-See also the [full list of variables](https://github.com/jaegertracing/jaeger-client-go#environment-variables).
+See also the [full list of
+variables](https://github.com/open-telemetry/opentelemetry-go/tree/main/exporters/jaeger).
 
 ## Sampling
 Because Gubernator generates a trace for each request, it is recommended to use
@@ -43,21 +46,16 @@ If using Gubernator's Golang gRPC client, the client must be created like so:
 
 ```go
     import (
-        "github.com/opentracing/opentracing-go"
-        otgrpc "github.com/opentracing-contrib/go-grpc"
+        "go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
         "google.golang.org/grpc"
     )
 
     // ...
 
-    tracer := opentracing.GlobalTracer()
-    tracingUnaryInterceptor := otgrpc.OpenTracingClientInterceptor(tracer)
-    tracingStreamInterceptor := otgrpc.OpenTracingStreamClientInterceptor(tracer)
-
     opts := []grpc.DialOption{
         grpc.WithBlock(),
-        grpc.WithUnaryInterceptor(tracingUnaryInterceptor),
-        grpc.WithStreamInterceptor(tracingStreamInterceptor),
+        grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
+        grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
     }
 
     endpoint := "<your-endpoint>"

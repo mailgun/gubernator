@@ -27,15 +27,16 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	guber "github.com/mailgun/gubernator/v2"
-	"github.com/mailgun/gubernator/v2/tracing"
 	"github.com/mailgun/holster/v4/clock"
+	"github.com/mailgun/holster/v4/ctxutil"
+	"github.com/mailgun/holster/v4/errors"
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
-	"github.com/opentracing/opentracing-go"
-	"github.com/opentracing/opentracing-go/ext"
-	"github.com/pkg/errors"
+	"github.com/mailgun/holster/v4/tracing"
 	"github.com/sirupsen/logrus"
-	jaegerConfig "github.com/uber/jaeger-client-go/config"
+	"go.opentelemetry.io/otel/attribute"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/time/rate"
 )
 
@@ -60,37 +61,57 @@ func main() {
 	flag.BoolVar(&quiet, "q", false, "Quiet logging")
 	flag.Parse()
 
-	ctx := context.Background()
-	err := initTracing()
-	if err != nil {
-		log.WithError(err).Warn("Error in initTracing")
-	}
-	span, _ := tracing.StartSpan(ctx)
-
-	// Print startup message.
-	argsMsg := fmt.Sprintf("Command line: %s", strings.Join(os.Args[1:], " "))
-	log.Info(argsMsg)
-	tracing.LogInfo(span, argsMsg)
-	span.Finish()
-
-	conf, err := guber.SetupDaemonConfig(log, configFile)
-	checkErr(err)
-	setter.SetOverride(&conf.GRPCListenAddress, grpcAddress)
-
-	if configFile == "" && grpcAddress == "" && os.Getenv("GUBER_GRPC_ADDRESS") == "" {
-		checkErr(errors.New("please provide a GRPC endpoint via -e or from a config " +
-			"file via -config or set the env GUBER_GRPC_ADDRESS"))
-	}
-
 	if quiet {
 		log.SetLevel(logrus.ErrorLevel)
 	}
 
-	err = guber.SetupTLS(conf.TLS)
-	checkErr(err)
+	// Initialize tracing.
+	res, err := tracing.NewResource("gubernator-cli", "")
+	if err != nil {
+		log.WithError(err).Fatal("Error in tracing.NewResource")
+	}
+	ctx := context.Background()
+	_, _, err = tracing.InitTracing(ctx,
+		"github.com/mailgun/gubernator/v2/cmd/gubernator-cli",
+		sdktrace.WithResource(res),
+	)
+	if err != nil {
+		log.WithError(err).Warn("Error in tracing.InitTracing")
+	}
 
-	log.Infof("Connecting to '%s'...\n", conf.GRPCListenAddress)
-	client, err := guber.DialV1Server(conf.GRPCListenAddress, conf.ClientTLS())
+	// Print startup message.
+	startCtx := tracing.StartScope(ctx)
+	argsMsg := fmt.Sprintf("Command line: %s", strings.Join(os.Args[1:], " "))
+	log.Info(argsMsg)
+	tracing.EndScope(startCtx, nil)
+
+	var client guber.V1Client
+	err = tracing.Scope(ctx, func(ctx context.Context) error {
+		// Print startup message.
+		cmdLine := strings.Join(os.Args[1:], " ")
+		logrus.WithContext(ctx).Info("Command line: " + cmdLine)
+
+		conf, err := guber.SetupDaemonConfig(log, configFile)
+		if err != nil {
+			return err
+		}
+		setter.SetOverride(&conf.GRPCListenAddress, grpcAddress)
+
+		if configFile == "" && grpcAddress == "" && os.Getenv("GUBER_GRPC_ADDRESS") == "" {
+			return errors.New("please provide a GRPC endpoint via -e or from a config " +
+				"file via -config or set the env GUBER_GRPC_ADDRESS")
+		}
+
+		err = guber.SetupTLS(conf.TLS)
+		if err != nil {
+			return err
+		}
+
+		log.WithContext(ctx).Infof("Connecting to '%s'...", conf.GRPCListenAddress)
+		client, err = guber.DialV1Server(conf.GRPCListenAddress, conf.ClientTLS())
+		return err
+	})
+
 	checkErr(err)
 
 	// Generate a selection of rate limits with random limits.
@@ -156,26 +177,26 @@ func randInt(min, max int) int {
 }
 
 func sendRequest(ctx context.Context, client guber.V1Client, req *guber.GetRateLimitsReq) {
-	span, ctx := tracing.StartSpan(ctx)
-	defer span.Finish()
-	ctx, cancel := tracing.ContextWithTimeout(ctx, timeout)
+	ctx = tracing.StartScope(ctx)
+	defer tracing.EndScope(ctx, nil)
+
+	ctx, cancel := ctxutil.WithTimeout(ctx, timeout)
 
 	// Now hit our cluster with the rate limits
 	resp, err := client.GetRateLimits(ctx, req)
 	cancel()
 	if err != nil {
-		ext.LogError(span, errors.Wrap(err, "Error in client.GetRateLimits"))
-		log.WithError(err).Error("Error in client.GetRateLimits")
+		log.WithContext(ctx).WithError(err).Error("Error in client.GetRateLimits")
 		return
 	}
 
 	// Sanity checks.
 	if resp == nil {
-		log.Error("Response object is unexpectedly nil")
+		log.WithContext(ctx).Error("Response object is unexpectedly nil")
 		return
 	}
 	if resp.Responses == nil {
-		log.Error("Responses array is unexpectedly nil")
+		log.WithContext(ctx).Error("Responses array is unexpectedly nil")
 		return
 	}
 
@@ -185,39 +206,20 @@ func sendRequest(ctx context.Context, client guber.V1Client, req *guber.GetRateL
 	for itemNum, resp := range resp.Responses {
 		if resp.Status == guber.Status_OVER_LIMIT {
 			overlimit = true
-			log.WithField("name", req.Requests[itemNum].Name).Info("Overlimit!")
+			log.WithContext(ctx).WithField("name", req.Requests[itemNum].Name).
+				Info("Overlimit!")
 		}
 	}
 
 	if overlimit {
-		span.SetTag("overlimit", true)
+		span := trace.SpanFromContext(ctx)
+		span.SetAttributes(
+			attribute.Bool("overlimit", true),
+		)
+
 		if !quiet {
-			log.Info(spew.Sdump(resp))
+			dumpResp := spew.Sdump(resp)
+			log.WithContext(ctx).Info(dumpResp)
 		}
 	}
-}
-
-// Configure tracer and set as global tracer.
-// Be sure to call closer.Close() on application exit.
-func initTracing() error {
-	// Configure new tracer.
-	cfg, err := jaegerConfig.FromEnv()
-	if err != nil {
-		return errors.Wrap(err, "Error in jaeger.FromEnv()")
-	}
-	if cfg.ServiceName == "" {
-		cfg.ServiceName = "gubernator-cli"
-	}
-
-	var tracer opentracing.Tracer
-
-	tracer, _, err = cfg.NewTracer()
-	if err != nil {
-		return errors.Wrap(err, "Error in cfg.NewTracer")
-	}
-
-	// Set as global tracer.
-	opentracing.SetGlobalTracer(tracer)
-
-	return nil
 }

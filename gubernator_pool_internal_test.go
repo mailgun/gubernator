@@ -42,9 +42,9 @@ func TestGubernatorPoolInternal(t *testing.T) {
 		conf.SetDefaults()
 
 		// Test that getWorker() interpolates the hash to find the expected worker.
-		testCases := []struct{
-			Name string
-			Hash uint64
+		testCases := []struct {
+			Name        string
+			Hash        uint64
 			ExpectedIdx int
 		}{
 			{"Hash 0%", 0, 0},

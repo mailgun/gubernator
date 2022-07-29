@@ -45,11 +45,12 @@ import (
 	"sync/atomic"
 
 	"github.com/OneOfOne/xxhash"
-	"github.com/mailgun/gubernator/v2/tracing"
+	"github.com/mailgun/holster/v4/errors"
 	"github.com/mailgun/holster/v4/setter"
-	"github.com/opentracing/opentracing-go/ext"
-	"github.com/pkg/errors"
+	"github.com/mailgun/holster/v4/tracing"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type GubernatorPool struct {
@@ -133,7 +134,7 @@ func NewGubernatorPool(conf *Config, concurrency int, cacheSize int) *Gubernator
 		workers:         make([]*poolWorker, concurrency),
 		workerCacheSize: cacheSize / concurrency,
 		hasher:          newPoolHasher(),
-		hashRingStep:    uint64(1 << 63) / uint64(concurrency),
+		hashRingStep:    uint64(1<<63) / uint64(concurrency),
 		conf:            conf,
 		done:            make(chan struct{}),
 	}
@@ -246,9 +247,12 @@ func (chp *GubernatorPool) worker(worker *poolWorker) {
 }
 
 // Send a GetRateLimit request to worker pool.
-func (chp *GubernatorPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) (*RateLimitResp, error) {
-	span, ctx := tracing.StartSpan(ctx)
-	defer span.Finish()
+func (chp *GubernatorPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) (retval *RateLimitResp, reterr error) {
+	ctx = tracing.StartScope(ctx)
+	defer func() {
+		tracing.EndScope(ctx, reterr)
+	}()
+	span := trace.SpanFromContext(ctx)
 
 	// Delegate request to assigned channel based on request key.
 	worker := chp.getWorker(rlRequest.UniqueKey)
@@ -259,33 +263,34 @@ func (chp *GubernatorPool) GetRateLimit(ctx context.Context, rlRequest *RateLimi
 	}
 
 	// Send request.
-	tracing.LogInfo(span, "Sending request...", "channelLength", len(worker.getRateLimitRequest))
+	span.AddEvent("Sending request...", trace.WithAttributes(
+		attribute.Int("channelLength", len(worker.getRateLimitRequest)),
+	))
+
 	select {
 	case worker.getRateLimitRequest <- handlerRequest:
 		// Successfully sent request.
 	case <-ctx.Done():
-		ext.LogError(span, ctx.Err())
 		return nil, ctx.Err()
 	}
 
 	poolWorkerQueueLength.WithLabelValues("GetRateLimit", worker.name).Observe(float64(len(worker.getRateLimitRequest)))
 
 	// Wait for response.
-	tracing.LogInfo(span, "Waiting for response...")
+	span.AddEvent("Waiting for response...")
 	select {
 	case handlerResponse := <-handlerRequest.resp:
 		// Successfully read response.
 		return handlerResponse.rl, handlerResponse.err
 	case <-ctx.Done():
-		ext.LogError(span, ctx.Err())
 		return nil, ctx.Err()
 	}
 }
 
 // Handle request received by worker.
 func (chp *GubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cache) {
-	span, ctx := tracing.StartSpan(handlerRequest.ctx)
-	defer span.Finish()
+	ctx := tracing.StartScope(handlerRequest.ctx)
+	defer tracing.EndScope(ctx, nil)
 
 	var rlResponse *RateLimitResp
 	var err error
@@ -297,7 +302,7 @@ func (chp *GubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cac
 			msg := "Error in tokenBucket"
 			countError(err, msg)
 			err = errors.Wrap(err, msg)
-			ext.LogError(span, err)
+			trace.SpanFromContext(ctx).RecordError(err)
 		}
 
 	case Algorithm_LEAKY_BUCKET:
@@ -306,12 +311,12 @@ func (chp *GubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cac
 			msg := "Error in leakyBucket"
 			countError(err, msg)
 			err = errors.Wrap(err, msg)
-			ext.LogError(span, err)
+			trace.SpanFromContext(ctx).RecordError(err)
 		}
 
 	default:
 		err = errors.Errorf("Invalid rate limit algorithm '%d'", handlerRequest.request.Algorithm)
-		ext.LogError(span, err)
+		trace.SpanFromContext(ctx).RecordError(err)
 		checkErrorCounter.WithLabelValues("Invalid algorithm").Add(1)
 	}
 
@@ -326,16 +331,18 @@ func (chp *GubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cac
 
 	case <-ctx.Done():
 		// Context canceled.
-		ext.LogError(span, ctx.Err())
+		trace.SpanFromContext(ctx).RecordError(err)
 	}
 }
 
 // Atomically load cache from persistent storage.
 // Read from persistent storage.  Load into each appropriate worker's cache.
 // Workers are locked during this load operation to prevent race conditions.
-func (chp *GubernatorPool) Load(ctx context.Context) error {
-	span, ctx := tracing.StartSpan(ctx)
-	defer span.Finish()
+func (chp *GubernatorPool) Load(ctx context.Context) (reterr error) {
+	ctx = tracing.StartScope(ctx)
+	defer func() {
+		tracing.EndScope(ctx, reterr)
+	}()
 
 	ch, err := chp.conf.Loader.Load()
 	if err != nil {
@@ -420,8 +427,8 @@ mainloop:
 }
 
 func (chp *GubernatorPool) handleLoad(request poolLoadRequest, cache Cache) {
-	span, ctx := tracing.StartSpan(request.ctx)
-	defer span.Finish()
+	ctx := tracing.StartScope(request.ctx)
+	defer tracing.EndScope(ctx, nil)
 
 mainloop:
 	for {
@@ -451,16 +458,18 @@ mainloop:
 
 	case <-ctx.Done():
 		// Context canceled.
-		ext.LogError(span, ctx.Err())
+		trace.SpanFromContext(ctx).RecordError(ctx.Err())
 	}
 }
 
 // Atomically store cache to persistent storage.
 // Save all workers' caches to persistent storage.
 // Workers are locked during this store operation to prevent race conditions.
-func (chp *GubernatorPool) Store(ctx context.Context) error {
-	span, ctx := tracing.StartSpan(ctx)
-	defer span.Finish()
+func (chp *GubernatorPool) Store(ctx context.Context) (reterr error) {
+	ctx = tracing.StartScope(ctx)
+	defer func() {
+		tracing.EndScope(ctx, reterr)
+	}()
 
 	var wg sync.WaitGroup
 	out := make(chan *CacheItem, 500)
@@ -469,14 +478,14 @@ func (chp *GubernatorPool) Store(ctx context.Context) error {
 	for _, worker := range chp.workers {
 		wg.Add(1)
 
-		go func(worker *poolWorker) {
-			span2, ctx2 := tracing.StartNamedSpan(ctx, fmt.Sprintf("%p", worker))
-			defer span2.Finish()
+		go func(ctx context.Context, worker *poolWorker) {
+			ctx = tracing.StartNamedScope(ctx, fmt.Sprintf("%p", worker))
+			defer tracing.EndScope(ctx, nil)
 			defer wg.Done()
 
 			respChan := make(chan poolStoreResponse)
 			req := poolStoreRequest{
-				ctx:      ctx2,
+				ctx:      ctx,
 				response: respChan,
 				out:      out,
 			}
@@ -489,18 +498,18 @@ func (chp *GubernatorPool) Store(ctx context.Context) error {
 					// Successfully received response.
 					return
 
-				case <-ctx2.Done():
+				case <-ctx.Done():
 					// Context canceled.
-					ext.LogError(span2, ctx2.Err())
+					trace.SpanFromContext(ctx).RecordError(ctx.Err())
 					return
 				}
 
-			case <-ctx2.Done():
+			case <-ctx.Done():
 				// Context canceled.
-				ext.LogError(span2, ctx2.Err())
+				trace.SpanFromContext(ctx).RecordError(ctx.Err())
 				return
 			}
-		}(worker)
+		}(ctx, worker)
 	}
 
 	// When all iterators are done, close `out` channel.
@@ -510,16 +519,20 @@ func (chp *GubernatorPool) Store(ctx context.Context) error {
 	}()
 
 	if ctx.Err() != nil {
-		ext.LogError(span, ctx.Err())
 		return ctx.Err()
 	}
 
-	return chp.conf.Loader.Save(out)
+	err := chp.conf.Loader.Save(out)
+	if err != nil {
+		return errors.Wrap(err, "error in chp.conf.Loader.Save")
+	}
+
+	return nil
 }
 
 func (chp *GubernatorPool) handleStore(request poolStoreRequest, cache Cache) {
-	span, ctx := tracing.StartSpan(request.ctx)
-	defer span.Finish()
+	ctx := tracing.StartScope(request.ctx)
+	defer tracing.EndScope(ctx, nil)
 
 	for item := range cache.Each() {
 		select {
@@ -528,7 +541,7 @@ func (chp *GubernatorPool) handleStore(request poolStoreRequest, cache Cache) {
 
 		case <-ctx.Done():
 			// Context canceled.
-			ext.LogError(span, ctx.Err())
+			trace.SpanFromContext(ctx).RecordError(ctx.Err())
 			return
 		}
 	}
@@ -541,14 +554,16 @@ func (chp *GubernatorPool) handleStore(request poolStoreRequest, cache Cache) {
 
 	case <-ctx.Done():
 		// Context canceled.
-		ext.LogError(span, ctx.Err())
+		trace.SpanFromContext(ctx).RecordError(ctx.Err())
 	}
 }
 
 // Add to worker's cache.
-func (chp *GubernatorPool) AddCacheItem(ctx context.Context, key string, item *CacheItem) error {
-	span, ctx := tracing.StartSpan(ctx)
-	defer span.Finish()
+func (chp *GubernatorPool) AddCacheItem(ctx context.Context, key string, item *CacheItem) (reterr error) {
+	ctx = tracing.StartScope(ctx)
+	defer func() {
+		tracing.EndScope(ctx, reterr)
+	}()
 
 	respChan := make(chan poolAddCacheItemResponse)
 	worker := chp.getWorker(key)
@@ -570,20 +585,18 @@ func (chp *GubernatorPool) AddCacheItem(ctx context.Context, key string, item *C
 
 		case <-ctx.Done():
 			// Context canceled.
-			ext.LogError(span, ctx.Err())
 			return ctx.Err()
 		}
 
 	case <-ctx.Done():
 		// Context canceled.
-		ext.LogError(span, ctx.Err())
 		return ctx.Err()
 	}
 }
 
 func (chp *GubernatorPool) handleAddCacheItem(request poolAddCacheItemRequest, cache Cache) {
-	span, ctx := tracing.StartSpan(request.ctx)
-	defer span.Finish()
+	ctx := tracing.StartScope(request.ctx)
+	defer tracing.EndScope(ctx, nil)
 
 	exists := cache.Add(request.item)
 	response := poolAddCacheItemResponse{exists}
@@ -594,14 +607,16 @@ func (chp *GubernatorPool) handleAddCacheItem(request poolAddCacheItemRequest, c
 
 	case <-ctx.Done():
 		// Context canceled.
-		ext.LogError(span, ctx.Err())
+		trace.SpanFromContext(ctx).RecordError(ctx.Err())
 	}
 }
 
 // Get item from worker's cache.
-func (chp *GubernatorPool) GetCacheItem(ctx context.Context, key string) (*CacheItem, bool, error) {
-	span, ctx := tracing.StartSpan(ctx)
-	defer span.Finish()
+func (chp *GubernatorPool) GetCacheItem(ctx context.Context, key string) (item *CacheItem, found bool, reterr error) {
+	ctx = tracing.StartScope(ctx)
+	defer func() {
+		tracing.EndScope(ctx, reterr)
+	}()
 
 	respChan := make(chan poolGetCacheItemResponse)
 	worker := chp.getWorker(key)
@@ -623,20 +638,18 @@ func (chp *GubernatorPool) GetCacheItem(ctx context.Context, key string) (*Cache
 
 		case <-ctx.Done():
 			// Context canceled.
-			ext.LogError(span, ctx.Err())
 			return nil, false, ctx.Err()
 		}
 
 	case <-ctx.Done():
 		// Context canceled.
-		ext.LogError(span, ctx.Err())
 		return nil, false, ctx.Err()
 	}
 }
 
 func (chp *GubernatorPool) handleGetCacheItem(request poolGetCacheItemRequest, cache Cache) {
-	span, ctx := tracing.StartSpan(request.ctx)
-	defer span.Finish()
+	ctx := tracing.StartScope(request.ctx)
+	defer tracing.EndScope(ctx, nil)
 
 	item, ok := cache.GetItem(request.key)
 	response := poolGetCacheItemResponse{item, ok}
@@ -647,6 +660,6 @@ func (chp *GubernatorPool) handleGetCacheItem(request poolGetCacheItemRequest, c
 
 	case <-ctx.Done():
 		// Context canceled.
-		ext.LogError(span, ctx.Err())
+		trace.SpanFromContext(ctx).RecordError(ctx.Err())
 	}
 }

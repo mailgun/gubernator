@@ -26,17 +26,16 @@ import (
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/mailgun/gubernator/v2/tracing"
+	"github.com/mailgun/holster/v4/errors"
 	"github.com/mailgun/holster/v4/etcdutil"
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
-	otgrpc "github.com/opentracing-contrib/go-grpc"
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/mailgun/holster/v4/tracing"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -65,19 +64,19 @@ type Daemon struct {
 // This function will block until the daemon responds to connections as specified
 // by GRPCListenAddress and HTTPListenAddress
 func SpawnDaemon(ctx context.Context, conf DaemonConfig) (*Daemon, error) {
-	span, ctx := tracing.StartSpan(ctx)
-	defer span.Finish()
+	var s *Daemon
 
-	s := Daemon{
-		log:  conf.Logger,
-		conf: conf,
-	}
-	setter.SetDefault(&s.log, logrus.WithField("category", "gubernator"))
+	err := tracing.Scope(ctx, func(ctx context.Context) error {
+		s = &Daemon{
+			log:  conf.Logger,
+			conf: conf,
+		}
+		setter.SetDefault(&s.log, logrus.WithField("category", "gubernator"))
 
-	if err := s.Start(ctx); err != nil {
-		return nil, err
-	}
-	return &s, nil
+		return s.Start(ctx)
+	})
+
+	return s, err
 }
 
 func (s *Daemon) Start(ctx context.Context) error {
@@ -102,6 +101,10 @@ func (s *Daemon) Start(ctx context.Context) error {
 	opts := []grpc.ServerOption{
 		grpc.StatsHandler(s.statsHandler),
 		grpc.MaxRecvMsgSize(1024 * 1024),
+
+		// OpenTelemetry instrumentation on gRPC endpoints.
+		grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
+		grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
 	}
 
 	if s.conf.GRPCMaxConnectionAgeSeconds > 0 {
@@ -114,16 +117,6 @@ func (s *Daemon) Start(ctx context.Context) error {
 	if err := SetupTLS(s.conf.TLS); err != nil {
 		return err
 	}
-
-	// Opentracing on gRPC endpoints.
-	tracer := opentracing.GlobalTracer()
-	tracingUnaryInterceptor := otgrpc.OpenTracingServerInterceptor(tracer)
-	tracingStreamInterceptor := otgrpc.OpenTracingStreamServerInterceptor(tracer)
-
-	opts = append(opts,
-		grpc.UnaryInterceptor(tracingUnaryInterceptor),
-		grpc.StreamInterceptor(tracingStreamInterceptor),
-	)
 
 	if s.conf.ServerTLS() != nil {
 		// Create two GRPC server instances, one for TLS and the other for the API Gateway

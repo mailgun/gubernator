@@ -11,13 +11,13 @@ Jaeger export is enabled by default and sends traces to localhost port
 6831/udp.
 
 Configure with environment variables.  See [OpenTelemetry configuration
-spec](https://github.com/open-telemetry/opentelemetry-go/tree/main/exporters/jaeger).
+spec](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/sdk-environment-variables.md).
 
 ## Sampling
 Because Gubernator generates a trace for each request, the tracing volume could
 exceed Jaeger's resources.  In production, it is recommended to set
 `OTEL_TRACES_SAMPLER=parentbased_traceidratio` [sampler
-type](https://www.jaegertracing.io/docs/1.30/sampling/) and
+type](https://opentelemetry.io/docs/concepts/sdk-configuration/general-sdk-configuration/#otel_traces_sampler) and
 `OTEL_TRACES_SAMPLER_ARG` to a decimal number between 0 (none) and 1 (all) for
 the proportion of traces to be sampled.
 

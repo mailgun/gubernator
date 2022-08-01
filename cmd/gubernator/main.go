@@ -26,12 +26,11 @@ import (
 	"syscall"
 
 	"github.com/mailgun/gubernator/v2"
-	"github.com/mailgun/gubernator/v2/tracing"
 	"github.com/mailgun/holster/v4/clock"
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/mailgun/holster/v4/ctxutil"
+	"github.com/mailgun/holster/v4/tracing"
 	"github.com/sirupsen/logrus"
-	jaegerConfig "github.com/uber/jaeger-client-go/config"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"k8s.io/klog"
 )
 
@@ -55,16 +54,25 @@ func main() {
 	klog.InitFlags(nil)
 	flag.Set("logtostderr", "true")
 
-	err := initTracing()
+	// Initialize tracing.
+	res, err := tracing.NewResource("gubernator", Version)
 	if err != nil {
-		log.WithError(err).Warn("Error in initTracing")
+		log.WithError(err).Fatal("Error in tracing.NewResource")
+	}
+
+	ctx, _, err := tracing.InitTracing(context.Background(),
+		"github.com/mailgun/gubernator/v2",
+		sdktrace.WithResource(res),
+	)
+	if err != nil {
+		log.WithError(err).Warn("Error in tracing.InitTracing")
 	}
 
 	// Read our config from the environment or optional environment config file
 	conf, err := gubernator.SetupDaemonConfig(logrus.StandardLogger(), configFile)
 	checkErr(err, "while getting config")
 
-	ctx, cancel := tracing.ContextWithTimeout(context.Background(), clock.Second*10)
+	ctx, cancel := ctxutil.WithTimeout(ctx, clock.Second*10)
 	defer cancel()
 
 	// Start the daemon
@@ -78,6 +86,7 @@ func main() {
 	for range c {
 		log.Info("caught signal; shutting down")
 		daemon.Close()
+		tracing.CloseTracing(context.Background())
 		exit(0)
 	}
 }
@@ -94,29 +103,4 @@ func exit(code int) {
 		tracerCloser.Close()
 	}
 	os.Exit(code)
-}
-
-// Configure tracer and set as global tracer.
-// Be sure to call closer.Close() on application exit.
-func initTracing() error {
-	// Configure new tracer.
-	cfg, err := jaegerConfig.FromEnv()
-	if err != nil {
-		return errors.Wrap(err, "Error in jaeger.FromEnv()")
-	}
-	if cfg.ServiceName == "" {
-		cfg.ServiceName = "gubernator"
-	}
-
-	var tracer opentracing.Tracer
-
-	tracer, tracerCloser, err = cfg.NewTracer()
-	if err != nil {
-		return errors.Wrap(err, "Error in cfg.NewTracer")
-	}
-
-	// Set as global tracer.
-	opentracing.SetGlobalTracer(tracer)
-
-	return nil
 }

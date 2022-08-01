@@ -22,9 +22,8 @@ import (
 	"time"
 
 	"github.com/mailgun/holster/v4/clock"
-	otgrpc "github.com/opentracing-contrib/go-grpc"
-	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -45,14 +44,10 @@ func DialV1Server(server string, tls *tls.Config) (V1Client, error) {
 		return nil, errors.New("server is empty; must provide a server")
 	}
 
-	// Setup Opentracing interceptor to propagate spans.
-	tracer := opentracing.GlobalTracer()
-	tracingUnaryInterceptor := otgrpc.OpenTracingClientInterceptor(tracer)
-	tracingStreamInterceptor := otgrpc.OpenTracingStreamClientInterceptor(tracer)
-
+	// Setup OpenTelemetry interceptor to propagate spans.
 	opts := []grpc.DialOption{
-		grpc.WithUnaryInterceptor(tracingUnaryInterceptor),
-		grpc.WithStreamInterceptor(tracingStreamInterceptor),
+		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
+		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
 	}
 	if tls != nil {
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tls)))

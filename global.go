@@ -20,9 +20,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/mailgun/gubernator/v2/tracing"
 	"github.com/mailgun/holster/v4/clock"
+	"github.com/mailgun/holster/v4/ctxutil"
 	"github.com/mailgun/holster/v4/syncutil"
+	"github.com/mailgun/holster/v4/tracing"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
@@ -80,8 +81,8 @@ func (gm *globalManager) runAsyncHits() {
 	hits := make(map[string]*RateLimitReq)
 
 	gm.wg.Until(func(done chan struct{}) bool {
-		span, ctx := tracing.StartSpan(context.Background())
-		defer span.Finish()
+		ctx := tracing.StartScope(context.Background())
+		defer tracing.EndScope(ctx, nil)
 
 		select {
 		case r := <-gm.asyncQueue:
@@ -150,7 +151,7 @@ func (gm *globalManager) sendHits(ctx context.Context, hits map[string]*RateLimi
 
 	// Send the rate limit requests to their respective owning peers.
 	for _, p := range peerRequests {
-		ctx, cancel := tracing.ContextWithTimeout(context.Background(), gm.conf.GlobalTimeout)
+		ctx, cancel := ctxutil.WithTimeout(context.Background(), gm.conf.GlobalTimeout)
 		_, err := p.client.GetPeerRateLimits(ctx, &p.req)
 		cancel()
 
@@ -169,8 +170,8 @@ func (gm *globalManager) runBroadcasts() {
 	updates := make(map[string]*RateLimitReq)
 
 	gm.wg.Until(func(done chan struct{}) bool {
-		span, ctx := tracing.StartSpan(context.Background())
-		defer span.Finish()
+		ctx := tracing.StartScope(context.Background())
+		defer tracing.EndScope(ctx, nil)
 
 		select {
 		case r := <-gm.broadcastQueue:
@@ -233,7 +234,7 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 			continue
 		}
 
-		ctx, cancel := tracing.ContextWithTimeout(context.Background(), gm.conf.GlobalTimeout)
+		ctx, cancel := ctxutil.WithTimeout(context.Background(), gm.conf.GlobalTimeout)
 		_, err := peer.UpdatePeerGlobals(ctx, &req)
 		cancel()
 

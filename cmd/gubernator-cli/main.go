@@ -35,7 +35,6 @@ import (
 	"github.com/mailgun/holster/v4/tracing"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/attribute"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/time/rate"
 )
@@ -73,7 +72,7 @@ func main() {
 	ctx := context.Background()
 	_, _, err = tracing.InitTracing(ctx,
 		"github.com/mailgun/gubernator/v2/cmd/gubernator-cli",
-		sdktrace.WithResource(res),
+		tracing.WithResource(res),
 	)
 	if err != nil {
 		log.WithError(err).Warn("Error in tracing.InitTracing")

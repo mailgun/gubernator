@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0-rc.27] - 2022-08-12
+## Changes
+* Update holster to get new `tracing` functionality.
+* Tag spans with debug log level to improve signal:noise ratio.
+
+by @Baliedge in #148.
+
 ## [2.0.0-rc.26] - 2022-08-02
 ## Changes
 * Update Go to 1.17.13 by @pzduniak in #147.

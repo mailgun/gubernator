@@ -7,7 +7,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.2
 	github.com/hashicorp/memberlist v0.3.1
-	github.com/mailgun/holster/v4 v4.6.1-0.20220812164440-8e5a48769f57
+	github.com/mailgun/holster/v4 v4.7.0
 	github.com/miekg/dns v1.1.49
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.13.0

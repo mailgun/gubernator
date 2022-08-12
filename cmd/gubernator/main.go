@@ -30,7 +30,6 @@ import (
 	"github.com/mailgun/holster/v4/ctxutil"
 	"github.com/mailgun/holster/v4/tracing"
 	"github.com/sirupsen/logrus"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"k8s.io/klog"
 )
 
@@ -60,9 +59,10 @@ func main() {
 		log.WithError(err).Fatal("Error in tracing.NewResource")
 	}
 
-	ctx, _, err := tracing.InitTracing(context.Background(),
+	ctx := context.Background()
+	err = tracing.InitTracing(ctx,
 		"github.com/mailgun/gubernator/v2",
-		sdktrace.WithResource(res),
+		tracing.WithResource(res),
 	)
 	if err != nil {
 		log.WithError(err).Warn("Error in tracing.InitTracing")

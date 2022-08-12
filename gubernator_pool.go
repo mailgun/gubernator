@@ -289,7 +289,7 @@ func (chp *GubernatorPool) GetRateLimit(ctx context.Context, rlRequest *RateLimi
 
 // Handle request received by worker.
 func (chp *GubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cache) {
-	ctx := tracing.StartScope(handlerRequest.ctx)
+	ctx := tracing.StartScopeDebug(handlerRequest.ctx)
 	defer tracing.EndScope(ctx, nil)
 
 	var rlResponse *RateLimitResp

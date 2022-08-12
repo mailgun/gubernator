@@ -8,3 +8,5 @@ gubernator.egg-info/
 googleapis/
 coverage.out
 coverage.html
+/gubernator
+/gubernator-cli

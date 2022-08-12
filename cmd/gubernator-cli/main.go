@@ -70,7 +70,7 @@ func main() {
 		log.WithError(err).Fatal("Error in tracing.NewResource")
 	}
 	ctx := context.Background()
-	_, _, err = tracing.InitTracing(ctx,
+	err = tracing.InitTracing(ctx,
 		"github.com/mailgun/gubernator/v2/cmd/gubernator-cli",
 		tracing.WithResource(res),
 	)

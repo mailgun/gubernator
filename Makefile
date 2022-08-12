@@ -2,6 +2,10 @@
 VERSION=$(shell cat version)
 LDFLAGS="-X main.Version=$(VERSION)"
 
+.PHONY: lint
+lint:
+	go vet ./...
+
 .PHONY: test
 test:
 	(go test -v -race -p=1 -count=1 -coverprofile coverage.out ./...; ret=$$?; \

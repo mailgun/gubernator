@@ -59,7 +59,8 @@ func main() {
 		log.WithError(err).Fatal("Error in tracing.NewResource")
 	}
 
-	ctx, _, err := tracing.InitTracing(context.Background(),
+	ctx := context.Background()
+	err = tracing.InitTracing(ctx,
 		"github.com/mailgun/gubernator/v2",
 		tracing.WithResource(res),
 	)

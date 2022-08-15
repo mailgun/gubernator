@@ -93,7 +93,7 @@ func NewPeerClient(conf PeerConfig) *PeerClient {
 
 // Connect establishes a GRPC connection to a peer
 func (c *PeerClient) connect(ctx context.Context) (reterr error) {
-	ctx = tracing.StartScope(ctx)
+	ctx = tracing.StartScopeDebug(ctx)
 	defer func() {
 		tracing.EndScope(ctx, reterr)
 	}()
@@ -305,7 +305,7 @@ func (c *PeerClient) GetLastErr() []string {
 }
 
 func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq) (retval *RateLimitResp, reterr error) {
-	ctx = tracing.StartScope(ctx)
+	ctx = tracing.StartScopeDebug(ctx)
 	defer func() {
 		tracing.EndScope(ctx, reterr)
 	}()
@@ -359,7 +359,7 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	}()
 
 	// Wait for a response or context cancel
-	ctx2 := tracing.StartNamedScope(ctx, "Wait for response")
+	ctx2 := tracing.StartNamedScopeDebug(ctx, "Wait for response")
 	defer tracing.EndScope(ctx2, nil)
 
 	select {
@@ -395,7 +395,7 @@ func (c *PeerClient) run() {
 				return
 			}
 
-			_ = tracing.Scope(r.ctx, func(reqCtx context.Context) error {
+			_ = tracing.ScopeDebug(r.ctx, func(reqCtx context.Context) error {
 				span := trace.SpanFromContext(reqCtx)
 				span.SetAttributes(
 					attribute.String("peer.grpcAddress", c.conf.Info.GRPCAddress),

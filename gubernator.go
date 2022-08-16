@@ -336,7 +336,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 	var attempts int
 	var err error
 
-	ctx = tracing.StartScopeDebug(ctx)
+	ctx = tracing.StartScope(ctx)
 	defer tracing.EndScope(ctx, nil)
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(

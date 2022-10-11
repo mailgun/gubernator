@@ -16,8 +16,6 @@ limitations under the License.
 
 package gubernator
 
-import "github.com/sirupsen/logrus"
-
 const (
 	FlagOSMetrics MetricFlags = 1 << iota
 	FlagGolangMetrics
@@ -38,7 +36,7 @@ func (f *MetricFlags) Has(flag MetricFlags) bool {
 	return *f&flag != 0
 }
 
-func getEnvMetricFlags(log logrus.FieldLogger, name string) MetricFlags {
+func getEnvMetricFlags(log FieldLogger, name string) MetricFlags {
 	flags := getEnvSlice(name)
 	if len(flags) == 0 {
 		return 0

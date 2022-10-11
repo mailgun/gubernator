@@ -37,7 +37,7 @@ type K8sPool struct {
 	informer    cache.SharedIndexInformer
 	client      *kubernetes.Clientset
 	wg          syncutil.WaitGroup
-	log         logrus.FieldLogger
+	log         FieldLogger
 	conf        K8sPoolConfig
 	watchCtx    context.Context
 	watchCancel func()
@@ -65,7 +65,7 @@ func WatchMechanismFromString(mechanism string) (WatchMechanism, error) {
 }
 
 type K8sPoolConfig struct {
-	Logger    logrus.FieldLogger
+	Logger    FieldLogger
 	Mechanism WatchMechanism
 	OnUpdate  UpdateFunc
 	Namespace string

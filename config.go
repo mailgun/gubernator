@@ -99,7 +99,7 @@ type Config struct {
 	DataCenter string
 
 	// (Optional) A Logger which implements the declared logger interface (typically *logrus.Entry)
-	Logger logrus.FieldLogger
+	Logger FieldLogger
 
 	// (Optional) The TLS config used when connecting to gubernator peers
 	PeerTLS *tls.Config
@@ -218,7 +218,7 @@ type DaemonConfig struct {
 	Picker PeerPicker
 
 	// (Optional) A Logger which implements the declared logger interface (typically *logrus.Entry)
-	Logger logrus.FieldLogger
+	Logger FieldLogger
 
 	// (Optional) TLS Configuration; SpawnDaemon() will modify the passed TLS config in an
 	// attempt to build a complete TLS config if one is not provided.

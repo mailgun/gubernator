@@ -46,7 +46,7 @@ type EtcdPool struct {
 	ctx       context.Context
 	cancelCtx context.CancelFunc
 	watchChan etcd.WatchChan
-	log       logrus.FieldLogger
+	log       FieldLogger
 	watcher   etcd.Watcher
 	conf      EtcdPoolConfig
 }
@@ -68,7 +68,7 @@ type EtcdPoolConfig struct {
 	EtcdConfig *etcd.Config
 
 	// (Optional) An interface through which logging will occur (Usually *logrus.Entry)
-	Logger logrus.FieldLogger
+	Logger FieldLogger
 }
 
 func NewEtcdPool(conf EtcdPoolConfig) (*EtcdPool, error) {

@@ -80,6 +80,7 @@ type PeerConfig struct {
 	TLS      *tls.Config
 	Behavior BehaviorConfig
 	Info     PeerInfo
+	Log      FieldLogger
 }
 
 func NewPeerClient(conf PeerConfig) *PeerClient {
@@ -405,7 +406,7 @@ func (c *PeerClient) run() {
 
 				// Send the queue if we reached our batch limit
 				if len(queue) >= c.conf.Behavior.BatchLimit {
-					logrus.WithContext(reqCtx).
+					c.conf.Log.WithContext(reqCtx).
 						WithFields(logrus.Fields{
 							"queueLen":   len(queue),
 							"batchLimit": c.conf.Behavior.BatchLimit,
@@ -479,7 +480,7 @@ func (c *PeerClient) sendQueue(ctx context.Context, queue []*request) {
 	// An error here indicates the entire request failed
 	if err != nil {
 		logPart := "Error in client.GetPeerRateLimits"
-		logrus.WithContext(ctx).
+		c.conf.Log.WithContext(ctx).
 			WithError(err).
 			WithFields(logrus.Fields{
 				"queueLen":     len(queue),

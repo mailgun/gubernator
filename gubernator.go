@@ -49,7 +49,7 @@ type V1Instance struct {
 	global               *globalManager
 	mutliRegion          *mutliRegionManager
 	peerMutex            sync.RWMutex
-	log                  logrus.FieldLogger
+	log                  FieldLogger
 	conf                 Config
 	isClosed             bool
 	getRateLimitsCounter int64
@@ -175,16 +175,14 @@ func (s *V1Instance) Close() (reterr error) {
 
 	err := s.gubernatorPool.Store(ctx)
 	if err != nil {
-		logrus.WithContext(ctx).
-			WithError(err).
+		s.log.WithError(err).
 			Error("Error in checkHandlerPool.Store")
 		return errors.Wrap(err, "Error in checkHandlerPool.Store")
 	}
 
 	err = s.gubernatorPool.Close()
 	if err != nil {
-		logrus.WithContext(ctx).
-			WithError(err).
+		s.log.WithError(err).
 			Error("Error in checkHandlerPool.Close")
 		return errors.Wrap(err, "Error in checkHandlerPool.Close")
 	}
@@ -356,7 +354,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 
 	for {
 		if attempts > 5 {
-			logrus.WithContext(ctx).
+			s.log.WithContext(ctx).
 				WithError(err).
 				WithField("key", req.Key).
 				Error("GetPeer() returned peer that is not connected")
@@ -366,13 +364,13 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 			break
 		}
 
-		// If we are attempting again, the owner of the this rate limit might have changed to us!
+		// If we are attempting again, the owner of this rate limit might have changed to us!
 		if attempts != 0 {
 			if req.Peer.Info().IsOwner {
 				getRateLimitCounter.WithLabelValues("local").Add(1)
 				resp.Resp, err = s.getRateLimit(ctx, req.Req)
 				if err != nil {
-					logrus.WithContext(ctx).
+					s.log.WithContext(ctx).
 						WithError(err).
 						WithField("key", req.Key).
 						Error("Error applying rate limit")
@@ -393,10 +391,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 				req.Peer, err = s.GetPeer(ctx, req.Key)
 				if err != nil {
 					errPart := fmt.Sprintf("Error finding peer that owns rate limit '%s'", req.Key)
-					logrus.WithContext(ctx).
-						WithError(err).
-						WithField("key", req.Key).
-						Error(errPart)
+					s.log.WithContext(ctx).WithError(err).WithField("key", req.Key).Error(errPart)
 					countError(err, "Error in GetPeer")
 					err = errors.Wrap(err, errPart)
 					resp.Resp = &RateLimitResp{Error: err.Error()}
@@ -405,10 +400,6 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 				continue
 			}
 
-			logrus.WithContext(ctx).
-				WithError(err).
-				WithField("key", req.Key).
-				Error("Error fetching rate limit from peer")
 			// Not calling `countError()` because we expect the remote end to
 			// report this error.
 			err = errors.Wrap(err, fmt.Sprintf("Error while fetching rate limit '%s' from peer", req.Key))
@@ -676,6 +667,7 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 				peer = NewPeerClient(PeerConfig{
 					TLS:      s.conf.PeerTLS,
 					Behavior: s.conf.Behaviors,
+					Log:      s.log,
 					Info:     info,
 				})
 			}
@@ -688,6 +680,7 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 			peer = NewPeerClient(PeerConfig{
 				TLS:      s.conf.PeerTLS,
 				Behavior: s.conf.Behaviors,
+				Log:      s.log,
 				Info:     info,
 			})
 		}

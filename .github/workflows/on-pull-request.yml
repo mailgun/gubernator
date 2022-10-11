@@ -1,0 +1,40 @@
+name: On Pull Request
+
+on:
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  test:
+    name: test
+    strategy:
+      matrix:
+        go-version:
+          - 1.18.x
+          - 1.19.x
+        os: [ ubuntu-latest ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - run: go env
+
+      - name: Cache deps
+        uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install deps
+        run: go mod download
+
+      - name: Test
+        run: go test -v -race -p=1 -count=1

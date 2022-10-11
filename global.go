@@ -25,7 +25,6 @@ import (
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/mailgun/holster/v4/tracing"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -36,7 +35,7 @@ type globalManager struct {
 	broadcastQueue chan *RateLimitReq
 	wg             syncutil.WaitGroup
 	conf           BehaviorConfig
-	log            logrus.FieldLogger
+	log            FieldLogger
 	instance       *V1Instance
 
 	asyncMetrics     prometheus.Summary

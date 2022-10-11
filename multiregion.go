@@ -18,14 +18,13 @@ package gubernator
 
 import (
 	"github.com/mailgun/holster/v4/syncutil"
-	"github.com/sirupsen/logrus"
 )
 
 type mutliRegionManager struct {
 	reqQueue chan *RateLimitReq
 	wg       syncutil.WaitGroup
 	conf     BehaviorConfig
-	log      logrus.FieldLogger
+	log      FieldLogger
 	instance *V1Instance
 }
 

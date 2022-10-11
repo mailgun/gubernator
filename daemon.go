@@ -47,7 +47,7 @@ type Daemon struct {
 	HTTPListener  net.Listener
 	V1Server      *V1Instance
 
-	log           logrus.FieldLogger
+	log           FieldLogger
 	pool          PoolInterface
 	conf          DaemonConfig
 	httpSrv       *http.Server

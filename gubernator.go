@@ -390,8 +390,10 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 				asyncRequestRetriesCounter.WithLabelValues(req.Req.Name).Add(1)
 				req.Peer, err = s.GetPeer(ctx, req.Key)
 				if err != nil {
+					errPart := fmt.Sprintf("Error finding peer that owns rate limit '%s'", req.Key)
+					s.log.WithContext(ctx).WithError(err).WithField("key", req.Key).Error(errPart)
 					countError(err, "Error in GetPeer")
-					err = errors.Wrap(err, fmt.Sprintf("Error finding peer that owns rate limit '%s'", req.Key))
+					err = errors.Wrap(err, errPart)
 					resp.Resp = &RateLimitResp{Error: err.Error()}
 					break
 				}
@@ -665,6 +667,7 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 				peer = NewPeerClient(PeerConfig{
 					TLS:      s.conf.PeerTLS,
 					Behavior: s.conf.Behaviors,
+					Log:      s.log,
 					Info:     info,
 				})
 			}
@@ -677,6 +680,7 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 			peer = NewPeerClient(PeerConfig{
 				TLS:      s.conf.PeerTLS,
 				Behavior: s.conf.Behaviors,
+				Log:      s.log,
 				Info:     info,
 			})
 		}

@@ -36,7 +36,7 @@ import (
 )
 
 type MemberListPool struct {
-	log        logrus.FieldLogger
+	log        FieldLogger
 	memberList *ml.Memberlist
 	conf       MemberListPoolConfig
 	events     *memberListEventHandler
@@ -62,7 +62,7 @@ type MemberListPoolConfig struct {
 	NodeName string
 
 	// (Optional) An interface through which logging will occur (Usually *logrus.Entry)
-	Logger logrus.FieldLogger
+	Logger FieldLogger
 }
 
 func NewMemberListPool(ctx context.Context, conf MemberListPoolConfig) (*MemberListPool, error) {
@@ -159,11 +159,11 @@ func (m *MemberListPool) Close() {
 
 type memberListEventHandler struct {
 	peers map[string]PeerInfo
-	log   logrus.FieldLogger
+	log   FieldLogger
 	conf  MemberListPoolConfig
 }
 
-func newMemberListEventHandler(log logrus.FieldLogger, conf MemberListPoolConfig) *memberListEventHandler {
+func newMemberListEventHandler(log FieldLogger, conf MemberListPoolConfig) *memberListEventHandler {
 	handler := memberListEventHandler{
 		conf: conf,
 		log:  log,
@@ -265,7 +265,7 @@ func unmarshallPeer(b []byte, ip string) (PeerInfo, error) {
 	return peer, nil
 }
 
-func newLogWriter(log logrus.FieldLogger) *io.PipeWriter {
+func newLogWriter(log FieldLogger) *io.PipeWriter {
 	reader, writer := io.Pipe()
 
 	go func() {

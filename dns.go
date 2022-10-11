@@ -124,11 +124,11 @@ type DNSPoolConfig struct {
 	// (Required) Called when the list of gubernators in the pool updates
 	OnUpdate UpdateFunc
 
-	Logger logrus.FieldLogger
+	Logger FieldLogger
 }
 
 type DNSPool struct {
-	log    logrus.FieldLogger
+	log    FieldLogger
 	conf   DNSPoolConfig
 	ctx    context.Context
 	cancel context.CancelFunc

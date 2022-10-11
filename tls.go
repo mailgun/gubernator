@@ -85,7 +85,7 @@ type TLSConfig struct {
 	InsecureSkipVerify bool
 
 	// (Optional) A Logger which implements the declared logger interface (typically *logrus.Entry)
-	Logger logrus.FieldLogger
+	Logger FieldLogger
 
 	// (Optional) The CA Certificate in PEM format. Used if CaFile is unset
 	CaPEM *bytes.Buffer

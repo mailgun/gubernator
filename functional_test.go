@@ -341,8 +341,8 @@ func TestTokenBucketNegativeHits(t *testing.T) {
 			resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
 				Requests: []*guber.RateLimitReq{
 					{
-						Name:      "test_token_bucket",
-						UniqueKey: "account:1234",
+						Name:      "test_token_bucket_negative",
+						UniqueKey: "account:12345",
 						Algorithm: guber.Algorithm_TOKEN_BUCKET,
 						Duration:  guber.Millisecond * 5,
 						Limit:     2,
@@ -711,8 +711,8 @@ func TestLeakyBucketNegativeHits(t *testing.T) {
 			resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
 				Requests: []*guber.RateLimitReq{
 					{
-						Name:      "test_leaky_bucket",
-						UniqueKey: "account:1234",
+						Name:      "test_leaky_bucket_negative",
+						UniqueKey: "account:12345",
 						Algorithm: guber.Algorithm_LEAKY_BUCKET,
 						Duration:  guber.Second * 30,
 						Hits:      test.Hits,

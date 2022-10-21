@@ -18,6 +18,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@master
 
+      - name: Fetch git tags
+        run: git fetch --tags
+
+      - name: Version consistency check
+        run: ./version-check.sh
+
       - name: Set up Go
         uses: actions/setup-go@v2
         with:

@@ -29,7 +29,12 @@ Publish a GitHub release from github.com.
 
 Create a new tag with "v" prefix version, such as "v2.0.0-rc.34".
 
-In description, paste the same description added to `CHANGELOG`.
+In description, paste the same description added to `CHANGELOG`.  For example,
+
+```markdown
+## What's Changed
+* Updated foobar by @Baliedge in #999.
+```
 
 Click "Publish Release".
 

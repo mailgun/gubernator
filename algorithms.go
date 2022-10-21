@@ -176,7 +176,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		}
 
 		// If we are already at the limit.
-		if rl.Remaining == 0 {
+		if rl.Remaining == 0 && r.Hits > 0 {
 			span.AddEvent("Already over the limit")
 			overLimitCounter.Add(1)
 			rl.Status = Status_OVER_LIMIT
@@ -414,7 +414,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		}
 
 		// If we are already at the limit
-		if int64(b.Remaining) == 0 {
+		if int64(b.Remaining) == 0 && r.Hits > 0 {
 			overLimitCounter.Add(1)
 			rl.Status = Status_OVER_LIMIT
 			return rl, nil

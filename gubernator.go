@@ -47,7 +47,7 @@ type V1Instance struct {
 	UnimplementedV1Server
 	UnimplementedPeersV1Server
 	global               *globalManager
-	mutliRegion          *mutliRegionManager
+	multiRegion          *multiRegionManager
 	peerMutex            sync.RWMutex
 	log                  FieldLogger
 	conf                 Config
@@ -135,7 +135,7 @@ func NewV1Instance(conf Config) (retval *V1Instance, reterr error) {
 
 	s.gubernatorPool = NewGubernatorPool(&conf, conf.PoolWorkers, 0)
 	s.global = newGlobalManager(conf.Behaviors, &s)
-	s.mutliRegion = newMultiRegionManager(conf.Behaviors, &s)
+	s.multiRegion = newMultiRegionManager(conf.Behaviors, &s)
 
 	// Register our instance with all GRPC servers
 	for _, srv := range conf.GRPCServers {
@@ -171,7 +171,7 @@ func (s *V1Instance) Close() (reterr error) {
 	}
 
 	s.global.Close()
-	s.mutliRegion.Close()
+	s.multiRegion.Close()
 
 	err := s.gubernatorPool.Store(ctx)
 	if err != nil {
@@ -641,8 +641,8 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (retval 
 	}
 
 	if HasBehavior(r.Behavior, Behavior_MULTI_REGION) {
-		s.mutliRegion.QueueHits(r)
-		span.AddEvent("s.mutliRegion.QueueHits(r)")
+		s.multiRegion.QueueHits(r)
+		span.AddEvent("s.multiRegion.QueueHits(r)")
 	}
 
 	resp, err := s.gubernatorPool.GetRateLimit(ctx, r)

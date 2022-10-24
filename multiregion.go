@@ -20,7 +20,7 @@ import (
 	"github.com/mailgun/holster/v4/syncutil"
 )
 
-type mutliRegionManager struct {
+type multiRegionManager struct {
 	reqQueue chan *RateLimitReq
 	wg       syncutil.WaitGroup
 	conf     BehaviorConfig
@@ -28,8 +28,8 @@ type mutliRegionManager struct {
 	instance *V1Instance
 }
 
-func newMultiRegionManager(conf BehaviorConfig, instance *V1Instance) *mutliRegionManager {
-	mm := mutliRegionManager{
+func newMultiRegionManager(conf BehaviorConfig, instance *V1Instance) *multiRegionManager {
+	mm := multiRegionManager{
 		conf:     conf,
 		instance: instance,
 		log:      instance.log,
@@ -40,11 +40,11 @@ func newMultiRegionManager(conf BehaviorConfig, instance *V1Instance) *mutliRegi
 }
 
 // QueueHits writes the RateLimitReq to be asynchronously sent to other regions
-func (mm *mutliRegionManager) QueueHits(r *RateLimitReq) {
+func (mm *multiRegionManager) QueueHits(r *RateLimitReq) {
 	mm.reqQueue <- r
 }
 
-func (mm *mutliRegionManager) runAsyncReqs() {
+func (mm *multiRegionManager) runAsyncReqs() {
 	var interval = NewInterval(mm.conf.MultiRegionSyncWait)
 	hits := make(map[string]*RateLimitReq)
 
@@ -93,10 +93,10 @@ func (mm *mutliRegionManager) runAsyncReqs() {
 
 // TODO: Sending cross DC should mainly update the hits, the config should not be sent, or ignored when received
 // TODO: Calculation of OVERLIMIT should not occur when sending hits cross DC
-func (mm *mutliRegionManager) sendHits(r map[string]*RateLimitReq, picker PeerPicker) {
+func (mm *multiRegionManager) sendHits(r map[string]*RateLimitReq, picker PeerPicker) {
 	// Does nothing for now
 }
 
-func (mm *mutliRegionManager) Close() {
+func (mm *multiRegionManager) Close() {
 	mm.wg.Stop()
 }

@@ -21,7 +21,15 @@ These files are:
    * `appVersion`
 * `version`
 
-It is necessary to manually update these files to match the target version.
+It is necessary to update these files to match the target version.
+
+Manually update `CHANGELOG`, then use script `update-version.sh` to easily
+update the remaining files.
+
+```
+$ ./update-version.sh 2.0.0-rc.35
+```
+
 Commit and push directly to `master` branch.
 
 ## Publish New GitHub Release
@@ -55,5 +63,5 @@ found in the files described in [Update Version Files](#update-version-files).
 If the check fails, the workflow will abort with an error.  The developer can
 make the necessary changes indicated in the error message.
 
-Developers may call script `./version-check.sh` locally to verify changes
+Developers may call script `./check-version.sh` locally to verify changes
 before commit.

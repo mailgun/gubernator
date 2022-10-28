@@ -5,20 +5,18 @@ on:
     types: [published]
 
 jobs:
-
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v2
 
-      - name: Update 'version' file
-        run: |
-          export VERSION="${{ github.event.release.tag_name }}"
-          echo "$VERSION" > version
-          sed -i "s/^version:.*$/version: ${VERSION:1}/" charts/gubernator/Chart.yaml
-          sed -i "s/^appVersion:.*$/appVersion: ${VERSION:1}/" charts/gubernator/Chart.yaml
-   
+      - name: Fetch git tags
+        run: git fetch --tags
+
+      - name: Version consistency check
+        run: ./check-version.sh
+
       # Buildx Needs QEMU
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
@@ -28,13 +26,13 @@ jobs:
         uses: docker/setup-buildx-action@v1
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v1 
+        uses: docker/login-action@v1
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ github.token }}
-      -
-        name: Build and push
+
+      - name: Build and push
         uses: docker/build-push-action@v3
         with:
           tags: |
@@ -45,15 +43,6 @@ jobs:
           platforms: linux/amd64,linux/arm64
           pull: true
           push: true
-
-      # Commit the updated 'version' file
-      - name: Commit changes
-        uses: EndBug/add-and-commit@v7
-        with:
-          default_author: github_actions
-          message: 'Update version number'
-          branch: master
-          add: '["version", "charts/gubernator/Chart.yaml"]'
 
       # Publish the Helm chart
       - name: Publish Helm chart

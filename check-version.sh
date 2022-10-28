@@ -1,4 +1,5 @@
 #!/bin/sh
+# Check version consistency across repo.
 
 # Use git tag as reference version string.
 # Strip leading 'v'.

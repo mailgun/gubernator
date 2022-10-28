@@ -15,7 +15,7 @@ jobs:
         run: git fetch --tags
 
       - name: Version consistency check
-        run: make version-check
+        run: ./check-version.sh
 
       # Buildx Needs QEMU
       - name: Set up QEMU

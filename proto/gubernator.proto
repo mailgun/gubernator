@@ -47,6 +47,8 @@ service V1 {
 // Must specify at least one Request
 message GetRateLimitsReq {
   repeated RateLimitReq requests = 1;
+  UnionBehavior Behavior = 2;
+  
 }
 
 // RateLimits returned are in the same order as the Requests
@@ -127,7 +129,19 @@ enum Behavior {
   // least 2 instances of Gubernator.
   MULTI_REGION = 16;
 
+
+
   // TODO: Add support for LOCAL. Which would force the rate limit to be handled by the local instance
+}
+
+// A set of int32 flags used to control the behavior of a chained rate limits in gubernator
+enum UnionBehavior {
+    // Default behaviour to treat multiple requests as fully independent
+    INDEPENDENT = 0; // <- here because it is mandatory for the proto
+
+    // Enables atomic chaining of rate limits to multiple limits, i.e. will only increment if all limits
+    // have remaining capacity, otherwise will fail.
+    ATOMIC_REQUESTS = 1;
 }
 
 message RateLimitReq {

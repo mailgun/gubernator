@@ -37,6 +37,7 @@ message GetPeerRateLimitsReq {
     // Must specify at least one RateLimit. The peer that recives this request MUST be authoritative for
     // each rate_limit[x].unique_key provided, as the peer will not forward the request to any other peers
     repeated RateLimitReq requests = 1;
+    bool atomicCheck = 2;
 }
 
 message GetPeerRateLimitsResp {

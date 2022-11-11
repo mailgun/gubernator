@@ -1381,6 +1381,17 @@ func TestAtomicChainingMultipleLimits(t *testing.T) {
 	assert.Equal(t, int64(10), rl.Limit)
 }
 
+func TestRequestNoRateLimits(t *testing.T) {
+	// test for sending no rate limits RateLimitReqList.RateLimits = nil
+	client, errs := guber.DialV1Server(cluster.GetPeers()[0].GRPCAddress, nil)
+	require.Nil(t, errs)
+	resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+		Requests: []*guber.RateLimitReq{},
+	})
+	require.Nil(t, err)
+	assert.Equal(t, 0, len(resp.Responses))
+}
+
 func getMetric(t testutil.TestingT, in io.Reader, name string) *model.Sample {
 	dec := expfmt.SampleDecoder{
 		Dec: expfmt.NewDecoder(in, expfmt.FmtText),

@@ -28,7 +28,7 @@ import (
 )
 
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket
-func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, ac bool) (resp *RateLimitResp, err error) {
+func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
 	ctx = tracing.StartScopeDebug(ctx)
 	defer func() {
 		tracing.EndScope(ctx, err)
@@ -114,7 +114,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, ac bool
 				span.AddEvent("s.Remove()")
 			}
 
-			return tokenBucketNewItem(ctx, s, c, r, ac)
+			return tokenBucketNewItem(ctx, s, c, r)
 		}
 
 		// Update the limit if it changed.
@@ -180,7 +180,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, ac bool
 			span.AddEvent("Already over the limit")
 			rl.Status = Status_OVER_LIMIT
 			t.Status = rl.Status
-			if !ac {
+			if !r.AtomicCheck {
 				overLimitCounter.Add(1)
 			}
 			return rl, nil
@@ -191,7 +191,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, ac bool
 		if t.Remaining == r.Hits {
 			span.AddEvent("At the limit")
 			rl.Remaining = 0
-			if !ac {
+			if !r.AtomicCheck {
 				t.Remaining = 0
 			}
 			return rl, nil
@@ -202,7 +202,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, ac bool
 		if r.Hits > t.Remaining {
 			span.AddEvent("Over the limit")
 			rl.Status = Status_OVER_LIMIT
-			if !ac {
+			if !r.AtomicCheck {
 				overLimitCounter.Add(1)
 			}
 			return rl, nil
@@ -211,7 +211,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, ac bool
 		span.AddEvent("Under the limit")
 		// if we are doing a check during atomic chaining then we only want
 		// to update the response and not the actual value for the rate limit
-		if ac {
+		if r.AtomicCheck {
 			rl.Remaining = t.Remaining - r.Hits
 		} else {
 			t.Remaining -= r.Hits
@@ -221,11 +221,11 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, ac bool
 	}
 
 	// Item is not found in cache or store, create new.
-	return tokenBucketNewItem(ctx, s, c, r, ac)
+	return tokenBucketNewItem(ctx, s, c, r)
 }
 
 // Called by tokenBucket() when adding a new item in the store.
-func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, ac bool) (resp *RateLimitResp, err error) {
+func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
 	ctx = tracing.StartScopeDebug(ctx)
 	defer func() {
 		tracing.EndScope(ctx, err)
@@ -243,7 +243,7 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, 
 	}
 
 	// if we are doing a check during atomic chaining then remaining number is actually the limit
-	if ac {
+	if r.AtomicCheck {
 		t.Remaining = r.Limit
 	}
 
@@ -273,7 +273,7 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, 
 	// Client could be requesting that we always return OVER_LIMIT.
 	if r.Hits > r.Limit {
 		span.AddEvent("Over the limit")
-		if !ac {
+		if !r.AtomicCheck {
 			overLimitCounter.Add(1)
 		}
 		rl.Status = Status_OVER_LIMIT
@@ -293,7 +293,7 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, 
 }
 
 // Implements leaky bucket algorithm for rate limiting https://en.wikipedia.org/wiki/Leaky_bucket
-func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, ac bool) (resp *RateLimitResp, err error) {
+func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
 	ctx = tracing.StartScopeDebug(ctx)
 	defer func() {
 		tracing.EndScope(ctx, err)
@@ -362,7 +362,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, ac bool
 				span.AddEvent("s.Remove()")
 			}
 
-			return leakyBucketNewItem(ctx, s, c, r, ac)
+			return leakyBucketNewItem(ctx, s, c, r)
 		}
 
 		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
@@ -401,7 +401,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, ac bool
 			duration = expire - (n.UnixNano() / 1000000)
 		}
 
-		if r.Hits != 0 {
+		if r.Hits != 0 && !r.AtomicCheck {
 			c.UpdateExpiration(r.HashKey(), now+duration)
 		}
 
@@ -436,7 +436,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, ac bool
 
 		// If we are already at the limit
 		if int64(b.Remaining) == 0 && r.Hits > 0 {
-			if !ac {
+			if !r.AtomicCheck {
 				overLimitCounter.Add(1)
 			}
 			rl.Status = Status_OVER_LIMIT
@@ -445,9 +445,9 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, ac bool
 
 		// If requested hits takes the remainder
 		if int64(b.Remaining) == r.Hits {
-			if !ac {
+			if !r.AtomicCheck {
 				b.Remaining -= float64(r.Hits)
-				rl.ResetTime = now + (rl.Limit-rl.Remaining)*int64(rate)
+				rl.ResetTime = now + (rl.Limit-int64(b.Remaining))*int64(rate)
 			}
 			rl.Remaining = 0
 			return rl, nil
@@ -456,7 +456,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, ac bool
 		// If requested is more than available, then return over the limit
 		// without updating the bucket.
 		if r.Hits > int64(b.Remaining) {
-			if !ac {
+			if !r.AtomicCheck {
 				overLimitCounter.Add(1)
 			}
 			rl.Status = Status_OVER_LIMIT
@@ -470,7 +470,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, ac bool
 
 		// if we are doing a check during atomic chaining then we only want
 		// to update the response and not the actual value for the rate limit
-		if ac {
+		if r.AtomicCheck {
 			rl.Remaining = int64(b.Remaining - float64(r.Hits))
 		} else {
 			b.Remaining -= float64(r.Hits)
@@ -480,11 +480,11 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, ac bool
 		return rl, nil
 	}
 
-	return leakyBucketNewItem(ctx, s, c, r, ac)
+	return leakyBucketNewItem(ctx, s, c, r)
 }
 
 // Called by leakyBucket() when adding a new item in the store.
-func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, ac bool) (resp *RateLimitResp, err error) {
+func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
 	ctx = tracing.StartScopeDebug(ctx)
 	defer func() {
 		tracing.EndScope(ctx, err)
@@ -514,11 +514,6 @@ func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, 
 		Burst:     r.Burst,
 	}
 
-	// if we are doing a check during atomic chaining then remaining number is actually the limit
-	if ac {
-		b.Remaining = float64(r.Limit)
-	}
-
 	rl := RateLimitResp{
 		Status:    Status_UNDER_LIMIT,
 		Limit:     b.Limit,
@@ -526,9 +521,15 @@ func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, 
 		ResetTime: now + (b.Limit-(r.Burst-r.Hits))*int64(rate),
 	}
 
+	// if we are doing a check during atomic chaining then remaining number is actually the burst limit
+	if r.AtomicCheck {
+		b.Remaining = float64(r.Burst)
+		rl.Remaining = r.Burst
+	}
+
 	// Client could be requesting that we start with the bucket OVER_LIMIT
 	if r.Hits > r.Burst {
-		if !ac {
+		if !r.AtomicCheck {
 			overLimitCounter.Add(1)
 		}
 		rl.Status = Status_OVER_LIMIT

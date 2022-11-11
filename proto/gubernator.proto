@@ -173,6 +173,9 @@ message RateLimitReq {
 
   // Maximum burst size that the limit can accept.
   int64 burst = 8;
+
+  // flag to determine if this request is part of an atomic chain
+  bool atomicCheck = 9;
 }
 
 enum Status {

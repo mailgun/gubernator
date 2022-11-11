@@ -129,7 +129,6 @@ func (gm *globalManager) sendHits(ctx context.Context, hits map[string]*RateLimi
 	peerRequests := make(map[string]*pair)
 	start := clock.Now()
 
-	// Assign each request to a peer
 	for _, r := range hits {
 		peer, err := gm.instance.GetPeer(ctx, r.HashKey())
 		if err != nil {
@@ -215,7 +214,7 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 		rl.Hits = 0
 
 		// we can invoke with atomicCheck = false as we are just getting status by using hits = 0
-		status, err := gm.instance.getRateLimit(ctx, rl, false)
+		status, err := gm.instance.getRateLimit(ctx, rl)
 		if err != nil {
 			gm.log.WithError(err).Errorf("while broadcasting update to peers for: '%s'", rl.HashKey())
 			continue

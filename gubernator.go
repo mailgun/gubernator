@@ -236,13 +236,13 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (re
 	return &resp, nil
 }
 
-func (s *V1Instance) checkLimits(ctx context.Context, span trace.Span, r *GetRateLimitsReq, resp *GetRateLimitsResp, ac bool) []*RateLimitResp {
+func (s *V1Instance) checkLimits(ctx context.Context, span trace.Span, r *GetRateLimitsReq, resp *GetRateLimitsResp, atomicCheck bool) []*RateLimitResp {
 	var wg sync.WaitGroup
 	asyncCh := make(chan AsyncResp, len(r.Requests))
 
 	// update the trace name if this is an atomic check
 	ts := "Iterate requests"
-	if ac {
+	if atomicCheck {
 		ts = fmt.Sprintf("%s - atomic check", ts)
 	}
 
@@ -252,6 +252,9 @@ func (s *V1Instance) checkLimits(ctx context.Context, span trace.Span, r *GetRat
 			key := req.Name + "_" + req.UniqueKey
 			var peer *PeerClient
 			var err error
+
+			// set the atomic check flag on the reqest object
+			req.AtomicCheck = atomicCheck
 
 			if len(req.UniqueKey) == 0 {
 				checkErrorCounter.WithLabelValues("Invalid request").Add(1)
@@ -287,11 +290,11 @@ func (s *V1Instance) checkLimits(ctx context.Context, span trace.Span, r *GetRat
 			// If our server instance is the owner of this rate limit
 			if peer.Info().IsOwner {
 				// Apply our rate limit algorithm to the request
-				if !ac {
+				if !atomicCheck {
 					getRateLimitCounter.WithLabelValues("local").Add(1)
 				}
 				funcTimer1 := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit (local)"))
-				resp.Responses[i], err = s.getRateLimit(ctx, req, ac)
+				resp.Responses[i], err = s.getRateLimit(ctx, req)
 				funcTimer1.ObserveDuration()
 				if err != nil {
 					err = errors.Wrapf(err, "Error while apply rate limit for '%s'", key)
@@ -300,7 +303,7 @@ func (s *V1Instance) checkLimits(ctx context.Context, span trace.Span, r *GetRat
 				}
 			} else {
 				if HasBehavior(req.Behavior, Behavior_GLOBAL) {
-					resp.Responses[i], err = s.getGlobalRateLimit(ctx, req, ac)
+					resp.Responses[i], err = s.getGlobalRateLimit(ctx, req)
 					if err != nil {
 						err = errors.Wrap(err, "Error in getGlobalRateLimit")
 						span.RecordError(err)
@@ -316,13 +319,12 @@ func (s *V1Instance) checkLimits(ctx context.Context, span trace.Span, r *GetRat
 				// Launch remote peer request in goroutine.
 				wg.Add(1)
 				go s.asyncRequests(ctx, &AsyncReq{
-					AsyncCh:     asyncCh,
-					Peer:        peer,
-					Req:         req,
-					WG:          &wg,
-					Key:         key,
-					Idx:         i,
-					atomicCheck: ac,
+					AsyncCh: asyncCh,
+					Peer:    peer,
+					Req:     req,
+					WG:      &wg,
+					Key:     key,
+					Idx:     i,
 				})
 			}
 
@@ -395,7 +397,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 		if attempts != 0 {
 			if req.Peer.Info().IsOwner {
 				getRateLimitCounter.WithLabelValues("local").Add(1)
-				resp.Resp, err = s.getRateLimit(ctx, req.Req, req.atomicCheck)
+				resp.Resp, err = s.getRateLimit(ctx, req.Req)
 				if err != nil {
 					s.log.WithContext(ctx).
 						WithError(err).
@@ -450,7 +452,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 
 // getGlobalRateLimit handles rate limits that are marked as `Behavior = GLOBAL`. Rate limit responses
 // are returned from the local cache and the hits are queued to be sent to the owning peer.
-func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq, ac bool) (retval *RateLimitResp, reterr error) {
+func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) (retval *RateLimitResp, reterr error) {
 	ctx = tracing.StartScope(ctx)
 	defer func() {
 		tracing.EndScope(ctx, reterr)
@@ -484,7 +486,7 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq, 
 
 	// Process the rate limit like we own it
 	getRateLimitCounter.WithLabelValues("global").Add(1)
-	resp, err := s.getRateLimit(ctx, cpy, ac)
+	resp, err := s.getRateLimit(ctx, cpy)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error in getRateLimit")
 	}
@@ -563,7 +565,7 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	for idx, req := range r.Requests {
 		fan.Run(func(in interface{}) error {
 			rin := in.(reqIn)
-			rl, err := s.getRateLimit(ctx, rin.req, r.AtomicCheck)
+			rl, err := s.getRateLimit(ctx, rin.req)
 			if err != nil {
 				// Return the error for this request
 				err = errors.Wrap(err, "Error in getRateLimit")
@@ -645,7 +647,7 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (retval
 	return &health, nil
 }
 
-func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq, ac bool) (retval *RateLimitResp, reterr error) {
+func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (retval *RateLimitResp, reterr error) {
 	ctx = tracing.StartScopeDebug(ctx)
 	defer func() {
 		tracing.EndScope(ctx, reterr)
@@ -672,7 +674,7 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq, ac bool)
 		span.AddEvent("s.multiRegion.QueueHits(r)")
 	}
 
-	resp, err := s.gubernatorPool.GetRateLimit(ctx, r, ac)
+	resp, err := s.gubernatorPool.GetRateLimit(ctx, r)
 	if isDeadlineExceeded(err) {
 		checkErrorCounter.WithLabelValues("Timeout").Add(1)
 	}

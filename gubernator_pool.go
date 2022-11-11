@@ -247,7 +247,7 @@ func (chp *GubernatorPool) worker(worker *poolWorker) {
 }
 
 // Send a GetRateLimit request to worker pool.
-func (chp *GubernatorPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq, ac bool) (retval *RateLimitResp, reterr error) {
+func (chp *GubernatorPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) (retval *RateLimitResp, reterr error) {
 	ctx = tracing.StartScope(ctx)
 	defer func() {
 		tracing.EndScope(ctx, reterr)
@@ -257,10 +257,9 @@ func (chp *GubernatorPool) GetRateLimit(ctx context.Context, rlRequest *RateLimi
 	// Delegate request to assigned channel based on request key.
 	worker := chp.getWorker(rlRequest.UniqueKey)
 	handlerRequest := &request{
-		ctx:         ctx,
-		atomicCheck: ac,
-		resp:        make(chan *response, 1),
-		request:     rlRequest,
+		ctx:     ctx,
+		resp:    make(chan *response, 1),
+		request: rlRequest,
 	}
 
 	// Send request.
@@ -298,7 +297,7 @@ func (chp *GubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cac
 
 	switch handlerRequest.request.Algorithm {
 	case Algorithm_TOKEN_BUCKET:
-		rlResponse, err = tokenBucket(ctx, chp.conf.Store, cache, handlerRequest.request, handlerRequest.atomicCheck)
+		rlResponse, err = tokenBucket(ctx, chp.conf.Store, cache, handlerRequest.request)
 		if err != nil {
 			msg := "Error in tokenBucket"
 			countError(err, msg)
@@ -307,7 +306,7 @@ func (chp *GubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cac
 		}
 
 	case Algorithm_LEAKY_BUCKET:
-		rlResponse, err = leakyBucket(ctx, chp.conf.Store, cache, handlerRequest.request, handlerRequest.atomicCheck)
+		rlResponse, err = leakyBucket(ctx, chp.conf.Store, cache, handlerRequest.request)
 		if err != nil {
 			msg := "Error in leakyBucket"
 			countError(err, msg)

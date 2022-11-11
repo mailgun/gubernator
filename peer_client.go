@@ -71,9 +71,10 @@ type response struct {
 }
 
 type request struct {
-	request *RateLimitReq
-	resp    chan *response
-	ctx     context.Context
+	request     *RateLimitReq
+	resp        chan *response
+	atomicCheck bool
+	ctx         context.Context
 }
 
 type PeerConfig struct {

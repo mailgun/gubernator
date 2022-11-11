@@ -214,7 +214,8 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 		SetBehavior(&rl.Behavior, Behavior_GLOBAL, false)
 		rl.Hits = 0
 
-		status, err := gm.instance.getRateLimit(ctx, rl)
+		// we can invoke with atomicCheck = false as we are just getting status by using hits = 0
+		status, err := gm.instance.getRateLimit(ctx, rl, false)
 		if err != nil {
 			gm.log.WithError(err).Errorf("while broadcasting update to peers for: '%s'", rl.HashKey())
 			continue

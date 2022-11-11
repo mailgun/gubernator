@@ -219,8 +219,32 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (re
 		Responses: make([]*RateLimitResp, len(r.Requests)),
 	}
 
+	// get the UnionBehaviour
+	var atomicRequests = HasUnionBehavior(r.GetBehavior(), UnionBehavior_ATOMIC_REQUESTS)
+	if atomicRequests {
+		// run with the atomic request check
+		resp.Responses = s.checkLimits(ctx, span, r, &resp, true)
+		// return without updating any actual limits if there is an error or anything over limit
+		for _, v := range resp.Responses {
+			if v.GetError() != "" || v.GetStatus() == Status_OVER_LIMIT {
+				return &resp, nil
+			}
+		}
+	}
+	// if atomic check is valid then run as we normally would
+	resp.Responses = s.checkLimits(ctx, span, r, &resp, false)
+	return &resp, nil
+}
+
+func (s *V1Instance) checkLimits(ctx context.Context, span trace.Span, r *GetRateLimitsReq, resp *GetRateLimitsResp, ac bool) []*RateLimitResp {
 	var wg sync.WaitGroup
 	asyncCh := make(chan AsyncResp, len(r.Requests))
+
+	// update the trace name if this is an atomic check
+	ts := "Iterate requests"
+	if ac {
+		ts = fmt.Sprintf("%s - atomic check", ts)
+	}
 
 	// For each item in the request body
 	for i, req := range r.Requests {
@@ -263,9 +287,11 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (re
 			// If our server instance is the owner of this rate limit
 			if peer.Info().IsOwner {
 				// Apply our rate limit algorithm to the request
-				getRateLimitCounter.WithLabelValues("local").Add(1)
+				if !ac {
+					getRateLimitCounter.WithLabelValues("local").Add(1)
+				}
 				funcTimer1 := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.getRateLimit (local)"))
-				resp.Responses[i], err = s.getRateLimit(ctx, req)
+				resp.Responses[i], err = s.getRateLimit(ctx, req, ac)
 				funcTimer1.ObserveDuration()
 				if err != nil {
 					err = errors.Wrapf(err, "Error while apply rate limit for '%s'", key)
@@ -274,7 +300,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (re
 				}
 			} else {
 				if HasBehavior(req.Behavior, Behavior_GLOBAL) {
-					resp.Responses[i], err = s.getGlobalRateLimit(ctx, req)
+					resp.Responses[i], err = s.getGlobalRateLimit(ctx, req, ac)
 					if err != nil {
 						err = errors.Wrap(err, "Error in getGlobalRateLimit")
 						span.RecordError(err)
@@ -290,12 +316,13 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (re
 				// Launch remote peer request in goroutine.
 				wg.Add(1)
 				go s.asyncRequests(ctx, &AsyncReq{
-					AsyncCh: asyncCh,
-					Peer:    peer,
-					Req:     req,
-					WG:      &wg,
-					Key:     key,
-					Idx:     i,
+					AsyncCh:     asyncCh,
+					Peer:        peer,
+					Req:         req,
+					WG:          &wg,
+					Key:         key,
+					Idx:         i,
+					atomicCheck: ac,
 				})
 			}
 
@@ -312,8 +339,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (re
 	for a := range asyncCh {
 		resp.Responses[a.Idx] = a.Resp
 	}
-
-	return &resp, nil
+	return resp.Responses
 }
 
 type AsyncResp struct {
@@ -322,12 +348,13 @@ type AsyncResp struct {
 }
 
 type AsyncReq struct {
-	WG      *sync.WaitGroup
-	AsyncCh chan AsyncResp
-	Req     *RateLimitReq
-	Peer    *PeerClient
-	Key     string
-	Idx     int
+	WG          *sync.WaitGroup
+	AsyncCh     chan AsyncResp
+	Req         *RateLimitReq
+	Peer        *PeerClient
+	Key         string
+	Idx         int
+	atomicCheck bool
 }
 
 func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
@@ -368,7 +395,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 		if attempts != 0 {
 			if req.Peer.Info().IsOwner {
 				getRateLimitCounter.WithLabelValues("local").Add(1)
-				resp.Resp, err = s.getRateLimit(ctx, req.Req)
+				resp.Resp, err = s.getRateLimit(ctx, req.Req, req.atomicCheck)
 				if err != nil {
 					s.log.WithContext(ctx).
 						WithError(err).
@@ -423,7 +450,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 
 // getGlobalRateLimit handles rate limits that are marked as `Behavior = GLOBAL`. Rate limit responses
 // are returned from the local cache and the hits are queued to be sent to the owning peer.
-func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) (retval *RateLimitResp, reterr error) {
+func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq, ac bool) (retval *RateLimitResp, reterr error) {
 	ctx = tracing.StartScope(ctx)
 	defer func() {
 		tracing.EndScope(ctx, reterr)
@@ -457,7 +484,7 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 
 	// Process the rate limit like we own it
 	getRateLimitCounter.WithLabelValues("global").Add(1)
-	resp, err := s.getRateLimit(ctx, cpy)
+	resp, err := s.getRateLimit(ctx, cpy, ac)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error in getRateLimit")
 	}
@@ -536,7 +563,7 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	for idx, req := range r.Requests {
 		fan.Run(func(in interface{}) error {
 			rin := in.(reqIn)
-			rl, err := s.getRateLimit(ctx, rin.req)
+			rl, err := s.getRateLimit(ctx, rin.req, r.AtomicCheck)
 			if err != nil {
 				// Return the error for this request
 				err = errors.Wrap(err, "Error in getRateLimit")
@@ -618,7 +645,7 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (retval
 	return &health, nil
 }
 
-func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (retval *RateLimitResp, reterr error) {
+func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq, ac bool) (retval *RateLimitResp, reterr error) {
 	ctx = tracing.StartScopeDebug(ctx)
 	defer func() {
 		tracing.EndScope(ctx, reterr)
@@ -645,7 +672,7 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (retval 
 		span.AddEvent("s.multiRegion.QueueHits(r)")
 	}
 
-	resp, err := s.gubernatorPool.GetRateLimit(ctx, r)
+	resp, err := s.gubernatorPool.GetRateLimit(ctx, r, ac)
 	if isDeadlineExceeded(err) {
 		checkErrorCounter.WithLabelValues("Timeout").Add(1)
 	}
@@ -806,6 +833,11 @@ func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
 	checkCounter.Collect(ch)
 	poolWorkerQueueLength.Collect(ch)
 	batchSendDurationMetric.Collect(ch)
+}
+
+// HasUnionBehavior returns true if the provided behavior is set on a collection of requests
+func HasUnionBehavior(b UnionBehavior, flag UnionBehavior) bool {
+	return b&flag != 0
 }
 
 // HasBehavior returns true if the provided behavior is set

@@ -1218,7 +1218,168 @@ func TestGetPeerRateLimits(t *testing.T) {
 	})
 }
 
-// TODO: Add a test for sending no rate limits RateLimitReqList.RateLimits = nil
+// Test multiple rate limits with atomic chaining enabled:
+// should behave as normal if a rate limit is not exceeded
+// should fail without incrementing rate limits if
+func TestAtomicChainingMultipleLimits(t *testing.T) {
+	// If the consistent hash changes or the number of peers changes, this might
+	// need to be changed. We want the test to forward both rate limits to other
+	// nodes in the cluster.
+
+	t.Logf("Asking Peer: %s", cluster.GetPeers()[0].GRPCAddress)
+	client, errs := guber.DialV1Server(cluster.GetPeers()[0].GRPCAddress, nil)
+	require.Nil(t, errs)
+
+	// send 2 different requests with atomic chaining on configured, second one starts over limit
+	resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+		Requests: []*guber.RateLimitReq{
+			{
+				Name:      "test_atomic_chaining",
+				UniqueKey: "account:9234",
+				Algorithm: guber.Algorithm_TOKEN_BUCKET,
+				Duration:  guber.Second * 9,
+				Limit:     2,
+				Hits:      1,
+				Behavior:  0,
+			},
+			{
+				Name:      "test_atomic_chaining",
+				UniqueKey: "account:5678",
+				Algorithm: guber.Algorithm_LEAKY_BUCKET,
+				Duration:  guber.Second * 9,
+				Limit:     10,
+				Hits:      11,
+				Behavior:  0,
+			},
+		},
+		Behavior: guber.UnionBehavior_ATOMIC_REQUESTS,
+	})
+	require.Nil(t, err)
+
+	require.Len(t, resp.Responses, 2)
+
+	rl := resp.Responses[0]
+	assert.Equal(t, guber.Status_UNDER_LIMIT, rl.Status)
+	assert.Equal(t, int64(1), rl.Remaining)
+	assert.Equal(t, int64(2), rl.Limit)
+
+	rl = resp.Responses[1]
+	assert.Equal(t, guber.Status_OVER_LIMIT, rl.Status)
+	assert.Equal(t, int64(10), rl.Limit)
+
+	// fire requests again but with a lower limit and all should increment their respective limits
+	resp, err = client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+		Requests: []*guber.RateLimitReq{
+			{
+				Name:      "test_atomic_chaining",
+				UniqueKey: "account:9234",
+				Algorithm: guber.Algorithm_TOKEN_BUCKET,
+				Duration:  guber.Second * 9,
+				Limit:     2,
+				Hits:      1,
+				Behavior:  0,
+			},
+			{
+				Name:      "test_atomic_chaining",
+				UniqueKey: "account:5678",
+				Algorithm: guber.Algorithm_LEAKY_BUCKET,
+				Duration:  guber.Second * 9,
+				Limit:     10,
+				Hits:      5,
+				Behavior:  0,
+			},
+		},
+		Behavior: guber.UnionBehavior_ATOMIC_REQUESTS,
+	})
+	require.Nil(t, err)
+
+	require.Len(t, resp.Responses, 2)
+
+	rl = resp.Responses[0]
+	assert.Equal(t, guber.Status_UNDER_LIMIT, rl.Status)
+	assert.Equal(t, int64(1), rl.Remaining)
+	assert.Equal(t, int64(2), rl.Limit)
+
+	rl = resp.Responses[1]
+	assert.Equal(t, guber.Status_UNDER_LIMIT, rl.Status)
+	assert.Equal(t, int64(5), rl.Remaining)
+	assert.Equal(t, int64(10), rl.Limit)
+
+	// Exceed the first rate limit, second should not be impacted
+	resp, err = client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+		Requests: []*guber.RateLimitReq{
+			{
+				Name:      "test_atomic_chaining",
+				UniqueKey: "account:9234",
+				Algorithm: guber.Algorithm_TOKEN_BUCKET,
+				Duration:  guber.Second * 9,
+				Limit:     2,
+				Hits:      2,
+				Behavior:  0,
+			},
+			{
+				Name:      "test_atomic_chaining",
+				UniqueKey: "account:5678",
+				Algorithm: guber.Algorithm_LEAKY_BUCKET,
+				Duration:  guber.Second * 9,
+				Limit:     10,
+				Hits:      1,
+				Behavior:  0,
+			},
+		},
+		Behavior: guber.UnionBehavior_ATOMIC_REQUESTS,
+	})
+	require.Nil(t, err)
+
+	require.Len(t, resp.Responses, 2)
+
+	rl = resp.Responses[0]
+	assert.Equal(t, guber.Status_OVER_LIMIT, rl.Status)
+	assert.Equal(t, int64(2), rl.Limit)
+
+	rl = resp.Responses[1]
+	assert.Equal(t, guber.Status_UNDER_LIMIT, rl.Status)
+	assert.Equal(t, int64(4), rl.Remaining)
+	assert.Equal(t, int64(10), rl.Limit)
+
+	// Send another atomic pair, the second won't have been modified by the previous request as one of the limits was exceeded.
+	resp, err = client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+		Requests: []*guber.RateLimitReq{
+			{
+				Name:      "test_atomic_chaining",
+				UniqueKey: "account:9234",
+				Algorithm: guber.Algorithm_TOKEN_BUCKET,
+				Duration:  guber.Second * 9,
+				Limit:     2,
+				Hits:      1,
+				Behavior:  0,
+			},
+			{
+				Name:      "test_atomic_chaining",
+				UniqueKey: "account:5678",
+				Algorithm: guber.Algorithm_LEAKY_BUCKET,
+				Duration:  guber.Second * 9,
+				Limit:     10,
+				Hits:      1,
+				Behavior:  0,
+			},
+		},
+		Behavior: guber.UnionBehavior_ATOMIC_REQUESTS,
+	})
+	require.Nil(t, err)
+
+	require.Len(t, resp.Responses, 2)
+
+	rl = resp.Responses[0]
+	assert.Equal(t, guber.Status_UNDER_LIMIT, rl.Status)
+	assert.Equal(t, int64(0), rl.Remaining)
+	assert.Equal(t, int64(2), rl.Limit)
+
+	rl = resp.Responses[1]
+	assert.Equal(t, guber.Status_UNDER_LIMIT, rl.Status)
+	assert.Equal(t, int64(4), rl.Remaining)
+	assert.Equal(t, int64(10), rl.Limit)
+}
 
 func getMetric(t testutil.TestingT, in io.Reader, name string) *model.Sample {
 	dec := expfmt.SampleDecoder{

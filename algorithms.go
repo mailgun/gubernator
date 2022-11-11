@@ -242,11 +242,6 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 		CreatedAt: now,
 	}
 
-	// if we are doing a check during atomic chaining then remaining number is actually the limit
-	if r.AtomicCheck {
-		t.Remaining = r.Limit
-	}
-
 	item := &CacheItem{
 		Algorithm: Algorithm_TOKEN_BUCKET,
 		Key:       r.HashKey(),
@@ -270,15 +265,22 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 		ResetTime: expire,
 	}
 
+	// if we are doing a check during atomic chaining then remaining number is actually the limit
+	// but we should respond with what the value would be as if it had been applied
+	if r.AtomicCheck {
+		t.Remaining = r.Limit
+		rl.Remaining = r.Limit - r.Hits
+	}
+
 	// Client could be requesting that we always return OVER_LIMIT.
+
 	if r.Hits > r.Limit {
 		span.AddEvent("Over the limit")
 		if !r.AtomicCheck {
 			overLimitCounter.Add(1)
+			t.Remaining = r.Limit
 		}
 		rl.Status = Status_OVER_LIMIT
-		rl.Remaining = r.Limit
-		t.Remaining = r.Limit
 	}
 
 	c.Add(item)
@@ -522,20 +524,20 @@ func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 	}
 
 	// if we are doing a check during atomic chaining then remaining number is actually the burst limit
+	// but we should respond with what the value would be as if it had been applied
 	if r.AtomicCheck {
 		b.Remaining = float64(r.Burst)
-		rl.Remaining = r.Burst
+		rl.Remaining = r.Burst - r.Hits
 	}
 
 	// Client could be requesting that we start with the bucket OVER_LIMIT
 	if r.Hits > r.Burst {
 		if !r.AtomicCheck {
 			overLimitCounter.Add(1)
+			b.Remaining = 0
 		}
 		rl.Status = Status_OVER_LIMIT
-		rl.Remaining = 0
 		rl.ResetTime = now + (rl.Limit-rl.Remaining)*int64(rate)
-		b.Remaining = 0
 	}
 
 	item := &CacheItem{

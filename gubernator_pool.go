@@ -294,10 +294,14 @@ func (chp *GubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cac
 
 	var rlResponse *RateLimitResp
 	var err error
+	shouldUpdate := true
 
 	switch handlerRequest.request.Algorithm {
 	case Algorithm_TOKEN_BUCKET:
 		rlResponse, err = tokenBucket(ctx, chp.conf.Store, cache, handlerRequest.request)
+		if HasBehavior(handlerRequest.request.Behavior, Behavior_RESET_REMAINING) {
+			shouldUpdate = false
+		}
 		if err != nil {
 			msg := "Error in tokenBucket"
 			countError(err, msg)
@@ -318,6 +322,14 @@ func (chp *GubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cac
 		err = errors.Errorf("Invalid rate limit algorithm '%d'", handlerRequest.request.Algorithm)
 		trace.SpanFromContext(ctx).RecordError(err)
 		checkErrorCounter.WithLabelValues("Invalid algorithm").Add(1)
+	}
+
+	// persist the hits to bucket if request is not a check only and it wasn't a token bucket reset
+	if !handlerRequest.request.AtomicCheck && shouldUpdate {
+		err = persistBucketHits(ctx, chp.conf.Store, cache, handlerRequest.request, int32(rlResponse.Status))
+		if err != nil {
+			logrus.Error("failed to persist hits to bucket")
+		}
 	}
 
 	handlerResponse := &response{

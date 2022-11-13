@@ -48,7 +48,6 @@ service V1 {
 message GetRateLimitsReq {
   repeated RateLimitReq requests = 1;
   UnionBehavior Behavior = 2;
-  
 }
 
 // RateLimits returned are in the same order as the Requests
@@ -128,8 +127,6 @@ enum Behavior {
   // 'member-list' peer discovery. Also requires GUBER_DATA_CENTER to be set to different values on at
   // least 2 instances of Gubernator.
   MULTI_REGION = 16;
-
-
 
   // TODO: Add support for LOCAL. Which would force the rate limit to be handled by the local instance
 }

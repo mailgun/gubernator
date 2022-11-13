@@ -219,9 +219,8 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (re
 		Responses: make([]*RateLimitResp, len(r.Requests)),
 	}
 
-	// get the UnionBehaviour
-	var atomicRequests = HasUnionBehavior(r.GetBehavior(), UnionBehavior_ATOMIC_REQUESTS)
-	if atomicRequests {
+	// perform a check first if the request is for union behaviour
+	if HasUnionBehavior(r.GetBehavior(), UnionBehavior_ATOMIC_REQUESTS) {
 		// run with the atomic request check
 		resp.Responses = s.checkLimits(ctx, span, r, &resp, true)
 		// return without updating any actual limits if there is an error or anything over limit

@@ -521,7 +521,7 @@ func getEnvBool(log logrus.FieldLogger, name string) bool {
 func getEnvMinVersion(log logrus.FieldLogger, name string) uint16 {
 	v := os.Getenv(name)
 	if v == "" {
-		return tls.VersionTLS10
+		return tls.VersionTLS13
 	}
 	minVersion := map[string]uint16{
 		"1.0": tls.VersionTLS10,
@@ -531,8 +531,8 @@ func getEnvMinVersion(log logrus.FieldLogger, name string) uint16 {
 	}
 	version, ok := minVersion[v]
 	if !ok {
-		log.WithError(fmt.Errorf("unknown tls version: %s", v)).Errorf("while parsing '%s' as an min tls version, defaulting to 1.0", name)
-		return tls.VersionTLS10
+		log.WithError(fmt.Errorf("unknown tls version: %s", v)).Errorf("while parsing '%s' as an min tls version, defaulting to 1.3", name)
+		return tls.VersionTLS13
 	}
 	return version
 }

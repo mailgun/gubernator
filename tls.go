@@ -151,7 +151,7 @@ func SetupTLS(conf *TLSConfig) error {
 
 	minServerTLSVersion := conf.MinVersion
 	if minServerTLSVersion == 0 {
-		minServerTLSVersion = tls.VersionTLS10
+		minServerTLSVersion = tls.VersionTLS13
 	}
 
 	setter.SetDefault(&conf.Logger, logrus.WithField("category", "gubernator"))

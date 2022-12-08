@@ -61,6 +61,9 @@ type TLSConfig struct {
 	//  the CaFile provided.
 	AutoTLS bool
 
+	// (Optional) Configures the MinVersion for ServerTLS. If not set, defaults to TLS 1.0
+	MinVersion uint16
+
 	// (Optional) Sets the Client Authentication type as defined in the 'tls' package.
 	// Defaults to tls.NoClientCert.See the standard library tls.ClientAuthType for valid values.
 	// If set to anything but tls.NoClientCert then SetupTLS() attempts to load ClientAuthCaFile,
@@ -146,6 +149,11 @@ func SetupTLS(conf *TLSConfig) error {
 		return nil
 	}
 
+	minServerTLSVersion := conf.MinVersion
+	if minServerTLSVersion == 0 {
+		minServerTLSVersion = tls.VersionTLS13
+	}
+
 	setter.SetDefault(&conf.Logger, logrus.WithField("category", "gubernator"))
 	conf.Logger.Info("Detected TLS Configuration")
 
@@ -171,7 +179,7 @@ func SetupTLS(conf *TLSConfig) error {
 			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
 		},
 		ClientAuth: conf.ClientAuth,
-		MinVersion: tls.VersionTLS10,
+		MinVersion: minServerTLSVersion,
 		NextProtos: []string{
 			"h2", "http/1.1", // enable HTTP/2
 		},

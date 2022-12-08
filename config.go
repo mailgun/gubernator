@@ -336,6 +336,7 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 		setter.SetDefault(&conf.TLS.KeyFile, os.Getenv("GUBER_TLS_KEY"))
 		setter.SetDefault(&conf.TLS.CertFile, os.Getenv("GUBER_TLS_CERT"))
 		setter.SetDefault(&conf.TLS.AutoTLS, getEnvBool(log, "GUBER_TLS_AUTO"))
+		setter.SetDefault(&conf.TLS.MinVersion, getEnvMinVersion(log, "GUBER_TLS_MIN_VERSION"))
 
 		clientAuth := os.Getenv("GUBER_TLS_CLIENT_AUTH")
 		if clientAuth != "" {
@@ -515,6 +516,25 @@ func getEnvBool(log logrus.FieldLogger, name string) bool {
 		return false
 	}
 	return b
+}
+
+func getEnvMinVersion(log logrus.FieldLogger, name string) uint16 {
+	v := os.Getenv(name)
+	if v == "" {
+		return tls.VersionTLS13
+	}
+	minVersion := map[string]uint16{
+		"1.0": tls.VersionTLS10,
+		"1.1": tls.VersionTLS11,
+		"1.2": tls.VersionTLS12,
+		"1.3": tls.VersionTLS13,
+	}
+	version, ok := minVersion[v]
+	if !ok {
+		log.WithError(fmt.Errorf("unknown tls version: %s", v)).Errorf("while parsing '%s' as an min tls version, defaulting to 1.3", name)
+		return tls.VersionTLS13
+	}
+	return version
 }
 
 func getEnvInteger(log logrus.FieldLogger, name string) int {

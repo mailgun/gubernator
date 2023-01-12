@@ -228,12 +228,6 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 		Remaining: r.Limit - r.Hits,
 		CreatedAt: now,
 	}
-	item := &CacheItem{
-		Algorithm: Algorithm_TOKEN_BUCKET,
-		Key:       r.HashKey(),
-		Value:     t,
-		ExpireAt:  expire,
-	}
 
 	// Add a new rate limit to the cache.
 	span.AddEvent("Add a new rate limit to the cache")
@@ -242,6 +236,13 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	item := &CacheItem{
+		Algorithm: Algorithm_TOKEN_BUCKET,
+		Key:       r.HashKey(),
+		Value:     t,
+		ExpireAt:  expire,
 	}
 
 	rl := &RateLimitResp{

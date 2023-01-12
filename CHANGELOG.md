@@ -7,10 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.0.0-rc.37] - 2023-01-12
 ## What's Changed
 * Token bucket fix for Gregorian duration by @akshay-livespace in #162.
-  * Token bucket algorithm would reset "remaining" for a request within
-  milliseconds when using behavior DURATION_IS_GREGORIAN.
-  * This is happening because expiry calculation for behavior
-  DURATION_IS_GREGORIAN, was calculated but never updated.
+  * Token bucket algorithm would reset "remaining" for a request within milliseconds when using behavior DURATION_IS_GREGORIAN.
+  * This is happening because expiry calculation for behavior DURATION_IS_GREGORIAN, was calculated but never updated.
 
 ## [2.0.0-rc.36] - 2022-12-07
 ## What's Changed

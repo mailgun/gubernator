@@ -157,10 +157,7 @@ func NewV1Instance(conf Config) (retval *V1Instance, reterr error) {
 }
 
 func (s *V1Instance) Close() (reterr error) {
-	ctx := tracing.StartScope(context.Background())
-	defer func() {
-		tracing.EndScope(ctx, reterr)
-	}()
+	ctx := context.Background()
 
 	if s.isClosed {
 		return nil
@@ -195,10 +192,6 @@ func (s *V1Instance) Close() (reterr error) {
 // rate limit `Name` and `UniqueKey` is not owned by this instance then we forward the request to the
 // peer that does.
 func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (retval *GetRateLimitsResp, reterr error) {
-	ctx = tracing.StartScope(ctx)
-	defer func() {
-		tracing.EndScope(ctx, reterr)
-	}()
 	span := trace.SpanFromContext(ctx)
 
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.GetRateLimits"))
@@ -304,9 +297,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (re
 	}
 
 	// Wait for any async responses if any
-	ctxWait := tracing.StartNamedScope(ctx, "Wait for responses")
 	wg.Wait()
-	tracing.EndScope(ctxWait, nil)
 
 	close(asyncCh)
 	for a := range asyncCh {
@@ -424,7 +415,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 // getGlobalRateLimit handles rate limits that are marked as `Behavior = GLOBAL`. Rate limit responses
 // are returned from the local cache and the hits are queued to be sent to the owning peer.
 func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) (retval *RateLimitResp, reterr error) {
-	ctx = tracing.StartScope(ctx)
+	ctx = tracing.StartScopeDebug(ctx)
 	defer func() {
 		tracing.EndScope(ctx, reterr)
 	}()
@@ -468,11 +459,6 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 // UpdatePeerGlobals updates the local cache with a list of global rate limits. This method should only
 // be called by a peer who is the owner of a global rate limit.
 func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (retval *UpdatePeerGlobalsResp, reterr error) {
-	ctx = tracing.StartScope(ctx)
-	defer func() {
-		tracing.EndScope(ctx, reterr)
-	}()
-
 	for _, g := range r.Globals {
 		item := &CacheItem{
 			ExpireAt:  g.Status.ResetTime,
@@ -491,10 +477,6 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 
 // GetPeerRateLimits is called by other peers to get the rate limits owned by this peer.
 func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (retval *GetPeerRateLimitsResp, reterr error) {
-	ctx = tracing.StartScope(ctx)
-	defer func() {
-		tracing.EndScope(ctx, reterr)
-	}()
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(attribute.Int("numRequests", len(r.Requests)))
 
@@ -560,10 +542,6 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 
 // HealthCheck Returns the health of our instance.
 func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (retval *HealthCheckResp, reterr error) {
-	ctx = tracing.StartScope(ctx)
-	defer func() {
-		tracing.EndScope(ctx, reterr)
-	}()
 	span := trace.SpanFromContext(ctx)
 
 	var errs []string
@@ -741,10 +719,6 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 
 // GetPeer returns a peer client for the hash key provided
 func (s *V1Instance) GetPeer(ctx context.Context, key string) (retval *PeerClient, reterr error) {
-	ctx = tracing.StartScope(ctx)
-	defer func() {
-		tracing.EndScope(ctx, reterr)
-	}()
 	span := trace.SpanFromContext(ctx)
 
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.GetPeer"))

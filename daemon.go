@@ -151,7 +151,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 
 	// Start serving GRPC Requests
 	s.wg.Go(func() {
-		s.log.Infof("GRPC Listening on %s ...", s.conf.GRPCListenAddress)
+		s.log.Infof("GRPC Listening on %s ...", l.Addr().String())
 		if err := s.grpcSrvs[0].Serve(l); err != nil {
 			s.log.WithError(err).Error("while starting GRPC server")
 		}
@@ -274,14 +274,14 @@ func (s *Daemon) Start(ctx context.Context) error {
 		return errors.Wrap(err, "while starting HTTP listener")
 	}
 
-	addrs := []string{s.conf.HTTPListenAddress}
+	httpListenerAddr := s.HTTPListener.Addr().String()
+	addrs := []string{httpListenerAddr}
 
 	if s.conf.ServerTLS() != nil {
 
 		// If configured, start another listener at configured address and server only
 		// /v1/HealthCheck while not requesting or verifying client certificate.
 		if s.conf.HTTPStatusListenAddress != "" {
-			addrs = append(addrs, s.conf.HTTPStatusListenAddress)
 			muxNoMTLS := http.NewServeMux()
 			muxNoMTLS.Handle("/v1/HealthCheck", gateway)
 			s.httpSrvNoMTLS = &http.Server{
@@ -295,8 +295,10 @@ func (s *Daemon) Start(ctx context.Context) error {
 			if err != nil {
 				return errors.Wrap(err, "while starting HTTP listener for health metric")
 			}
+			httpAddr := httpListener.Addr().String()
+			addrs = append(addrs, httpAddr)
 			s.wg.Go(func() {
-				s.log.Infof("HTTPS Status Handler Listening on %s ...", s.conf.HTTPStatusListenAddress)
+				s.log.Infof("HTTPS Status Handler Listening on %s ...", httpAddr)
 				if err := s.httpSrvNoMTLS.ServeTLS(httpListener, "", ""); err != nil {
 					if err != http.ErrServerClosed {
 						s.log.WithError(err).Error("while starting TLS Status HTTP server")
@@ -309,7 +311,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 		// since the tls config is a shared pointer.
 		s.httpSrv.TLSConfig = s.conf.ServerTLS().Clone()
 		s.wg.Go(func() {
-			s.log.Infof("HTTPS Gateway Listening on %s ...", s.conf.HTTPListenAddress)
+			s.log.Infof("HTTPS Gateway Listening on %s ...", httpListenerAddr)
 			if err := s.httpSrv.ServeTLS(s.HTTPListener, "", ""); err != nil {
 				if err != http.ErrServerClosed {
 					s.log.WithError(err).Error("while starting TLS HTTP server")
@@ -318,7 +320,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 		})
 	} else {
 		s.wg.Go(func() {
-			s.log.Infof("HTTP Gateway Listening on %s ...", s.conf.HTTPListenAddress)
+			s.log.Infof("HTTP Gateway Listening on %s ...", httpListenerAddr)
 			if err := s.httpSrv.Serve(s.HTTPListener); err != nil {
 				if err != http.ErrServerClosed {
 					s.log.WithError(err).Error("while starting HTTP server")

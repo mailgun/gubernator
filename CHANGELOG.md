@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0-rc.40] - 2023-03-01
+## What's Changed
+* Adjust tracing detail by @Baliedge in #166.
+   * Adjust certain functions to debug level tracing. Mainly private methods are debug tracing.
+   * Give background async goroutine traces descriptive names.
+   * Update holster for additional functionality.
+   * Adjust dependency versions to ensure compatibility with holster.
+
 ## [2.0.0-rc.39] - 2023-02-28
 ## What's Changed
 * Simplify OTel traces by @Baliedge in #165.

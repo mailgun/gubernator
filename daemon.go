@@ -66,7 +66,7 @@ type Daemon struct {
 func SpawnDaemon(ctx context.Context, conf DaemonConfig) (*Daemon, error) {
 	var s *Daemon
 
-	err := tracing.Scope(ctx, func(ctx context.Context) error {
+	err := tracing.CallScope(ctx, func(ctx context.Context) error {
 		s = &Daemon{
 			log:  conf.Logger,
 			conf: conf,

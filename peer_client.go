@@ -396,7 +396,7 @@ func (c *PeerClient) run() {
 				return
 			}
 
-			_ = tracing.ScopeDebug(r.ctx, func(reqCtx context.Context) error {
+			_ = tracing.CallNamedScope(r.ctx, "Send batch", func(reqCtx context.Context) error {
 				span := trace.SpanFromContext(reqCtx)
 				span.SetAttributes(
 					attribute.String("peer.grpcAddress", c.conf.Info.GRPCAddress),
@@ -438,7 +438,7 @@ func (c *PeerClient) run() {
 				queue = nil
 
 				go func() {
-					ctx2 := tracing.StartScope(ctx)
+					ctx2 := tracing.StartNamedScope(ctx, "Send batch")
 					defer tracing.EndScope(ctx2, nil)
 					intervalSpan := trace.SpanFromContext(ctx2)
 					intervalSpan.SetAttributes(
@@ -455,7 +455,7 @@ func (c *PeerClient) run() {
 // sendQueue sends the queue provided and returns the responses to
 // waiting go routines
 func (c *PeerClient) sendQueue(ctx context.Context, queue []*request) {
-	ctx = tracing.StartScope(ctx)
+	ctx = tracing.StartScopeDebug(ctx)
 	defer tracing.EndScope(ctx, nil)
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(

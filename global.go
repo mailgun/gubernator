@@ -80,7 +80,7 @@ func (gm *globalManager) runAsyncHits() {
 	hits := make(map[string]*RateLimitReq)
 
 	gm.wg.Until(func(done chan struct{}) bool {
-		ctx := tracing.StartScope(context.Background())
+		ctx := tracing.StartScopeDebug(context.Background())
 		defer tracing.EndScope(ctx, nil)
 
 		select {
@@ -169,7 +169,7 @@ func (gm *globalManager) runBroadcasts() {
 	updates := make(map[string]*RateLimitReq)
 
 	gm.wg.Until(func(done chan struct{}) bool {
-		ctx := tracing.StartScope(context.Background())
+		ctx := tracing.StartScopeDebug(context.Background())
 		defer tracing.EndScope(ctx, nil)
 
 		select {

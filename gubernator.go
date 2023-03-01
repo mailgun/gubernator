@@ -115,7 +115,7 @@ var batchSendDurationMetric = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 // NewV1Instance instantiate a single instance of a gubernator peer and registers this
 // instance with the provided GRPCServer.
 func NewV1Instance(conf Config) (retval *V1Instance, reterr error) {
-	ctx := tracing.StartScope(context.Background())
+	ctx := tracing.StartScopeDebug(context.Background())
 	defer func() {
 		tracing.EndScope(ctx, reterr)
 	}()

@@ -427,7 +427,7 @@ mainloop:
 }
 
 func (chp *GubernatorPool) handleLoad(request poolLoadRequest, cache Cache) {
-	ctx := tracing.StartScope(request.ctx)
+	ctx := tracing.StartScopeDebug(request.ctx)
 	defer tracing.EndScope(ctx, nil)
 
 mainloop:
@@ -531,7 +531,7 @@ func (chp *GubernatorPool) Store(ctx context.Context) (reterr error) {
 }
 
 func (chp *GubernatorPool) handleStore(request poolStoreRequest, cache Cache) {
-	ctx := tracing.StartScope(request.ctx)
+	ctx := tracing.StartScopeDebug(request.ctx)
 	defer tracing.EndScope(ctx, nil)
 
 	for item := range cache.Each() {
@@ -595,7 +595,7 @@ func (chp *GubernatorPool) AddCacheItem(ctx context.Context, key string, item *C
 }
 
 func (chp *GubernatorPool) handleAddCacheItem(request poolAddCacheItemRequest, cache Cache) {
-	ctx := tracing.StartScope(request.ctx)
+	ctx := tracing.StartScopeDebug(request.ctx)
 	defer tracing.EndScope(ctx, nil)
 
 	exists := cache.Add(request.item)
@@ -648,7 +648,7 @@ func (chp *GubernatorPool) GetCacheItem(ctx context.Context, key string) (item *
 }
 
 func (chp *GubernatorPool) handleGetCacheItem(request poolGetCacheItemRequest, cache Cache) {
-	ctx := tracing.StartScope(request.ctx)
+	ctx := tracing.StartScopeDebug(request.ctx)
 	defer tracing.EndScope(ctx, nil)
 
 	item, ok := cache.GetItem(request.key)

@@ -85,7 +85,7 @@ func main() {
 	tracing.EndScope(startCtx, nil)
 
 	var client guber.V1Client
-	err = tracing.Scope(ctx, func(ctx context.Context) error {
+	err = tracing.CallScope(ctx, func(ctx context.Context) error {
 		// Print startup message.
 		cmdLine := strings.Join(os.Args[1:], " ")
 		logrus.WithContext(ctx).Info("Command line: " + cmdLine)

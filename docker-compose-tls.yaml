@@ -2,7 +2,7 @@ version: '3'
 services:
   gubernator-1:
     image: ghcr.io/mailgun/gubernator:latest
-    command: "/gubernator"
+    entrypoint: "/gubernator"
     environment:
       # Basic member-list config
       - GUBER_GRPC_ADDRESS=0.0.0.0:81
@@ -22,7 +22,7 @@ services:
 
   gubernator-2:
     image: ghcr.io/mailgun/gubernator:latest
-    command: "/gubernator"
+    entrypoint: "/gubernator"
     environment:
       # Basic member-list config
       - GUBER_GRPC_ADDRESS=0.0.0.0:81
@@ -42,7 +42,7 @@ services:
 
   gubernator-3:
     image: ghcr.io/mailgun/gubernator:latest
-    command: "/gubernator"
+    entrypoint: "/gubernator"
     environment:
       # Basic member-list config
       - GUBER_GRPC_ADDRESS=0.0.0.0:81
@@ -62,7 +62,7 @@ services:
 
   gubernator-4:
     image: ghcr.io/mailgun/gubernator:latest
-    command: "/gubernator"
+    entrypoint: "/gubernator"
     environment:
       # Basic member-list config
       - GUBER_DEBUG=true

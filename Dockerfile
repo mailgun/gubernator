@@ -22,6 +22,9 @@ ARG VERSION
 RUN CGO_ENABLED=0 GOOS=${TARGETPLATFORM%/*} GOARCH=${TARGETPLATFORM#*/} go build -a -installsuffix cgo \
     -ldflags "-w -s -X main.Version=$VERSION" -o /gubernator /go/src/cmd/gubernator/main.go
 
+RUN CGO_ENABLED=0 GOOS=${TARGETPLATFORM%/*} GOARCH=${TARGETPLATFORM#*/} go build -a -installsuffix cgo \
+    -ldflags "-w -s" -o /healthcheck /go/src/cmd/gubernator/healthcheck.go
+
 # Create our deploy image
 FROM scratch
 
@@ -30,6 +33,10 @@ COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 # Copy our static executable.
 COPY --from=build /gubernator /gubernator
+COPY --from=build /healthcheck /healthcheck
+
+# Healtcheck
+HEALTHCHECK --interval=3s --timeout=1s --start-period=2s --retries=2 CMD [ "/healthcheck" ]
 
 # Run the server
 ENTRYPOINT ["/gubernator"]

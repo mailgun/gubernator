@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0-rc.42] - 2023-03-03
+## What's Changed
+* Allow binding the daemon to a random port by @pzduniak in #167
+
 ## [2.0.0-rc.40] - 2023-03-01
 ## What's Changed
 * Adjust tracing detail by @Baliedge in #166.

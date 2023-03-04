@@ -17,11 +17,10 @@ limitations under the License.
 package gubernator_test
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
@@ -36,6 +35,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	json "google.golang.org/protobuf/encoding/protojson"
 )
 
 // Setup and shutdown the mock gubernator cluster for the entire test suite
@@ -1156,20 +1156,49 @@ func TestMultiRegion(t *testing.T) {
 }
 
 func TestGRPCGateway(t *testing.T) {
-	resp, err := http.DefaultClient.Get("http://" + cluster.GetRandomPeer(cluster.DataCenterNone).HTTPAddress + "/v1/HealthCheck")
+	address := cluster.GetRandomPeer(cluster.DataCenterNone).HTTPAddress
+	resp, err := http.DefaultClient.Get("http://" + address + "/v1/HealthCheck")
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 
 	// This test ensures future upgrades don't accidentally change `under_score` to `camelCase` again.
 	assert.Contains(t, string(b), "peer_count")
 
-	// Should unmarshall JSON correctly
 	var hc guber.HealthCheckResp
 	require.NoError(t, json.Unmarshal(b, &hc))
 	assert.Equal(t, int32(10), hc.PeerCount)
 
 	require.NoError(t, err)
+
+	payload, err := json.Marshal(&guber.GetRateLimitsReq{
+		Requests: []*guber.RateLimitReq{
+			{
+				Name:      "requests_per_sec",
+				UniqueKey: "account:12345",
+				Duration:  guber.Millisecond * 1000,
+				Hits:      1,
+				Limit:     10,
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	resp, err = http.DefaultClient.Post("http://"+address+"/v1/GetRateLimits",
+		"application/json", bytes.NewReader(payload))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	b, err = io.ReadAll(resp.Body)
+	var r guber.GetRateLimitsResp
+
+	// NOTE: It is important to use 'protojson' instead of the standard 'json' package
+	//  else the enums will not be converted properly and json.Unmarshal() will return an
+	//  error.
+	require.NoError(t, json.Unmarshal(b, &r))
+	require.Equal(t, 1, len(r.Responses))
+	assert.Equal(t, gubernator.Status_UNDER_LIMIT, r.Responses[0].Status)
 }
 
 func TestGetPeerRateLimits(t *testing.T) {

@@ -31,6 +31,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -42,7 +43,6 @@ type PeerPicker interface {
 	Get(string) (*PeerClient, error)
 	New() PeerPicker
 	Add(*PeerClient)
-	Size() int // TODO: Might not be useful?
 }
 
 type peerStatus int
@@ -93,10 +93,10 @@ func NewPeerClient(conf PeerConfig) *PeerClient {
 }
 
 // Connect establishes a GRPC connection to a peer
-func (c *PeerClient) connect(ctx context.Context) (reterr error) {
+func (c *PeerClient) connect(ctx context.Context) (err error) {
 	ctx = tracing.StartScopeDebug(ctx)
 	defer func() {
-		tracing.EndScope(ctx, reterr)
+		tracing.EndScope(ctx, err)
 	}()
 
 	// NOTE: To future self, this mutex is used here because we need to know if the peer is disconnecting and
@@ -134,8 +134,8 @@ func (c *PeerClient) connect(ctx context.Context) (reterr error) {
 
 		// Setup OpenTelemetry interceptor to propagate spans.
 		opts := []grpc.DialOption{
-			grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-			grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
+			grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor(
+				otelgrpc.WithInterceptorFilter(TraceLevelInfoFilter))),
 		}
 
 		if c.conf.TLS != nil {
@@ -163,20 +163,34 @@ func (c *PeerClient) Info() PeerInfo {
 	return c.conf.Info
 }
 
-// GetPeerRateLimit forwards a rate limit request to a peer. If the rate limit has `behavior == BATCHING` configured
+// GetPeerRateLimit forwards a rate limit request to a peer. If the rate limit has `behavior == BATCHING` configured,
 // this method will attempt to batch the rate limits
-func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (retval *RateLimitResp, reterr error) {
-	ctx = tracing.StartScopeDebug(ctx)
-	defer func() {
-		tracing.EndScope(ctx, reterr)
-	}()
+func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (resp *RateLimitResp, err error) {
+	ctx = tracing.StartNamedScope(ctx, "PeerClient.GetPeerRateLimit")
+	defer tracing.EndScope(ctx, err)
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(
-		attribute.String("request.name", r.Name),
+		attribute.String("peer.GRPCAddress", c.conf.Info.GRPCAddress),
+		attribute.String("peer.HTTPAddress", c.conf.Info.HTTPAddress),
+		attribute.String("peer.Datacenter", c.conf.Info.DataCenter),
 		attribute.String("request.key", r.UniqueKey),
-		attribute.Int64("request.limit", r.Limit),
+		attribute.String("request.name", r.Name),
+		attribute.Int64("request.algorithm", int64(r.Algorithm)),
+		attribute.Int64("request.behavior", int64(r.Behavior)),
 		attribute.Int64("request.duration", r.Duration),
+		attribute.Int64("request.limit", r.Limit),
+		attribute.Int64("request.hits", r.Hits),
+		attribute.Int64("request.burst", r.Burst),
 	)
+
+	// If no metadata is provided
+	if r.Metadata == nil {
+		r.Metadata = make(map[string]string)
+	}
+	// Propagate the trace context along with the batched rate limit so
+	// peers can continue to report traces for this rate limit.
+	prop := propagation.TraceContext{}
+	prop.Inject(ctx, &MetadataCarrier{Map: r.Metadata})
 
 	// If config asked for no batching
 	if HasBehavior(r.Behavior, Behavior_NO_BATCHING) {
@@ -191,23 +205,19 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (ret
 		return resp.RateLimits[0], nil
 	}
 
-	rateLimitResp, err := c.getPeerRateLimitsBatch(ctx, r)
+	resp, err = c.getPeerRateLimitsBatch(ctx, r)
 	if err != nil {
 		err = errors.Wrap(err, "Error in getPeerRateLimitsBatch")
 		return nil, c.setLastErr(err)
 	}
 
-	return rateLimitResp, nil
+	return resp, nil
 }
 
 // GetPeerRateLimits requests a list of rate limit statuses from a peer
-func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (retval *GetPeerRateLimitsResp, reterr error) {
-	ctx = tracing.StartScope(ctx)
-	defer func() {
-		tracing.EndScope(ctx, reterr)
-	}()
-	span := trace.SpanFromContext(ctx)
-	span.SetAttributes(attribute.Int("numRequests", len(r.Requests)))
+func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (resp *GetPeerRateLimitsResp, err error) {
+	ctx = tracing.StartNamedScopeDebug(ctx, "PeerClient.GetPeerRateLimits")
+	defer tracing.EndScope(ctx, err)
 
 	if err := c.connect(ctx); err != nil {
 		err = errors.Wrap(err, "Error in connect")
@@ -225,7 +235,7 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 		defer c.wg.Done()
 	}()
 
-	resp, err := c.client.GetPeerRateLimits(ctx, r)
+	resp, err = c.client.GetPeerRateLimits(ctx, r)
 	if err != nil {
 		err = errors.Wrap(err, "Error in client.GetPeerRateLimits")
 		// metricCheckErrorCounter is updated within client.GetPeerRateLimits().
@@ -242,10 +252,10 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 }
 
 // UpdatePeerGlobals sends global rate limit status updates to a peer
-func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (retval *UpdatePeerGlobalsResp, reterr error) {
-	ctx = tracing.StartScope(ctx)
+func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (resp *UpdatePeerGlobalsResp, err error) {
+	ctx = tracing.StartNamedScope(ctx, "PeerClient.UpdatePeerGlobals")
 	defer func() {
-		tracing.EndScope(ctx, reterr)
+		tracing.EndScope(ctx, err)
 	}()
 
 	if err := c.connect(ctx); err != nil {
@@ -260,7 +270,7 @@ func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 		defer c.wg.Done()
 	}()
 
-	resp, err := c.client.UpdatePeerGlobals(ctx, r)
+	resp, err = c.client.UpdatePeerGlobals(ctx, r)
 	if err != nil {
 		c.setLastErr(err)
 	}
@@ -299,18 +309,9 @@ func (c *PeerClient) GetLastErr() []string {
 	return errs
 }
 
-func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq) (retval *RateLimitResp, reterr error) {
-	ctx = tracing.StartScopeDebug(ctx)
-	defer func() {
-		tracing.EndScope(ctx, reterr)
-	}()
-	span := trace.SpanFromContext(ctx)
-	span.SetAttributes(
-		attribute.String("request.name", r.Name),
-		attribute.String("request.key", r.UniqueKey),
-		attribute.Int64("request.limit", r.Limit),
-		attribute.Int64("request.duration", r.Duration),
-	)
+func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq) (resp *RateLimitResp, err error) {
+	ctx = tracing.StartNamedScopeDebug(ctx, "PeerClient.getPeerRateLimitsBatch")
+	defer tracing.EndScope(ctx, err)
 
 	funcTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("PeerClient.getPeerRateLimitsBatch"))
 	defer funcTimer.ObserveDuration()
@@ -326,24 +327,26 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 		err := &PeerErr{err: errors.New("already disconnecting")}
 		return nil, c.setLastErr(err)
 	}
+
+	// Wait for a response or context cancel
+	ctx2 := tracing.StartNamedScopeDebug(ctx, "Wait for response")
+	defer tracing.EndScope(ctx2, nil)
+
 	req := request{
-		request: r,
 		resp:    make(chan *response, 1),
-		ctx:     ctx,
+		ctx:     ctx2,
+		request: r,
 	}
 
 	// Enqueue the request to be sent
-	span.AddEvent("Enqueue request", trace.WithAttributes(
-		attribute.Int("queueLength", len(c.queue)),
-	))
 	peerAddr := c.Info().GRPCAddress
 	metricQueueLength.WithLabelValues(peerAddr).Observe(float64(len(c.queue)))
 
 	select {
 	case c.queue <- &req:
 		// Successfully enqueued request.
-	case <-ctx.Done():
-		return nil, errors.Wrap(ctx.Err(), "Error while enqueuing request")
+	case <-ctx2.Done():
+		return nil, errors.Wrap(ctx2.Err(), "Context error while enqueuing request")
 	}
 
 	c.wg.Add(1)
@@ -352,19 +355,15 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 		c.wg.Done()
 	}()
 
-	// Wait for a response or context cancel
-	ctx2 := tracing.StartNamedScopeDebug(ctx, "Wait for response")
-	defer tracing.EndScope(ctx2, nil)
-
 	select {
-	case resp := <-req.resp:
-		if resp.err != nil {
-			err := errors.Wrap(c.setLastErr(resp.err), "Request error")
+	case re := <-req.resp:
+		if re.err != nil {
+			err := errors.Wrap(c.setLastErr(re.err), "Request error")
 			return nil, c.setLastErr(err)
 		}
-		return resp.rl, nil
+		return re.rl, nil
 	case <-ctx2.Done():
-		return nil, errors.Wrap(ctx2.Err(), "Error while waiting for response")
+		return nil, errors.Wrap(ctx2.Err(), "Context error while waiting for response")
 	}
 }
 
@@ -389,40 +388,27 @@ func (c *PeerClient) run() {
 				return
 			}
 
-			_ = tracing.CallNamedScopeDebug(r.ctx, "Send batch", func(reqCtx context.Context) error {
-				span := trace.SpanFromContext(reqCtx)
-				span.SetAttributes(
-					attribute.String("peer.grpcAddress", c.conf.Info.GRPCAddress),
-				)
+			queue = append(queue, r)
+			// Send the queue if we reached our batch limit
+			if len(queue) >= c.conf.Behavior.BatchLimit {
+				c.conf.Log.WithContext(ctx).
+					WithFields(logrus.Fields{
+						"queueLen":   len(queue),
+						"batchLimit": c.conf.Behavior.BatchLimit,
+					}).
+					Debug("run() reached batch limit")
+				ref := queue
+				queue = nil
+				go c.sendQueue(ctx, ref)
+				continue
+			}
 
-				queue = append(queue, r)
-
-				// Send the queue if we reached our batch limit
-				if len(queue) >= c.conf.Behavior.BatchLimit {
-					c.conf.Log.WithContext(reqCtx).
-						WithFields(logrus.Fields{
-							"queueLen":   len(queue),
-							"batchLimit": c.conf.Behavior.BatchLimit,
-						}).
-						Info("run() reached batch limit")
-
-					queue2 := queue
-					queue = nil
-					go c.sendQueue(ctx, queue2)
-
-					// TODO: The `interval` timer should be reset to abort the
-					// pending tick that's still scheduled.
-					return nil
-				}
-
-				// If this is our first enqueued item since last
-				// sendQueue, reset interval timer.
-				if len(queue) == 1 {
-					interval.Next()
-				}
-
-				return nil
-			})
+			// If this is our first enqueued item since last
+			// sendQueue, reset interval timer.
+			if len(queue) == 1 {
+				interval.Next()
+			}
+			continue
 
 		case <-interval.C:
 			queue2 := queue
@@ -431,14 +417,7 @@ func (c *PeerClient) run() {
 				queue = nil
 
 				go func() {
-					ctx2 := tracing.StartNamedScope(ctx, "Send batch")
-					defer tracing.EndScope(ctx2, nil)
-					intervalSpan := trace.SpanFromContext(ctx2)
-					intervalSpan.SetAttributes(
-						attribute.String("batchWait", c.conf.Behavior.BatchWait.String()),
-					)
-
-					c.sendQueue(ctx2, queue2)
+					c.sendQueue(ctx, queue2)
 				}()
 			}
 		}
@@ -448,27 +427,32 @@ func (c *PeerClient) run() {
 // sendQueue sends the queue provided and returns the responses to
 // waiting go routines
 func (c *PeerClient) sendQueue(ctx context.Context, queue []*request) {
-	ctx = tracing.StartScopeDebug(ctx)
-	defer tracing.EndScope(ctx, nil)
-	span := trace.SpanFromContext(ctx)
-	span.SetAttributes(
-		attribute.Int("queueLen", len(queue)),
-		attribute.String("peer.grpcAddress", c.conf.Info.GRPCAddress),
-	)
+	//ctx = tracing.StartNamedScopeInfo(ctx, "PeerClient.sendQueue")
+	//defer tracing.EndScope(ctx, nil)
 
 	batchSendTimer := prometheus.NewTimer(metricBatchSendDuration.WithLabelValues(c.conf.Info.GRPCAddress))
 	defer batchSendTimer.ObserveDuration()
 	funcTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("PeerClient.sendQueue"))
 	defer funcTimer.ObserveDuration()
 
+	var links []trace.Link
+
 	var req GetPeerRateLimitsReq
 	for _, r := range queue {
+		//ctx = trace.LinkFromContext(ctx, )
+		links = append(links, trace.LinkFromContext(r.ctx))
 		req.Requests = append(req.Requests, r.request)
 	}
 
-	ctx2, cancel2 := ctxutil.WithTimeout(ctx, c.conf.Behavior.BatchTimeout)
-	resp, err := c.client.GetPeerRateLimits(ctx2, &req)
-	cancel2()
+	// Get the SpanContext from each item in the request
+	// Link those spans to this new Trace
+	//link := trace.LinkFromContext(ctx)
+
+	ctx = tracing.StartNamedScopeInfo(ctx, "PeersV1Client.GetPeerRateLimits", trace.WithLinks(links...))
+	timeoutCtx, timeoutCancel := ctxutil.WithTimeout(ctx, c.conf.Behavior.BatchTimeout)
+	resp, err := c.client.GetPeerRateLimits(timeoutCtx, &req)
+	timeoutCancel()
+	defer tracing.EndScope(ctx, err)
 
 	// An error here indicates the entire request failed
 	if err != nil {
@@ -493,7 +477,6 @@ func (c *PeerClient) sendQueue(ctx context.Context, queue []*request) {
 	// Unlikely, but this avoids a panic if something wonky happens
 	if len(resp.RateLimits) != len(queue) {
 		err = errors.New("server responded with incorrect rate limit list size")
-		span.RecordError(err)
 
 		for _, r := range queue {
 			metricCheckErrorCounter.WithLabelValues("Item mismatch").Add(1)

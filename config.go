@@ -17,8 +17,11 @@ limitations under the License.
 package gubernator
 
 import (
+	"bufio"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -32,11 +35,13 @@ import (
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/slice"
+	"github.com/mailgun/holster/v4/tracing"
 	"github.com/pkg/errors"
 	"github.com/segmentio/fasthash/fnv1"
 	"github.com/segmentio/fasthash/fnv1a"
 	"github.com/sirupsen/logrus"
 	etcd "go.etcd.io/etcd/client/v3"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 )
 
@@ -230,8 +235,15 @@ type DaemonConfig struct {
 	// attempt to build a complete TLS config if one is not provided.
 	TLS *TLSConfig
 
-	// (Optional) Metrics Flags which enable or disable collection of some types of metrics
+	// (Optional) Metrics Flags which enable or disable a collection of some metric types
 	MetricFlags MetricFlags
+
+	// (Optional) Instance ID which is a unique id that identifies this instance of gubernator
+	InstanceID string
+
+	// (Optional) TraceLevel sets the tracing level, this controls the number of spans included in a single trace.
+	//  Valid options are (tracing.InfoLevel, tracing.DebugLevel) Defaults to tracing.InfoLevel
+	TraceLevel tracing.Level
 }
 
 func (d *DaemonConfig) ClientTLS() *tls.Config {
@@ -297,6 +309,7 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 		fmt.Sprintf("%s:81", LocalHost()))
 	setter.SetDefault(&conf.HTTPListenAddress, os.Getenv("GUBER_HTTP_ADDRESS"),
 		fmt.Sprintf("%s:80", LocalHost()))
+	setter.SetDefault(&conf.InstanceID, GetInstanceID())
 	setter.SetDefault(&conf.HTTPStatusListenAddress, os.Getenv("GUBER_STATUS_HTTP_ADDRESS"), "")
 	setter.SetDefault(&conf.GRPCMaxConnectionAgeSeconds, getEnvInteger(log, "GUBER_GRPC_MAX_CONN_AGE_SEC"), 0)
 	setter.SetDefault(&conf.CacheSize, getEnvInteger(log, "GUBER_CACHE_SIZE"), 50_000)
@@ -456,6 +469,8 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 	if DebugEnabled {
 		log.Debug(spew.Sdump(conf))
 	}
+
+	setter.SetDefault(&conf.TraceLevel, GetTracingLevel())
 
 	return conf, nil
 }
@@ -659,3 +674,75 @@ func validHash64Keys(m map[string]HashString64) string {
 	}
 	return strings.Join(rs, ",")
 }
+
+// GetInstanceID attempts to source a unique id from the environment,
+// if none is found, then it will generate a random instance id.
+func GetInstanceID() string {
+	var id string
+
+	// Use in order, if the result is "" (empty string) then the next option will be used
+	//  1. The environment variable `GUBER_INSTANCE_ID`
+	//  2. The id of the docker container we are running in
+	//  3. Generate a random id
+	setter.SetDefault(&id, os.Getenv("GUBER_INSTANCE_ID"), getDockerCID(), generateID())
+
+	return id
+}
+
+func generateID() string {
+	token := make([]byte, 5)
+	_, _ = rand.Read(token)
+	return hex.EncodeToString(token)
+}
+
+func getDockerCID() string {
+	f, err := os.Open("/proc/self/cgroup")
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.Split(line, "/docker/")
+		if len(parts) != 2 {
+			continue
+		}
+
+		fullDockerCID := parts[1]
+		return fullDockerCID[:12]
+	}
+	return ""
+}
+
+func GetTracingLevel() tracing.Level {
+	s := os.Getenv("GUBER_TRACING_LEVEL")
+	lvl, ok := map[string]tracing.Level{
+		"ERROR": tracing.ErrorLevel,
+		"INFO":  tracing.InfoLevel,
+		"DEBUG": tracing.DebugLevel,
+	}[s]
+	if ok {
+		return lvl
+	}
+	return tracing.InfoLevel
+}
+
+var TraceLevelInfoFilter = otelgrpc.Filter(func(info *otelgrpc.InterceptorInfo) bool {
+	if info.UnaryServerInfo != nil {
+		if info.UnaryServerInfo.FullMethod == "/pb.gubernator.PeersV1/GetPeerRateLimits" {
+			return false
+		}
+		if info.UnaryServerInfo.FullMethod == "/pb.gubernator.V1/HealthCheck" {
+			return false
+		}
+	}
+	if info.Method == "/pb.gubernator.PeersV1/GetPeerRateLimits" {
+		return false
+	}
+	if info.Method == "/pb.gubernator.V1/HealthCheck" {
+		return false
+	}
+	return true
+})

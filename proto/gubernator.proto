@@ -159,6 +159,11 @@ message RateLimitReq {
 
   // Maximum burst size that the limit can accept.
   int64 burst = 8;
+
+  // This is metadata that is associated with this rate limit. Peer to Peer communication will use
+  // this to pass trace context to other peers. Might be useful for future clients to pass along
+  // trace information to gubernator.
+  map<string, string> metadata = 9;
 }
 
 enum Status {

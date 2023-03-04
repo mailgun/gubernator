@@ -49,7 +49,6 @@ import (
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/tracing"
 	"github.com/sirupsen/logrus"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -155,17 +154,17 @@ func (ph *hasher) ComputeHash63(input string) uint64 {
 	return xxhash.ChecksumString64S(input, 0) >> 1
 }
 
-func (chp *WorkerPool) Close() error {
-	close(chp.done)
+func (p *WorkerPool) Close() error {
+	close(p.done)
 	return nil
 }
 
 // Create a new pool worker instance.
-func (chp *WorkerPool) newWorker() *Worker {
+func (p *WorkerPool) newWorker() *Worker {
 	const commandChannelSize = 10000
 
 	worker := &Worker{
-		cache:               chp.conf.CacheFactory(chp.workerCacheSize),
+		cache:               p.conf.CacheFactory(p.workerCacheSize),
 		getRateLimitRequest: make(chan *request, commandChannelSize),
 		storeRequest:        make(chan workerStoreRequest, commandChannelSize),
 		loadRequest:         make(chan workerLoadRequest, commandChannelSize),
@@ -179,66 +178,66 @@ func (chp *WorkerPool) newWorker() *Worker {
 
 // getWorker Returns the request channel associated with the key.
 // Hash the key, then lookup hash ring to find the worker.
-func (chp *WorkerPool) getWorker(key string) *Worker {
-	hash := chp.hasher.ComputeHash63(key)
-	idx := hash / chp.hashRingStep
-	return chp.workers[idx]
+func (p *WorkerPool) getWorker(key string) *Worker {
+	hash := p.hasher.ComputeHash63(key)
+	idx := hash / p.hashRingStep
+	return p.workers[idx]
 }
 
 // Pool worker for processing Gubernator requests.
 // Each worker maintains its own state.
 // A hash ring will distribute requests to an assigned worker by key.
 // See: getWorker()
-func (chp *WorkerPool) worker(worker *Worker) {
+func (p *WorkerPool) worker(worker *Worker) {
 	for {
 		// Dispatch requests from each channel.
 		select {
 		case req, ok := <-worker.getRateLimitRequest:
 			if !ok {
 				// Channel closed.  Unexpected, but should be handled.
-				logrus.Error("checkHandlerPool worker stopped because channel closed")
+				logrus.Error("workerPool worker stopped because channel closed")
 				return
 			}
 
-			chp.handleGetRateLimit(req, worker.cache)
+			p.handleGetRateLimit(req, worker.cache)
 
 		case req, ok := <-worker.storeRequest:
 			if !ok {
 				// Channel closed.  Unexpected, but should be handled.
-				logrus.Error("checkHandlerPool worker stopped because channel closed")
+				logrus.Error("workerPool worker stopped because channel closed")
 				return
 			}
 
-			chp.handleStore(req, worker.cache)
+			p.handleStore(req, worker.cache)
 
 		case req, ok := <-worker.loadRequest:
 			if !ok {
 				// Channel closed.  Unexpected, but should be handled.
-				logrus.Error("checkHandlerPool worker stopped because channel closed")
+				logrus.Error("workerPool worker stopped because channel closed")
 				return
 			}
 
-			chp.handleLoad(req, worker.cache)
+			p.handleLoad(req, worker.cache)
 
 		case req, ok := <-worker.addCacheItemRequest:
 			if !ok {
 				// Channel closed.  Unexpected, but should be handled.
-				logrus.Error("checkHandlerPool worker stopped because channel closed")
+				logrus.Error("workerPool worker stopped because channel closed")
 				return
 			}
 
-			chp.handleAddCacheItem(req, worker.cache)
+			p.handleAddCacheItem(req, worker.cache)
 
 		case req, ok := <-worker.getCacheItemRequest:
 			if !ok {
 				// Channel closed.  Unexpected, but should be handled.
-				logrus.Error("checkHandlerPool worker stopped because channel closed")
+				logrus.Error("workerPool worker stopped because channel closed")
 				return
 			}
 
-			chp.handleGetCacheItem(req, worker.cache)
+			p.handleGetCacheItem(req, worker.cache)
 
-		case <-chp.done:
+		case <-p.done:
 			// Clean up.
 			return
 		}
@@ -246,15 +245,9 @@ func (chp *WorkerPool) worker(worker *Worker) {
 }
 
 // GetRateLimit sends a GetRateLimit request to worker pool.
-func (chp *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) (retval *RateLimitResp, reterr error) {
-	ctx = tracing.StartScope(ctx)
-	defer func() {
-		tracing.EndScope(ctx, reterr)
-	}()
-	span := trace.SpanFromContext(ctx)
-
+func (p *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) (retval *RateLimitResp, reterr error) {
 	// Delegate request to assigned channel based on request key.
-	worker := chp.getWorker(rlRequest.UniqueKey)
+	worker := p.getWorker(rlRequest.UniqueKey)
 	handlerRequest := &request{
 		ctx:     ctx,
 		resp:    make(chan *response, 1),
@@ -262,10 +255,6 @@ func (chp *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq
 	}
 
 	// Send request.
-	span.AddEvent("Sending request...", trace.WithAttributes(
-		attribute.Int("channelLength", len(worker.getRateLimitRequest)),
-	))
-
 	select {
 	case worker.getRateLimitRequest <- handlerRequest:
 		// Successfully sent request.
@@ -276,7 +265,6 @@ func (chp *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq
 	metricWorkerQueueLength.WithLabelValues("GetRateLimit", worker.name).Observe(float64(len(worker.getRateLimitRequest)))
 
 	// Wait for response.
-	span.AddEvent("Waiting for response...")
 	select {
 	case handlerResponse := <-handlerRequest.resp:
 		// Successfully read response.
@@ -287,8 +275,8 @@ func (chp *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq
 }
 
 // Handle request received by worker.
-func (chp *WorkerPool) handleGetRateLimit(handlerRequest *request, cache Cache) {
-	ctx := tracing.StartScopeDebug(handlerRequest.ctx)
+func (p *WorkerPool) handleGetRateLimit(handlerRequest *request, cache Cache) {
+	ctx := tracing.StartNamedScopeDebug(handlerRequest.ctx, "WorkerPool.handleGetRateLimit")
 	defer tracing.EndScope(ctx, nil)
 
 	var rlResponse *RateLimitResp
@@ -296,7 +284,7 @@ func (chp *WorkerPool) handleGetRateLimit(handlerRequest *request, cache Cache) 
 
 	switch handlerRequest.request.Algorithm {
 	case Algorithm_TOKEN_BUCKET:
-		rlResponse, err = tokenBucket(ctx, chp.conf.Store, cache, handlerRequest.request)
+		rlResponse, err = tokenBucket(ctx, p.conf.Store, cache, handlerRequest.request)
 		if err != nil {
 			msg := "Error in tokenBucket"
 			countError(err, msg)
@@ -305,7 +293,7 @@ func (chp *WorkerPool) handleGetRateLimit(handlerRequest *request, cache Cache) 
 		}
 
 	case Algorithm_LEAKY_BUCKET:
-		rlResponse, err = leakyBucket(ctx, chp.conf.Store, cache, handlerRequest.request)
+		rlResponse, err = leakyBucket(ctx, p.conf.Store, cache, handlerRequest.request)
 		if err != nil {
 			msg := "Error in leakyBucket"
 			countError(err, msg)
@@ -337,13 +325,11 @@ func (chp *WorkerPool) handleGetRateLimit(handlerRequest *request, cache Cache) 
 // Load atomically loads cache from persistent storage.
 // Read from persistent storage.  Load into each appropriate worker's cache.
 // Workers are locked during this load operation to prevent race conditions.
-func (chp *WorkerPool) Load(ctx context.Context) (reterr error) {
+func (p *WorkerPool) Load(ctx context.Context) (err error) {
 	ctx = tracing.StartScope(ctx)
-	defer func() {
-		tracing.EndScope(ctx, reterr)
-	}()
+	defer tracing.EndScope(ctx, err)
 
-	ch, err := chp.conf.Loader.Load()
+	ch, err := p.conf.Loader.Load()
 	if err != nil {
 		return errors.Wrap(err, "Error in loader.Load")
 	}
@@ -375,7 +361,7 @@ MAIN:
 			return ctx.Err()
 		}
 
-		worker := chp.getWorker(item.Key)
+		worker := p.getWorker(item.Key)
 
 		// Initiate a load channel with each worker.
 		loadCh, exist := loadChMap[worker]
@@ -425,8 +411,8 @@ MAIN:
 	return nil
 }
 
-func (chp *WorkerPool) handleLoad(request workerLoadRequest, cache Cache) {
-	ctx := tracing.StartScopeDebug(request.ctx)
+func (p *WorkerPool) handleLoad(request workerLoadRequest, cache Cache) {
+	ctx := tracing.StartNamedScopeDebug(request.ctx, "WorkerPool.handleLoad")
 	defer tracing.EndScope(ctx, nil)
 
 MAIN:
@@ -464,17 +450,15 @@ MAIN:
 // Store atomically stores cache to persistent storage.
 // Save all workers' caches to persistent storage.
 // Workers are locked during this store operation to prevent race conditions.
-func (chp *WorkerPool) Store(ctx context.Context) (reterr error) {
-	ctx = tracing.StartScope(ctx)
-	defer func() {
-		tracing.EndScope(ctx, reterr)
-	}()
+func (p *WorkerPool) Store(ctx context.Context) (err error) {
+	ctx = tracing.StartNamedScopeDebug(ctx, "WorkerPool.Store")
+	defer tracing.EndScope(ctx, err)
 
 	var wg sync.WaitGroup
 	out := make(chan *CacheItem, 500)
 
 	// Iterate each worker's cache to `out` channel.
-	for _, worker := range chp.workers {
+	for _, worker := range p.workers {
 		wg.Add(1)
 
 		go func(ctx context.Context, worker *Worker) {
@@ -521,16 +505,15 @@ func (chp *WorkerPool) Store(ctx context.Context) (reterr error) {
 		return ctx.Err()
 	}
 
-	err := chp.conf.Loader.Save(out)
-	if err != nil {
-		return errors.Wrap(err, "error in chp.conf.Loader.Save")
+	if err = p.conf.Loader.Save(out); err != nil {
+		return errors.Wrap(err, "while calling p.conf.Loader.Save()")
 	}
 
 	return nil
 }
 
-func (chp *WorkerPool) handleStore(request workerStoreRequest, cache Cache) {
-	ctx := tracing.StartScopeDebug(request.ctx)
+func (p *WorkerPool) handleStore(request workerStoreRequest, cache Cache) {
+	ctx := tracing.StartNamedScopeDebug(request.ctx, "WorkerPool.handleStore")
 	defer tracing.EndScope(ctx, nil)
 
 	for item := range cache.Each() {
@@ -558,14 +541,12 @@ func (chp *WorkerPool) handleStore(request workerStoreRequest, cache Cache) {
 }
 
 // AddCacheItem adds an item to the worker's cache.
-func (chp *WorkerPool) AddCacheItem(ctx context.Context, key string, item *CacheItem) (reterr error) {
-	ctx = tracing.StartScope(ctx)
-	defer func() {
-		tracing.EndScope(ctx, reterr)
-	}()
+func (p *WorkerPool) AddCacheItem(ctx context.Context, key string, item *CacheItem) (err error) {
+	ctx = tracing.StartNamedScopeDebug(ctx, "WorkerPool.AddCacheItem")
+	tracing.EndScope(ctx, err)
 
 	respChan := make(chan workerAddCacheItemResponse)
-	worker := chp.getWorker(key)
+	worker := p.getWorker(key)
 	req := workerAddCacheItemRequest{
 		ctx:      ctx,
 		response: respChan,
@@ -593,8 +574,8 @@ func (chp *WorkerPool) AddCacheItem(ctx context.Context, key string, item *Cache
 	}
 }
 
-func (chp *WorkerPool) handleAddCacheItem(request workerAddCacheItemRequest, cache Cache) {
-	ctx := tracing.StartScopeDebug(request.ctx)
+func (p *WorkerPool) handleAddCacheItem(request workerAddCacheItemRequest, cache Cache) {
+	ctx := tracing.StartNamedScopeDebug(request.ctx, "WorkerPool.handleAddCacheItem")
 	defer tracing.EndScope(ctx, nil)
 
 	exists := cache.Add(request.item)
@@ -611,14 +592,12 @@ func (chp *WorkerPool) handleAddCacheItem(request workerAddCacheItemRequest, cac
 }
 
 // GetCacheItem gets item from worker's cache.
-func (chp *WorkerPool) GetCacheItem(ctx context.Context, key string) (item *CacheItem, found bool, reterr error) {
-	ctx = tracing.StartScope(ctx)
-	defer func() {
-		tracing.EndScope(ctx, reterr)
-	}()
+func (p *WorkerPool) GetCacheItem(ctx context.Context, key string) (item *CacheItem, found bool, err error) {
+	ctx = tracing.StartNamedScopeDebug(ctx, "WorkerPool.GetCacheItem")
+	tracing.EndScope(ctx, err)
 
 	respChan := make(chan workerGetCacheItemResponse)
-	worker := chp.getWorker(key)
+	worker := p.getWorker(key)
 	req := workerGetCacheItemRequest{
 		ctx:      ctx,
 		response: respChan,
@@ -646,8 +625,8 @@ func (chp *WorkerPool) GetCacheItem(ctx context.Context, key string) (item *Cach
 	}
 }
 
-func (chp *WorkerPool) handleGetCacheItem(request workerGetCacheItemRequest, cache Cache) {
-	ctx := tracing.StartScopeDebug(request.ctx)
+func (p *WorkerPool) handleGetCacheItem(request workerGetCacheItemRequest, cache Cache) {
+	ctx := tracing.StartNamedScopeDebug(request.ctx, "WorkerPool.handleGetCacheItem")
 	defer tracing.EndScope(ctx, nil)
 
 	item, ok := cache.GetItem(request.key)

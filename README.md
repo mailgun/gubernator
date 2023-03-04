@@ -225,15 +225,15 @@ POST /v1/GetRateLimits
 Example Payload
 ```json
 {
-    "requests":[
-        {
-            "name": "requests_per_sec",
-            "unique_key": "account.id=1234",
-            "hits": 1,
-            "duration": 60000,
-            "limit": 10
-        }
-    ]
+  "requests": [
+    {
+      "name": "requests_per_sec",
+      "uniqueKey": "account:12345",
+      "hits": "1",
+      "limit": "10",
+      "duration": "1000"
+    }
+  ]
 }
 ```
 
@@ -241,32 +241,27 @@ Example response:
 
 ```json
 {
-  "responses":[
+  "responses": [
     {
-      "status": 0,
+      "status": "UNDER_LIMIT",
       "limit": "10",
-      "remaining": "7",
-      "reset_time": "1551309219226"
+      "remaining": "9",
+      "reset_time": "1690855128786",
+      "error": "",
+      "metadata": {
+        "owner": "gubernator:81"
+      }
     }
   ]
 }
 ```
 
 ### Deployment
-NOTE: Gubernator uses `etcd` or Kubernetes or round-robin DNS to discover peers and
+NOTE: Gubernator uses `etcd`, Kubernetes or round-robin DNS to discover peers and
 establish a cluster. If you don't have either, the docker-compose method is the
 simplest way to try gubernator out.
 
-##### Docker with existing etcd cluster
-```bash
-$ docker run -p 8081:81 -p 9080:80 -e GUBER_ETCD_ENDPOINTS=etcd1:2379,etcd2:2379 \
-   ghcr.io/mailgun/gubernator:latest
-   
-# Hit the HTTP API at localhost:9080
-$ curl http://localhost:9080/v1/HealthCheck
-```
-
-##### Docker compose
+##### Docker compose cluster
 The docker compose file uses member-list for peer discovery
 ```bash
 # Download the docker-compose file
@@ -279,6 +274,29 @@ $ vi docker-compose.yaml
 $ docker-compose up -d
 
 # Hit the HTTP API at localhost:9080 (GRPC is at 9081)
+$ curl http://localhost:9080/v1/HealthCheck
+
+# Make a rate limit request
+$ curl http://localhost:9080/v1/GetRateLimits \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "requests": [
+        {
+            "name": "requests_per_sec",
+            "uniqueKey": "account:12345",
+            "hits": "1",
+            "limit": "10",
+            "duration": "1000"
+        }
+    ]
+}'
+```
+##### Docker with existing etcd cluster
+```bash
+$ docker run -p 8081:81 -p 9080:80 -e GUBER_ETCD_ENDPOINTS=etcd1:2379,etcd2:2379 \
+   ghcr.io/mailgun/gubernator:latest
+
+# Hit the HTTP API at localhost:9080
 $ curl http://localhost:9080/v1/HealthCheck
 ```
 
@@ -298,16 +316,6 @@ $ kubectl create -f k8s-deployment.yaml
 If your DNS service supports auto-registration, for example AWS Route53 service discovery,
 you can use same fully-qualified domain name to both let your business logic containers or
 instances to find `gubernator` and for `gubernator` containers/instances to find each other.
-
-###### Local Testing
-
-1. terminal, start the environment: `docker-compose -f docker-compose-dns.yml up --build`
-2. terminal, drop into test container: `docker exec -it gubernator_shell_1 /bin/sh`
-3. in the test container: `curl -v gubernator/v1/GetRateLimits --data '{"requests":[{"name":"requests_per_sec","unique_key":"account.id=1234","hits":1,"duration":60000,"limit":10}]}'
-
-###### AWS
-
-TBD
 
 ##### TLS
 Gubernator supports TLS for both HTTP and GRPC connections. You can see an example with
@@ -334,6 +342,5 @@ workings of gubernator.
 Gubernator publishes Prometheus metrics for realtime monitoring.  See
 [prometheus.md](prometheus.md) for details.
 
-## Jaeger Tracing
-Gubernator supports tracing using Jaeger Tracing tools.  See
-[jaegertracing.md](jaegertracing.md) for details.
+## OpenTelemetry Tracing (OTEL)
+Gubernator supports OpenTelemetry. See [tracing.md](tracing.md) for details.

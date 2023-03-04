@@ -23,7 +23,6 @@ import (
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/ctxutil"
 	"github.com/mailgun/holster/v4/syncutil"
-	"github.com/mailgun/holster/v4/tracing"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/protobuf/proto"
 )
@@ -80,8 +79,6 @@ func (gm *globalManager) runAsyncHits() {
 	hits := make(map[string]*RateLimitReq)
 
 	gm.wg.Until(func(done chan struct{}) bool {
-		ctx := tracing.StartScopeDebug(context.Background())
-		defer tracing.EndScope(ctx, nil)
 
 		select {
 		case r := <-gm.asyncQueue:
@@ -96,7 +93,7 @@ func (gm *globalManager) runAsyncHits() {
 
 			// Send the hits if we reached our batch limit
 			if len(hits) == gm.conf.GlobalBatchLimit {
-				gm.sendHits(ctx, hits)
+				gm.sendHits(context.Background(), hits)
 				hits = make(map[string]*RateLimitReq)
 				return true
 			}
@@ -109,7 +106,7 @@ func (gm *globalManager) runAsyncHits() {
 
 		case <-interval.C:
 			if len(hits) != 0 {
-				gm.sendHits(ctx, hits)
+				gm.sendHits(context.Background(), hits)
 				hits = make(map[string]*RateLimitReq)
 			}
 		case <-done:
@@ -169,16 +166,13 @@ func (gm *globalManager) runBroadcasts() {
 	updates := make(map[string]*RateLimitReq)
 
 	gm.wg.Until(func(done chan struct{}) bool {
-		ctx := tracing.StartScopeDebug(context.Background())
-		defer tracing.EndScope(ctx, nil)
-
 		select {
 		case r := <-gm.broadcastQueue:
 			updates[r.HashKey()] = r
 
 			// Send the hits if we reached our batch limit
 			if len(updates) == gm.conf.GlobalBatchLimit {
-				gm.broadcastPeers(ctx, updates)
+				gm.broadcastPeers(context.Background(), updates)
 				updates = make(map[string]*RateLimitReq)
 				return true
 			}
@@ -191,7 +185,7 @@ func (gm *globalManager) runBroadcasts() {
 
 		case <-interval.C:
 			if len(updates) != 0 {
-				gm.broadcastPeers(ctx, updates)
+				gm.broadcastPeers(context.Background(), updates)
 				updates = make(map[string]*RateLimitReq)
 			}
 		case <-done:
@@ -207,14 +201,14 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 	start := clock.Now()
 
 	for _, r := range updates {
-		// Copy the original since we removing the GLOBAL behavior
+		// Copy the original since we are removing the GLOBAL behavior
 		rl := proto.Clone(r).(*RateLimitReq)
-		// We are only sending the status of the rate limit so
-		// we clear the behavior flag so we don't get queued for update again.
+		// We are only sending the status of the rate limit so, we
+		// clear the behavior flag, so we don't get queued for update again.
 		SetBehavior(&rl.Behavior, Behavior_GLOBAL, false)
 		rl.Hits = 0
 
-		status, err := gm.instance.getRateLimit(ctx, rl)
+		status, err := gm.instance.getLocalRateLimit(ctx, rl)
 		if err != nil {
 			gm.log.WithError(err).Errorf("while broadcasting update to peers for: '%s'", rl.HashKey())
 			continue

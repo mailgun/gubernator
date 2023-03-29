@@ -76,7 +76,7 @@ func newV1Server(t *testing.T, address string, conf gubernator.Config) *v1Server
 func TestLoader(t *testing.T) {
 	loader := gubernator.NewMockLoader()
 
-	srv := newV1Server(t, "", gubernator.Config{
+	srv := newV1Server(t, "localhost:0", gubernator.Config{
 		Behaviors: gubernator.BehaviorConfig{
 			GlobalSyncWait: clock.Millisecond * 50, // Suitable for testing but not production
 			GlobalTimeout:  clock.Second,
@@ -129,7 +129,7 @@ func TestStore(t *testing.T) {
 	setup := func() (*MockStore2, *v1Server, gubernator.V1Client) {
 		store := &MockStore2{}
 
-		srv := newV1Server(t, "", gubernator.Config{
+		srv := newV1Server(t, "localhost:0", gubernator.Config{
 			Behaviors: gubernator.BehaviorConfig{
 				GlobalSyncWait: clock.Millisecond * 50, // Suitable for testing but not production
 				GlobalTimeout:  clock.Second,

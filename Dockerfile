@@ -19,11 +19,11 @@ ADD . /go/src
 ARG VERSION
 
 # Build the server inside the container
-RUN CGO_ENABLED=0 GOOS=${TARGETPLATFORM%/*} GOARCH=${TARGETPLATFORM#*/} go build -a -installsuffix cgo \
-    -ldflags "-w -s -X main.Version=$VERSION" -o /gubernator /go/src/cmd/gubernator
+RUN CGO_ENABLED=0 GOOS=${TARGETPLATFORM%/*} GOARCH=${TARGETPLATFORM#*/} go build \
+    -ldflags "-w -s -X main.Version=$VERSION" -o /gubernator /go/src/cmd/gubernator/main.go
 
-RUN CGO_ENABLED=0 GOOS=${TARGETPLATFORM%/*} GOARCH=${TARGETPLATFORM#*/} go build -a -installsuffix cgo \
-    -ldflags "-w -s" -o /healthcheck /go/src/cmd/healthcheck
+RUN CGO_ENABLED=0 GOOS=${TARGETPLATFORM%/*} GOARCH=${TARGETPLATFORM#*/} go build \
+    -ldflags "-w -s" -o /healthcheck /go/src/cmd/healthcheck/main.go
 
 # Create our deploy image
 FROM scratch

@@ -12,19 +12,15 @@ At a high level:
 
 ## Update Version Files
 Some files contain the current version in [semver](https://semver.org/) format,
-such as "2.0.0-rc.34".
+such as "2.0.0-rc.34".  These files must be updated to the target version.
 
 These files are:
-* `CHANGELOG`
 * `charts/helm/Chart.yaml`
    * `version`
    * `appVersion`
 * `version`
 
-It is necessary to update these files to match the target version.
-
-Manually update `CHANGELOG`, then use script `update-version.sh` to easily
-update the remaining files.
+Use script `update-version.sh` to easily update the required files.
 
 ```
 $ ./update-version.sh 2.0.0-rc.35
@@ -37,8 +33,10 @@ Publish a GitHub release from github.com.
 
 Create a new tag with "v" prefix version, such as "v2.0.0-rc.34".
 
-In description, paste the same description added to `CHANGELOG`.  For example,
+Provide a meaningful description of what's changed.  For example:
 
+* Tag: v2.0.0-rc.35
+* Title: v2.0.0-rc.35
 ```markdown
 ## What's Changed
 * Updated foobar by @Baliedge in #999.

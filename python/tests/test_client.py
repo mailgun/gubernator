@@ -43,9 +43,10 @@ def cluster():
 
 
 def test_health_check(cluster):
-    client = gubernator.V1Client()
-    resp = client.health_check()
-    print("Health:", resp)
+    with grpc.insecure_channel("127.0.0.1:9090") as channel:
+        client = V1Stub(channel)
+        resp = client.HealthCheck()
+        print("Health:", resp)
 
 
 def test_get_rate_limit(cluster):

@@ -58,7 +58,7 @@ def test_get_rate_limit(cluster):
         unique_key="domain-id-0001"
     )
 
-    with grpc.insecure_channel(endpoint) as channel:
+    with grpc.insecure_channel("127.0.0.1:9090") as channel:
         client = V1Stub(channel)
         resp = client.GetRateLimits(req, timeout=0.5)
         print("RateLimit:", resp)

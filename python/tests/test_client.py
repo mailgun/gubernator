@@ -13,12 +13,16 @@
 # limitations under the License.
 #
 
-from gubernator import ratelimit_pb2 as pb
-
+import os
 import pytest
 import subprocess
-import os
+
+import grpc
+
 import gubernator
+from gubernator import Algorithm, GetRateLimitsReq, V1Stub
+
+SECOND = 1000
 
 
 @pytest.fixture(scope='module')
@@ -45,16 +49,16 @@ def test_health_check(cluster):
 
 
 def test_get_rate_limit(cluster):
-    req = pb.Requests()
-    rate_limit = req.requests.add()
+    req = GetRateLimitsReq(
+        algorithm=Algorithm.TOKEN_BUCKET,
+        duration=2 * SECOND,
+        hits=1,
+        limit=10,
+        name="test-ns",
+        unique_key="domain-id-0001"
+    )
 
-    rate_limit.algorithm = pb.TOKEN_BUCKET
-    rate_limit.duration = gubernator.SECOND * 2
-    rate_limit.limit = 10
-    rate_limit.namespace = 'test-ns'
-    rate_limit.unique_key = 'domain-id-0001'
-    rate_limit.hits = 1
-
-    client = gubernator.V1Client()
-    resp = client.GetRateLimits(req, timeout=0.5)
-    print("RateLimit: {}".format(resp))
+    with grpc.insecure_channel(endpoint) as channel:
+        client = V1Stub(channel)
+        resp = client.GetRateLimits(req, timeout=0.5)
+        print("RateLimit:", resp)

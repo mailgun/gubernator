@@ -16,42 +16,28 @@
 # limitations under the License.
 #
 
-try:  # for pip >= 10
-    from pip._internal.req import parse_requirements
-except ImportError:  # for pip <= 9.0.3
-    from pip.req import parse_requirements
-from setuptools import setup, find_packages
-import platform
-
-with open('version', 'r') as version_file:
-    version = version_file.readline().strip()
-
-if platform.python_version_tuple()[0] == '2':
-    reqs = parse_requirements('requirements-py2.txt', session='')
-else:
-    reqs = parse_requirements('requirements-py3.txt', session='')
-
-requirements = [str(r.req) for r in reqs]
+from setuptools import setup
 
 setup(
     name='gubernator',
-    version='0.1.0',
+    version="0.2.0",
     description="Python client for gubernator",
     author="Derrick J. Wippler",
     author_email='thrawn01@gmail.com',
     url='https://github.com/mailgun/gubernator',
-    package_dir={'': '.'},
-    packages=find_packages('.', exclude=['tests']),
-    install_requires=requirements,
+    packages=("gubernator",),
+    install_requires=("grpcio>=1,<2", "protobuf>=4,<5"),
+    include_package_data=True,
     license="Apache Software License 2.0",
-    python_requires='>=2.7',
+    python_requires='>=3.8',
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: Apache Software License',
         'Natural Language :: English',
-        'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3.5',
-        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
     ],
 )

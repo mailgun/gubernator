@@ -2,7 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-import peers_pb2 as peers__pb2
+from gubernator import peers_pb2 as peers__pb2
 
 
 class PeersV1Stub(object):

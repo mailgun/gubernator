@@ -2,7 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-import gubernator_pb2 as gubernator__pb2
+from gubernator import gubernator_pb2 as gubernator__pb2
 
 
 class V1Stub(object):

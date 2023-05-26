@@ -5,8 +5,8 @@ __pycache__
 gubernator.egg-info/
 .DS_Store
 *.iml
-googleapis/
 coverage.out
 coverage.html
 /gubernator
 /gubernator-cli
+/proto_vendor/

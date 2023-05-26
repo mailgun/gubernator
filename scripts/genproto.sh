@@ -18,57 +18,51 @@
 # Make sure the script fails fast.
 set -eux
 
-SCRIPT_PATH=$(dirname "$0")                  # relative
-REPO_ROOT=$(cd "${SCRIPT_PATH}/.." && pwd )  # absolutized and normalized
+REPO_ROOT=$(git rev-parse --show-toplevel)
 PROTO_DIR=$REPO_ROOT/proto
+VENDOR_DIR=$REPO_ROOT/proto_vendor
 PYTHON_DST_DIR=$REPO_ROOT/python/gubernator
 GOLANG_DST_DIR=$REPO_ROOT
 
-# Build Golang stabs
+# Pull dependencies.
+GOOGLE_APIS_DIR=$REPO_ROOT/proto_vendor/googleapis
+if [ ! -d $GOOGLE_APIS_DIR ]; then
+  git clone --depth 1 https://github.com/googleapis/googleapis $GOOGLE_APIS_DIR
+fi
 
-
-go install \
-  google.golang.org/protobuf/cmd/protoc-gen-go \
+# Build Golang stubs
+go get google.golang.org/grpc/cmd/protoc-gen-go-grpc
+go install google.golang.org/protobuf/cmd/protoc-gen-go \
   google.golang.org/grpc/cmd/protoc-gen-go-grpc \
   github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway \
   github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2
 GOPATH=$(go env GOPATH)
 export PATH=$PATH:$GOPATH/bin
 
-GOOGLE_APIS_DIR=$REPO_ROOT/googleapis
-if [ -d $GOOGLE_APIS_DIR ]
-then
-    pushd $GOOGLE_APIS_DIR
-    git pull
-    popd
-else
-    git clone https://github.com/googleapis/googleapis $GOOGLE_APIS_DIR
-fi
+protoc -I=$PROTO_DIR \
+  -I=$GOOGLE_APIS_DIR \
+  --go_out=$GOLANG_DST_DIR \
+  --go_opt=paths=source_relative \
+  --go-grpc_out=$GOLANG_DST_DIR \
+  --go-grpc_opt=paths=source_relative \
+  $PROTO_DIR/*.proto
 
 protoc -I=$PROTO_DIR \
-    -I=$GOOGLE_APIS_DIR \
-    --go_out=$GOLANG_DST_DIR \
-    --go_opt=paths=source_relative \
-    --go-grpc_out=$GOLANG_DST_DIR \
-    --go-grpc_opt=paths=source_relative \
-    $PROTO_DIR/*.proto
+  -I=$GOOGLE_APIS_DIR \
+  --grpc-gateway_out=$GOLANG_DST_DIR \
+  --grpc-gateway_opt=logtostderr=true \
+  --grpc-gateway_opt=paths=source_relative \
+  --grpc-gateway_opt=generate_unbound_methods=true \
+  $PROTO_DIR/*.proto
 
-protoc -I=$PROTO_DIR \
-    -I=$GOOGLE_APIS_DIR \
-    --grpc-gateway_out=$GOLANG_DST_DIR \
-    --grpc-gateway_opt=logtostderr=true \
-    --grpc-gateway_opt=paths=source_relative \
-    --grpc-gateway_opt=generate_unbound_methods=true \
-    $PROTO_DIR/*.proto
-
-# Build Python stabs
+# Build Python stubs
 mkdir -p "$PYTHON_DST_DIR"
-pip install grpcio
-pip install grpcio-tools
+pip install grpcio grpcio_tools
 python3 -m grpc.tools.protoc \
-    -I=$PROTO_DIR \
-    -I=$GOOGLE_APIS_DIR \
-    --python_out=$PYTHON_DST_DIR \
-    --grpc_python_out=$PYTHON_DST_DIR \
-    $PROTO_DIR/*.proto
+  -I=$PROTO_DIR \
+  -I=$GOOGLE_APIS_DIR \
+  --python_out=$PYTHON_DST_DIR \
+  --pyi_out=$PYTHON_DST_DIR \
+  --grpc_python_out=$PYTHON_DST_DIR \
+  $PROTO_DIR/*.proto
 touch $PYTHON_DST_DIR/__init__.py

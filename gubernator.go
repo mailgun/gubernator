@@ -193,6 +193,9 @@ func (s *V1Instance) Close() (reterr error) {
 // peer that does.
 func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (retval *GetRateLimitsResp, reterr error) {
 	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		attribute.Int("num.items", len(r.Requests)),
+	)
 
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.GetRateLimits"))
 	defer funcTimer.ObserveDuration()
@@ -325,7 +328,7 @@ func (s *V1Instance) asyncRequests(ctx context.Context, req *AsyncReq) {
 	var attempts int
 	var err error
 
-	ctx = tracing.StartScope(ctx)
+	ctx = tracing.StartScopeDebug(ctx)
 	defer tracing.EndScope(ctx, nil)
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(

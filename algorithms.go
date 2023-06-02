@@ -41,15 +41,12 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 	// Get rate limit from cache.
 	hashKey := r.HashKey()
 	item, ok := c.GetItem(hashKey)
-	span.AddEvent("c.GetItem()")
 
 	if s != nil && !ok {
 		// Cache miss.
 		// Check our store for the item.
 		if item, ok = s.Get(ctx, r); ok {
-			span.AddEvent("Check store for rate limit")
 			c.Add(item)
-			span.AddEvent("c.Add()")
 		}
 	}
 
@@ -78,15 +75,11 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 	if ok {
 		// Item found in cache or store.
-		span.AddEvent("Update existing rate limit")
-
 		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
 			c.Remove(hashKey)
-			span.AddEvent("c.Remove()")
 
 			if s != nil {
 				s.Remove(ctx, hashKey)
-				span.AddEvent("s.Remove()")
 			}
 			return &RateLimitResp{
 				Status:    Status_UNDER_LIMIT,
@@ -107,18 +100,15 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			span.AddEvent("Client switched algorithms; perhaps due to a migration?")
 
 			c.Remove(hashKey)
-			span.AddEvent("c.Remove()")
 
 			if s != nil {
 				s.Remove(ctx, hashKey)
-				span.AddEvent("s.Remove()")
 			}
 
 			return tokenBucketNewItem(ctx, s, c, r)
 		}
 
 		// Update the limit if it changed.
-		span.AddEvent("Update the limit if changed")
 		if t.Limit != r.Limit {
 			// Add difference to remaining.
 			t.Remaining += r.Limit - t.Limit
@@ -164,14 +154,12 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		if s != nil {
 			defer func() {
 				s.OnChange(ctx, r, item)
-				span.AddEvent("defer s.OnChange()")
 			}()
 		}
 
 		// Client is only interested in retrieving the current status or
 		// updating the rate limit config.
 		if r.Hits == 0 {
-			span.AddEvent("Return current status, apply no change")
 			return rl, nil
 		}
 
@@ -230,7 +218,6 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 	}
 
 	// Add a new rate limit to the cache.
-	span.AddEvent("Add a new rate limit to the cache")
 	if HasBehavior(r.Behavior, Behavior_DURATION_IS_GREGORIAN) {
 		expire, err = GregorianExpiration(clock.Now(), r.Duration)
 		if err != nil {
@@ -262,11 +249,9 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 	}
 
 	c.Add(item)
-	span.AddEvent("c.Add()")
 
 	if s != nil {
 		s.OnChange(ctx, r, item)
-		span.AddEvent("s.OnChange()")
 	}
 
 	return rl, nil
@@ -292,15 +277,12 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 	// Get rate limit from cache.
 	hashKey := r.HashKey()
 	item, ok := c.GetItem(hashKey)
-	span.AddEvent("c.GetItem()")
 
 	if s != nil && !ok {
 		// Cache miss.
 		// Check our store for the item.
 		if item, ok = s.Get(ctx, r); ok {
-			span.AddEvent("Check store for rate limit")
 			c.Add(item)
-			span.AddEvent("c.Add()")
 		}
 	}
 
@@ -329,17 +311,14 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 	if ok {
 		// Item found in cache or store.
-		span.AddEvent("Update existing rate limit")
 
 		b, ok := item.Value.(*LeakyBucketItem)
 		if !ok {
 			// Client switched algorithms; perhaps due to a migration?
 			c.Remove(hashKey)
-			span.AddEvent("c.Remove()")
 
 			if s != nil {
 				s.Remove(ctx, hashKey)
-				span.AddEvent("s.Remove()")
 			}
 
 			return leakyBucketNewItem(ctx, s, c, r)
@@ -410,7 +389,6 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		if s != nil {
 			defer func() {
 				s.OnChange(ctx, r, item)
-				span.AddEvent("s.OnChange()")
 			}()
 		}
 
@@ -457,7 +435,6 @@ func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 	defer func() {
 		tracing.EndScope(ctx, err)
 	}()
-	span := trace.SpanFromContext(ctx)
 
 	now := MillisecondNow()
 	duration := r.Duration
@@ -506,11 +483,9 @@ func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 	}
 
 	c.Add(item)
-	span.AddEvent("c.Add()")
 
 	if s != nil {
 		s.OnChange(ctx, r, item)
-		span.AddEvent("s.OnChange()")
 	}
 
 	return &rl, nil

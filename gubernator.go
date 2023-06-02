@@ -548,7 +548,6 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (retval
 
 	s.peerMutex.RLock()
 	defer s.peerMutex.RUnlock()
-	span.AddEvent("peerMutex.RLock()")
 
 	// Iterate through local peers and get their last errors
 	localPeers := s.conf.LocalPicker.Peers()
@@ -615,12 +614,10 @@ func (s *V1Instance) getRateLimit(ctx context.Context, r *RateLimitReq) (retval 
 
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
 		s.global.QueueUpdate(r)
-		span.AddEvent("s.global.QueueUpdate(r)")
 	}
 
 	if HasBehavior(r.Behavior, Behavior_MULTI_REGION) {
 		s.mutliRegion.QueueHits(r)
-		span.AddEvent("s.mutliRegion.QueueHits(r)")
 	}
 
 	resp, err := s.gubernatorPool.GetRateLimit(ctx, r)
@@ -719,15 +716,12 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 
 // GetPeer returns a peer client for the hash key provided
 func (s *V1Instance) GetPeer(ctx context.Context, key string) (retval *PeerClient, reterr error) {
-	span := trace.SpanFromContext(ctx)
-
 	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.GetPeer"))
 	defer funcTimer.ObserveDuration()
 	lockTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("V1Instance.GetPeer_RLock"))
 
 	s.peerMutex.RLock()
 	defer s.peerMutex.RUnlock()
-	span.AddEvent("peerMutex.RLock()")
 	lockTimer.ObserveDuration()
 
 	peer, err := s.conf.LocalPicker.Get(key)

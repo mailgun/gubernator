@@ -217,7 +217,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (re
 
 	// For each item in the request body
 	for i, req := range r.Requests {
-		_ = tracing.NamedScope(ctx, "Iterate requests", func(ctx context.Context) error {
+		_ = tracing.NamedScopeDebug(ctx, "Iterate requests", func(ctx context.Context) error {
 			key := req.Name + "_" + req.UniqueKey
 			var peer *PeerClient
 			var err error

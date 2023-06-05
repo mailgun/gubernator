@@ -26,7 +26,7 @@ setup(
     author_email='thrawn01@gmail.com',
     url='https://github.com/mailgun/gubernator',
     packages=("gubernator",),
-    install_requires=("grpcio>=1,<2", "protobuf>=4,<5"),
+    install_requires=("grpcio>=1.54.2,<2", "protobuf>=4.23.1,<5"),
     include_package_data=True,
     license="Apache Software License 2.0",
     python_requires='>=3.8',

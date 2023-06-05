@@ -19,8 +19,8 @@ import subprocess
 
 import grpc
 
-import gubernator
-from gubernator import Algorithm, GetRateLimitsReq, V1Stub
+from gubernator import (Algorithm, GetRateLimitsReq, HealthCheckReq, RateLimitReq,
+                        Status, V1Stub)
 
 SECOND = 1000
 
@@ -45,12 +45,12 @@ def cluster():
 def test_health_check(cluster):
     with grpc.insecure_channel("127.0.0.1:9090") as channel:
         client = V1Stub(channel)
-        resp = client.HealthCheck()
-        print("Health:", resp)
+        resp = client.HealthCheck(HealthCheckReq())
+        assert resp.status == "healthy"
 
 
 def test_get_rate_limit(cluster):
-    req = GetRateLimitsReq(
+    req = RateLimitReq(
         algorithm=Algorithm.TOKEN_BUCKET,
         duration=2 * SECOND,
         hits=1,
@@ -61,5 +61,5 @@ def test_get_rate_limit(cluster):
 
     with grpc.insecure_channel("127.0.0.1:9090") as channel:
         client = V1Stub(channel)
-        resp = client.GetRateLimits(req, timeout=0.5)
-        print("RateLimit:", resp)
+        resp = client.GetRateLimits(GetRateLimitsReq([req]), timeout=0.5)
+        assert resp.responses[0].status is Status.UNDER_LIMIT

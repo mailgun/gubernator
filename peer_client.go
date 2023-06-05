@@ -98,7 +98,6 @@ func (c *PeerClient) connect(ctx context.Context) (reterr error) {
 	defer func() {
 		tracing.EndScope(ctx, reterr)
 	}()
-	span := trace.SpanFromContext(ctx)
 
 	// NOTE: To future self, this mutex is used here because we need to know if the peer is disconnecting and
 	// handle ErrClosing. Since this mutex MUST be here we take this opportunity to also see if we are connected.
@@ -112,7 +111,6 @@ func (c *PeerClient) connect(ctx context.Context) (reterr error) {
 
 	c.mutex.RLock()
 	lockTimer.ObserveDuration()
-	span.AddEvent("mutex.RLock()")
 
 	if c.status == peerClosing {
 		c.mutex.RUnlock()
@@ -128,7 +126,6 @@ func (c *PeerClient) connect(ctx context.Context) (reterr error) {
 		c.mutex.RUnlock()
 		c.mutex.Lock()
 		defer c.mutex.Unlock()
-		span.AddEvent("mutex.Lock()")
 
 		// Now that we have the RW lock, ensure no else got here ahead of us.
 		if c.status == peerConnected {
@@ -169,7 +166,7 @@ func (c *PeerClient) Info() PeerInfo {
 // GetPeerRateLimit forwards a rate limit request to a peer. If the rate limit has `behavior == BATCHING` configured
 // this method will attempt to batch the rate limits
 func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (retval *RateLimitResp, reterr error) {
-	ctx = tracing.StartScope(ctx)
+	ctx = tracing.StartScopeDebug(ctx)
 	defer func() {
 		tracing.EndScope(ctx, reterr)
 	}()
@@ -222,7 +219,6 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	// a race condition if called within a separate go routine if the internal wg is `0`
 	// when Wait() is called then Add(1) is called concurrently.
 	c.mutex.RLock()
-	span.AddEvent("mutex.RLock()")
 	c.wg.Add(1)
 	defer func() {
 		c.mutex.RUnlock()
@@ -251,7 +247,6 @@ func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 	defer func() {
 		tracing.EndScope(ctx, reterr)
 	}()
-	span := trace.SpanFromContext(ctx)
 
 	if err := c.connect(ctx); err != nil {
 		return nil, c.setLastErr(err)
@@ -259,7 +254,6 @@ func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 
 	// See NOTE above about RLock and wg.Add(1)
 	c.mutex.RLock()
-	span.AddEvent("mutex.RLock()")
 	c.wg.Add(1)
 	defer func() {
 		c.mutex.RUnlock()
@@ -328,7 +322,6 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 
 	// See NOTE above about RLock and wg.Add(1)
 	c.mutex.RLock()
-	span.AddEvent("mutex.RLock()")
 	if c.status == peerClosing {
 		err := &PeerErr{err: errors.New("already disconnecting")}
 		return nil, c.setLastErr(err)
@@ -396,7 +389,7 @@ func (c *PeerClient) run() {
 				return
 			}
 
-			_ = tracing.CallNamedScope(r.ctx, "Send batch", func(reqCtx context.Context) error {
+			_ = tracing.CallNamedScopeDebug(r.ctx, "Send batch", func(reqCtx context.Context) error {
 				span := trace.SpanFromContext(reqCtx)
 				span.SetAttributes(
 					attribute.String("peer.grpcAddress", c.conf.Info.GRPCAddress),

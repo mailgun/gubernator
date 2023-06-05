@@ -62,13 +62,16 @@ protoc -I=$PROTO_DIR \
     $PROTO_DIR/*.proto
 
 # Build Python stabs
-mkdir -p "$PYTHON_DST_DIR"
-pip install grpcio
-pip install grpcio-tools
+pip install -r "${REPO_ROOT}/python/requirements.txt"
 python3 -m grpc.tools.protoc \
     -I=$PROTO_DIR \
     -I=$GOOGLE_APIS_DIR \
     --python_out=$PYTHON_DST_DIR \
+    --pyi_out=$PYTHON_DST_DIR \
     --grpc_python_out=$PYTHON_DST_DIR \
+    --mypy_grpc_out=$PYTHON_DST_DIR \
     $PROTO_DIR/*.proto
-touch $PYTHON_DST_DIR/__init__.py
+# Rewrite imports to import from package
+sed -i '' 's/import gubernator_pb2/from gubernator import gubernator_pb2/' "${PYTHON_DST_DIR}/"gubernator_pb2_grpc.py*
+sed -i '' 's/import gubernator_pb2/from gubernator import gubernator_pb2/' "${PYTHON_DST_DIR}/"peers_pb2.py*
+sed -i '' 's/import peers_pb2/from gubernator import peers_pb2/' "${PYTHON_DST_DIR}/"peers_pb2_grpc.py*

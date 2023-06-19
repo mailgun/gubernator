@@ -37,9 +37,11 @@ func (m *MockPoolHasher) ComputeHash63(input string) uint64 {
 func TestGubernatorPoolInternal(t *testing.T) {
 	t.Run("getWorker()", func(t *testing.T) {
 		const concurrency = 32
-		const cacheSize = 1000
-		conf := &Config{}
-		conf.SetDefaults()
+		conf := &Config{
+			Workers:   concurrency,
+			CacheSize: 1000,
+		}
+		require.NoError(t, conf.SetDefaults())
 
 		// Test that getWorker() interpolates the hash to find the expected worker.
 		testCases := []struct {
@@ -49,13 +51,13 @@ func TestGubernatorPoolInternal(t *testing.T) {
 		}{
 			{"Hash 0%", 0, 0},
 			{"Hash 50%", 0x3fff_ffff_ffff_ffff, (concurrency / 2) - 1},
-			{"Hash 50% + 1", 0x4000_0000_0000_0000, (concurrency / 2)},
+			{"Hash 50% + 1", 0x4000_0000_0000_0000, concurrency / 2},
 			{"Hash 100%", 0x7fff_ffff_ffff_ffff, concurrency - 1},
 		}
 
 		for _, testCase := range testCases {
 			t.Run(testCase.Name, func(t *testing.T) {
-				pool := NewGubernatorPool(conf, concurrency, cacheSize)
+				pool := NewGubernatorPool(conf)
 				defer pool.Close()
 				mockHasher := &MockPoolHasher{}
 				pool.hasher = mockHasher

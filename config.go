@@ -106,7 +106,10 @@ type Config struct {
 
 	// (Optional) Number of worker goroutines to launch for request processing in GubernatorPool.
 	// Default is set to number of CPUs.
-	PoolWorkers int
+	Workers int
+
+	// (Optional) The total size of the cache used to store rate limits. Defaults to 50,000
+	CacheSize int
 }
 
 func (c *Config) SetDefaults() error {
@@ -125,8 +128,7 @@ func (c *Config) SetDefaults() error {
 	setter.SetDefault(&c.LocalPicker, NewReplicatedConsistentHash(nil, defaultReplicas))
 	setter.SetDefault(&c.RegionPicker, NewRegionPicker(nil))
 
-	numCpus := runtime.NumCPU()
-	setter.SetDefault(&c.PoolWorkers, numCpus)
+	setter.SetDefault(&c.Workers, runtime.NumCPU())
 
 	if c.CacheFactory == nil {
 		c.CacheFactory = func(maxSize int) Cache {
@@ -190,6 +192,10 @@ type DaemonConfig struct {
 
 	// (Optional) The number of items in the cache. Defaults to 50,000
 	CacheSize int
+
+	// (Optional) The number of go routine workers used to process concurrent rate limit requests
+	// Defaults to the number of CPUs returned by runtime.NumCPU()
+	Workers int
 
 	// (Optional) Configure how behaviours behave
 	Behaviors BehaviorConfig
@@ -292,6 +298,7 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 	setter.SetDefault(&conf.HTTPStatusListenAddress, os.Getenv("GUBER_STATUS_HTTP_ADDRESS"), "")
 	setter.SetDefault(&conf.GRPCMaxConnectionAgeSeconds, getEnvInteger(log, "GUBER_GRPC_MAX_CONN_AGE_SEC"), 0)
 	setter.SetDefault(&conf.CacheSize, getEnvInteger(log, "GUBER_CACHE_SIZE"), 50_000)
+	setter.SetDefault(&conf.Workers, getEnvInteger(log, "GUBER_WORKER_COUNT"), 0)
 	setter.SetDefault(&conf.AdvertiseAddress, os.Getenv("GUBER_ADVERTISE_ADDRESS"), conf.GRPCListenAddress)
 	setter.SetDefault(&conf.DataCenter, os.Getenv("GUBER_DATA_CENTER"), "")
 	setter.SetDefault(&conf.MetricFlags, getEnvMetricFlags(log, "GUBER_METRIC_FLAGS"))

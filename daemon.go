@@ -57,7 +57,7 @@ type Daemon struct {
 	statsHandler  *GRPCStatsHandler
 	promRegister  *prometheus.Registry
 	gwCancel      context.CancelFunc
-	gubeConfig    Config
+	instanceConf  Config
 }
 
 // SpawnDaemon starts a new gubernator daemon according to the provided DaemonConfig.
@@ -126,7 +126,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 	s.grpcSrvs = append(s.grpcSrvs, grpc.NewServer(opts...))
 
 	// Registers a new gubernator instance with the GRPC server
-	s.gubeConfig = Config{
+	s.instanceConf = Config{
 		PeerTLS:      s.conf.ClientTLS(),
 		DataCenter:   s.conf.DataCenter,
 		LocalPicker:  s.conf.Picker,
@@ -134,8 +134,11 @@ func (s *Daemon) Start(ctx context.Context) error {
 		Logger:       s.log,
 		CacheFactory: cacheFactory,
 		Behaviors:    s.conf.Behaviors,
+		CacheSize:    s.conf.CacheSize,
+		Workers:      s.conf.Workers,
 	}
-	s.V1Server, err = NewV1Instance(s.gubeConfig)
+
+	s.V1Server, err = NewV1Instance(s.instanceConf)
 	if err != nil {
 		return errors.Wrap(err, "while creating new gubernator instance")
 	}

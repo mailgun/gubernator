@@ -125,22 +125,22 @@ var _ ipoolHasher = &poolHasher{}
 
 var poolWorkerCounter int64
 
-func NewGubernatorPool(conf *Config, concurrency int, cacheSize int) *GubernatorPool {
-	setter.SetDefault(&cacheSize, 50_000)
+func NewGubernatorPool(conf *Config) *GubernatorPool {
+	setter.SetDefault(&conf.CacheSize, 50_000)
 
 	// Compute hashRingStep as interval between workers' 63-bit hash ranges.
 	// 64th bit is used here as a max value that is just out of range of 63-bit space to calculate the step.
 	chp := &GubernatorPool{
-		workers:         make([]*poolWorker, concurrency),
-		workerCacheSize: cacheSize / concurrency,
+		workers:         make([]*poolWorker, conf.Workers),
+		workerCacheSize: conf.CacheSize / conf.Workers,
 		hasher:          newPoolHasher(),
-		hashRingStep:    uint64(1<<63) / uint64(concurrency),
+		hashRingStep:    uint64(1<<63) / uint64(conf.Workers),
 		conf:            conf,
 		done:            make(chan struct{}),
 	}
 
 	// Create workers.
-	for i := 0; i < concurrency; i++ {
+	for i := 0; i < conf.Workers; i++ {
 		chp.workers[i] = chp.newWorker()
 		go chp.worker(chp.workers[i])
 	}

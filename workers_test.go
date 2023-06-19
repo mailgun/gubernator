@@ -63,7 +63,7 @@ func TestGubernatorPool(t *testing.T) {
 					Workers: testCase.workers,
 				}
 				conf.SetDefaults()
-				chp := guber.NewGubernatorPool(conf)
+				chp := guber.NewWorkerPool(conf)
 
 				// Mock Loader.
 				fakeLoadCh := make(chan *guber.CacheItem, NumCacheItems)
@@ -96,7 +96,7 @@ func TestGubernatorPool(t *testing.T) {
 					Workers: testCase.workers,
 				}
 				require.NoError(t, conf.SetDefaults())
-				chp := guber.NewGubernatorPool(conf)
+				chp := guber.NewWorkerPool(conf)
 
 				// Mock Loader.
 				mockLoader.On("Save", mock.Anything).Once().Return(nil).

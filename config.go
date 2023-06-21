@@ -104,7 +104,7 @@ type Config struct {
 	// (Optional) The TLS config used when connecting to gubernator peers
 	PeerTLS *tls.Config
 
-	// (Optional) Number of worker goroutines to launch for request processing in GubernatorPool.
+	// (Optional) The number of go routine workers used to process concurrent rate limit requests
 	// Default is set to number of CPUs.
 	Workers int
 

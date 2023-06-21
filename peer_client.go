@@ -105,9 +105,9 @@ func (c *PeerClient) connect(ctx context.Context) (reterr error) {
 	// was connected when `NewPeerClient()` was called however, when adding support for multi data centers having a
 	// PeerClient connected to every Peer in every data center continuously is not desirable.
 
-	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("PeerClient.connect"))
+	funcTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("PeerClient.connect"))
 	defer funcTimer.ObserveDuration()
-	lockTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("PeerClient.connect_RLock"))
+	lockTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("PeerClient.connect_RLock"))
 
 	c.mutex.RLock()
 	lockTimer.ObserveDuration()
@@ -211,7 +211,7 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 
 	if err := c.connect(ctx); err != nil {
 		err = errors.Wrap(err, "Error in connect")
-		checkErrorCounter.WithLabelValues("Connect error").Add(1)
+		metricCheckErrorCounter.WithLabelValues("Connect error").Add(1)
 		return nil, c.setLastErr(err)
 	}
 
@@ -228,14 +228,14 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	resp, err := c.client.GetPeerRateLimits(ctx, r)
 	if err != nil {
 		err = errors.Wrap(err, "Error in client.GetPeerRateLimits")
-		// checkErrorCounter is updated within client.GetPeerRateLimits().
+		// metricCheckErrorCounter is updated within client.GetPeerRateLimits().
 		return nil, c.setLastErr(err)
 	}
 
 	// Unlikely, but this avoids a panic if something wonky happens
 	if len(resp.RateLimits) != len(r.Requests) {
 		err = errors.New("number of rate limits in peer response does not match request")
-		checkErrorCounter.WithLabelValues("Item mismatch").Add(1)
+		metricCheckErrorCounter.WithLabelValues("Item mismatch").Add(1)
 		return nil, c.setLastErr(err)
 	}
 	return resp, nil
@@ -312,7 +312,7 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 		attribute.Int64("request.duration", r.Duration),
 	)
 
-	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("PeerClient.getPeerRateLimitsBatch"))
+	funcTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("PeerClient.getPeerRateLimitsBatch"))
 	defer funcTimer.ObserveDuration()
 
 	if err := c.connect(ctx); err != nil {
@@ -337,7 +337,7 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 		attribute.Int("queueLength", len(c.queue)),
 	))
 	peerAddr := c.Info().GRPCAddress
-	queueLengthMetric.WithLabelValues(peerAddr).Observe(float64(len(c.queue)))
+	metricQueueLength.WithLabelValues(peerAddr).Observe(float64(len(c.queue)))
 
 	select {
 	case c.queue <- &req:
@@ -456,9 +456,9 @@ func (c *PeerClient) sendQueue(ctx context.Context, queue []*request) {
 		attribute.String("peer.grpcAddress", c.conf.Info.GRPCAddress),
 	)
 
-	batchSendTimer := prometheus.NewTimer(batchSendDurationMetric.WithLabelValues(c.conf.Info.GRPCAddress))
+	batchSendTimer := prometheus.NewTimer(metricBatchSendDuration.WithLabelValues(c.conf.Info.GRPCAddress))
 	defer batchSendTimer.ObserveDuration()
-	funcTimer := prometheus.NewTimer(funcTimeMetric.WithLabelValues("PeerClient.sendQueue"))
+	funcTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("PeerClient.sendQueue"))
 	defer funcTimer.ObserveDuration()
 
 	var req GetPeerRateLimitsReq
@@ -482,7 +482,7 @@ func (c *PeerClient) sendQueue(ctx context.Context, queue []*request) {
 			Error(logPart)
 		err = errors.Wrap(err, logPart)
 		c.setLastErr(err)
-		// checkErrorCounter is updated within client.GetPeerRateLimits().
+		// metricCheckErrorCounter is updated within client.GetPeerRateLimits().
 
 		for _, r := range queue {
 			r.resp <- &response{err: err}
@@ -496,7 +496,7 @@ func (c *PeerClient) sendQueue(ctx context.Context, queue []*request) {
 		span.RecordError(err)
 
 		for _, r := range queue {
-			checkErrorCounter.WithLabelValues("Item mismatch").Add(1)
+			metricCheckErrorCounter.WithLabelValues("Item mismatch").Add(1)
 			r.resp <- &response{err: err}
 		}
 		return

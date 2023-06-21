@@ -24,17 +24,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type MockPoolHasher struct {
+type MockHasher struct {
 	mock.Mock
 }
 
-func (m *MockPoolHasher) ComputeHash63(input string) uint64 {
+func (m *MockHasher) ComputeHash63(input string) uint64 {
 	args := m.Called(input)
 	retval, _ := args.Get(0).(uint64)
 	return retval
 }
 
-func TestGubernatorPoolInternal(t *testing.T) {
+func TestWorkersInternal(t *testing.T) {
 	t.Run("getWorker()", func(t *testing.T) {
 		const concurrency = 32
 		conf := &Config{
@@ -57,9 +57,9 @@ func TestGubernatorPoolInternal(t *testing.T) {
 
 		for _, testCase := range testCases {
 			t.Run(testCase.Name, func(t *testing.T) {
-				pool := NewGubernatorPool(conf)
+				pool := NewWorkerPool(conf)
 				defer pool.Close()
-				mockHasher := &MockPoolHasher{}
+				mockHasher := &MockHasher{}
 				pool.hasher = mockHasher
 
 				// Setup mocks.

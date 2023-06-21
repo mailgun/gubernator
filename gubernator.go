@@ -133,7 +133,7 @@ func NewV1Instance(conf Config) (retval *V1Instance, reterr error) {
 	}
 	setter.SetDefault(&s.log, logrus.WithField("category", "gubernator"))
 
-	s.gubernatorPool = NewGubernatorPool(&conf, conf.PoolWorkers, 0)
+	s.gubernatorPool = NewGubernatorPool(&conf)
 	s.global = newGlobalManager(conf.Behaviors, &s)
 	s.mutliRegion = newMultiRegionManager(conf.Behaviors, &s)
 
@@ -516,8 +516,7 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	}()
 
 	// Fan out requests.
-	concurrencyLimit := s.conf.PoolWorkers
-	fan := syncutil.NewFanOut(concurrencyLimit)
+	fan := syncutil.NewFanOut(s.conf.Workers)
 	for idx, req := range r.Requests {
 		fan.Run(func(in interface{}) error {
 			rin := in.(reqIn)

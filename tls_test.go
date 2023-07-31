@@ -181,9 +181,6 @@ func TestSetupTLSSkipVerify(t *testing.T) {
 }
 
 func TestSetupTLSClientAuth(t *testing.T) {
-	// This test began failing with 'rpc error: code = Unavailable desc = connection closed before server preface received'
-	// for an unknown reason, and I don't have time to figure it out now.
-	//t.Skip("failing test")
 	serverTLS := gubernator.TLSConfig{
 		CaFile:           "certs/ca.cert",
 		CertFile:         "certs/gubernator.pem",

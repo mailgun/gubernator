@@ -519,8 +519,6 @@ func (c *PeerClient) Shutdown(ctx context.Context) error {
 	defer c.mutex.Unlock()
 
 	c.status = peerClosing
-	// We need to close the chan here to prevent a possible race
-	close(c.queue)
 
 	defer func() {
 		if c.conn != nil {
@@ -534,6 +532,7 @@ func (c *PeerClient) Shutdown(ctx context.Context) error {
 	waitChan := make(chan struct{})
 	go func() {
 		c.wg.Wait()
+		close(c.queue)
 		close(waitChan)
 	}()
 

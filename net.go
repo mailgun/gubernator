@@ -24,9 +24,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-// If the passed address is "0.0.0.0" or "::" attempts to discover the actual ip address of the host
+// ResolveHostIP attempts to discover the actual ip address of the host if the passed address is "0.0.0.0" or "::"
 func ResolveHostIP(addr string) (string, error) {
-	if slice.ContainsString(addr, []string{"0.0.0.0", "::", "0:0:0:0:0:0:0:0"}, nil) {
+	if slice.ContainsString(addr, []string{"0.0.0.0", "::", "0:0:0:0:0:0:0:0", ""}, nil) {
 		// Use the hostname as the advertise address as it's most likely to be the external interface
 		domainName, err := os.Hostname()
 		if err != nil {

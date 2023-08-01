@@ -30,7 +30,6 @@ import (
 	"github.com/mailgun/holster/v4/etcdutil"
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
-	"github.com/mailgun/holster/v4/tracing"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -64,19 +63,13 @@ type Daemon struct {
 // This function will block until the daemon responds to connections as specified
 // by GRPCListenAddress and HTTPListenAddress
 func SpawnDaemon(ctx context.Context, conf DaemonConfig) (*Daemon, error) {
-	var s *Daemon
+	s := &Daemon{
+		log:  conf.Logger,
+		conf: conf,
+	}
+	setter.SetDefault(&s.log, logrus.WithField("category", "gubernator"))
 
-	err := tracing.CallScope(ctx, func(ctx context.Context) error {
-		s = &Daemon{
-			log:  conf.Logger,
-			conf: conf,
-		}
-		setter.SetDefault(&s.log, logrus.WithField("category", "gubernator"))
-
-		return s.Start(ctx)
-	})
-
-	return s, err
+	return s, s.Start(ctx)
 }
 
 func (s *Daemon) Start(ctx context.Context) error {

@@ -113,11 +113,11 @@ var metricBatchSendDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 	},
 }, []string{"peerAddr"})
 
-// NewV1Instance instantiate a single instance of a gubernator peer and registers this
+// NewV1Instance instantiate a single instance of a gubernator peer and register this
 // instance with the provided GRPCServer.
 func NewV1Instance(conf Config) (s *V1Instance, err error) {
-	ctx := tracing.StartScopeDebug(context.Background())
-	defer tracing.EndScope(ctx, err)
+	ctx := tracing.StartNamedScopeDebug(context.Background(), "gubernator.NewV1Instance")
+	defer func() { tracing.EndScope(ctx, err) }()
 
 	if conf.GRPCServers == nil {
 		return nil, errors.New("at least one GRPCServer instance is required")
@@ -407,7 +407,7 @@ func (s *V1Instance) asyncRequest(ctx context.Context, req *AsyncReq) {
 // are returned from the local cache and the hits are queued to be sent to the owning peer.
 func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) (resp *RateLimitResp, err error) {
 	ctx = tracing.StartNamedScopeDebug(ctx, "getGlobalRateLimit")
-	defer tracing.EndScope(ctx, err)
+	defer func() { tracing.EndScope(ctx, err) }()
 
 	funcTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getGlobalRateLimit"))
 	defer funcTimer.ObserveDuration()
@@ -596,8 +596,7 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (*R
 		attribute.Int64("request.burst", r.Burst),
 	)
 
-	funcTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getLocalRateLimit"))
-	defer funcTimer.ObserveDuration()
+	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getLocalRateLimit")).ObserveDuration()
 	metricCheckCounter.Add(1)
 
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
@@ -629,10 +628,11 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 			// If we don't have an existing PeerClient create a new one
 			if peer == nil {
 				peer = NewPeerClient(PeerConfig{
-					TLS:      s.conf.PeerTLS,
-					Behavior: s.conf.Behaviors,
-					Log:      s.log,
-					Info:     info,
+					TraceGRPC: s.conf.PeerTraceGRPC,
+					Behavior:  s.conf.Behaviors,
+					TLS:       s.conf.PeerTLS,
+					Log:       s.log,
+					Info:      info,
 				})
 			}
 			regionPicker.Add(peer)
@@ -642,10 +642,11 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 		peer := s.conf.LocalPicker.GetByPeerInfo(info)
 		if peer == nil {
 			peer = NewPeerClient(PeerConfig{
-				TLS:      s.conf.PeerTLS,
-				Behavior: s.conf.Behaviors,
-				Log:      s.log,
-				Info:     info,
+				TraceGRPC: s.conf.PeerTraceGRPC,
+				Behavior:  s.conf.Behaviors,
+				TLS:       s.conf.PeerTLS,
+				Log:       s.log,
+				Info:      info,
 			})
 		}
 		localPicker.Add(peer)

@@ -326,8 +326,8 @@ func (p *WorkerPool) handleGetRateLimit(handlerRequest *request, cache Cache) {
 // Read from persistent storage.  Load into each appropriate worker's cache.
 // Workers are locked during this load operation to prevent race conditions.
 func (p *WorkerPool) Load(ctx context.Context) (err error) {
-	ctx = tracing.StartScope(ctx)
-	defer tracing.EndScope(ctx, err)
+	ctx = tracing.StartNamedScope(ctx, "WorkerPool.Load")
+	defer func() { tracing.EndScope(ctx, err) }()
 
 	ch, err := p.conf.Loader.Load()
 	if err != nil {
@@ -343,7 +343,7 @@ func (p *WorkerPool) Load(ctx context.Context) (err error) {
 	// Map request channel hash to load channel.
 	loadChMap := map[*Worker]loadChannel{}
 
-	// Send each item to assigned channel's cache.
+	// Send each item to the assigned channel's cache.
 MAIN:
 	for {
 		var item *CacheItem
@@ -452,7 +452,7 @@ MAIN:
 // Workers are locked during this store operation to prevent race conditions.
 func (p *WorkerPool) Store(ctx context.Context) (err error) {
 	ctx = tracing.StartNamedScopeDebug(ctx, "WorkerPool.Store")
-	defer tracing.EndScope(ctx, err)
+	defer func() { tracing.EndScope(ctx, err) }()
 
 	var wg sync.WaitGroup
 	out := make(chan *CacheItem, 500)

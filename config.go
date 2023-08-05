@@ -109,6 +109,9 @@ type Config struct {
 	// (Optional) The TLS config used when connecting to gubernator peers
 	PeerTLS *tls.Config
 
+	// (Optional) If true, will emit traces for GRPC client requests to other peers
+	PeerTraceGRPC bool
+
 	// (Optional) The number of go routine workers used to process concurrent rate limit requests
 	// Default is set to number of CPUs.
 	Workers int

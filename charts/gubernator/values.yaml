@@ -52,6 +52,6 @@ gubernator:
       memory: 150Mi
 
   serviceMonitor:
-    create: true
+    create: false
     interval: 5s
     scrapeTimeout: 5s

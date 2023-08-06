@@ -50,3 +50,8 @@ gubernator:
     requests:
       cpu: 100m
       memory: 150Mi
+
+  serviceMonitor:
+    create: true
+    interval: 5s
+    scrapeTimeout: 5s

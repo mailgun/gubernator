@@ -1,0 +1,31 @@
+{{- if .Values.gubernator.serviceMonitor.create -}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "gubernator.fullname" . }}
+  labels:
+  {{- include "gubernator.labels" . | nindent 4 }}
+  annotations:
+  {{- include "gubernator.annotations" . | nindent 4 }}
+spec:
+  endpoints:
+    - port: http
+      path: "/metrics"
+      {{- if .Values.gubernator.serviceMonitor.interval }}
+      interval: {{ .Values.gubernator.serviceMonitor.interval }}
+      {{- end }}
+      {{- if .Values.gubernator.serviceMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ .Values.gubernator.serviceMonitor.scrapeTimeout }}
+      {{- end }}
+      {{- if .Values.gubernator.serviceMonitor.relabellings }}
+      relabelings: {{- toYaml .Values.gubernator.serviceMonitor.relabellings | nindent 6 }}
+      {{- end }}
+      {{- if .Values.gubernator.serviceMonitor.metricRelabelings }}
+      metricRelabelings: {{- toYaml .Values.gubernator.serviceMonitor.metricRelabelings | nindent 6 }}
+      {{- end }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels: {{- include "gubernator.selectorLabels" . | nindent 6 }}
+{{- end }}

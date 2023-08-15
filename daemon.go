@@ -30,6 +30,7 @@ import (
 	"github.com/mailgun/holster/v4/etcdutil"
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
+	"github.com/mailgun/holster/v4/tracing"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -63,23 +64,29 @@ type Daemon struct {
 // This function will block until the daemon responds to connections as specified
 // by GRPCListenAddress and HTTPListenAddress
 func SpawnDaemon(ctx context.Context, conf DaemonConfig) (*Daemon, error) {
+
 	s := &Daemon{
 		log:  conf.Logger,
 		conf: conf,
 	}
-	setter.SetDefault(&s.log, logrus.WithField("category", "gubernator"))
-
 	return s, s.Start(ctx)
 }
 
 func (s *Daemon) Start(ctx context.Context) error {
 	var err error
 
+	setter.SetDefault(&s.log, logrus.WithFields(logrus.Fields{
+		"instance-id": s.conf.InstanceID,
+		"category":    "gubernator",
+	}))
+
 	s.promRegister = prometheus.NewRegistry()
 
 	// The LRU cache for storing rate limits.
 	cacheCollector := NewLRUCacheCollector()
-	s.promRegister.Register(cacheCollector)
+	if err := s.promRegister.Register(cacheCollector); err != nil {
+		return errors.Wrap(err, "during call to promRegister.Register()")
+	}
 
 	cacheFactory := func(maxSize int) Cache {
 		cache := NewLRUCache(maxSize)
@@ -91,13 +98,19 @@ func (s *Daemon) Start(ctx context.Context) error {
 	s.statsHandler = NewGRPCStatsHandler()
 	s.promRegister.Register(s.statsHandler)
 
+	var filters []otelgrpc.Option
+	if s.conf.TraceLevel != tracing.DebugLevel {
+		filters = []otelgrpc.Option{
+			otelgrpc.WithInterceptorFilter(TraceLevelInfoFilter),
+		}
+	}
+
 	opts := []grpc.ServerOption{
 		grpc.StatsHandler(s.statsHandler),
 		grpc.MaxRecvMsgSize(1024 * 1024),
 
 		// OpenTelemetry instrumentation on gRPC endpoints.
-		grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
-		grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
+		grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor(filters...)),
 	}
 
 	if s.conf.GRPCMaxConnectionAgeSeconds > 0 {
@@ -120,15 +133,16 @@ func (s *Daemon) Start(ctx context.Context) error {
 
 	// Registers a new gubernator instance with the GRPC server
 	s.instanceConf = Config{
-		PeerTLS:      s.conf.ClientTLS(),
-		DataCenter:   s.conf.DataCenter,
-		LocalPicker:  s.conf.Picker,
-		GRPCServers:  s.grpcSrvs,
-		Logger:       s.log,
-		CacheFactory: cacheFactory,
-		Behaviors:    s.conf.Behaviors,
-		CacheSize:    s.conf.CacheSize,
-		Workers:      s.conf.Workers,
+		PeerTraceGRPC: s.conf.TraceLevel >= tracing.DebugLevel,
+		PeerTLS:       s.conf.ClientTLS(),
+		DataCenter:    s.conf.DataCenter,
+		LocalPicker:   s.conf.Picker,
+		GRPCServers:   s.grpcSrvs,
+		Logger:        s.log,
+		CacheFactory:  cacheFactory,
+		Behaviors:     s.conf.Behaviors,
+		CacheSize:     s.conf.CacheSize,
+		Workers:       s.conf.Workers,
 	}
 
 	s.V1Server, err = NewV1Instance(s.instanceConf)
@@ -156,8 +170,8 @@ func (s *Daemon) Start(ctx context.Context) error {
 	var gatewayAddr string
 	if s.conf.ServerTLS() != nil {
 		// We start a new local GRPC instance because we can't guarantee the TLS cert provided by the
-		// user has localhost or the local interface included in the certs valid hostnames. If they are not
-		// included it means the local gateway connections will not be able to connect.
+		// user has localhost or the local interface included in the certs' valid hostnames. If they are not
+		//  included, it means the local gateway connections will not be able to connect.
 		l, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			return errors.Wrap(err, "while starting GRPC Gateway listener")
@@ -296,7 +310,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 			s.wg.Go(func() {
 				s.log.Infof("HTTPS Status Handler Listening on %s ...", httpAddr)
 				if err := s.httpSrvNoMTLS.ServeTLS(httpListener, "", ""); err != nil {
-					if err != http.ErrServerClosed {
+					if !errors.Is(err, http.ErrServerClosed) {
 						s.log.WithError(err).Error("while starting TLS Status HTTP server")
 					}
 				}
@@ -309,7 +323,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 		s.wg.Go(func() {
 			s.log.Infof("HTTPS Gateway Listening on %s ...", httpListenerAddr)
 			if err := s.httpSrv.ServeTLS(s.HTTPListener, "", ""); err != nil {
-				if err != http.ErrServerClosed {
+				if !errors.Is(err, http.ErrServerClosed) {
 					s.log.WithError(err).Error("while starting TLS HTTP server")
 				}
 			}
@@ -318,7 +332,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 		s.wg.Go(func() {
 			s.log.Infof("HTTP Gateway Listening on %s ...", httpListenerAddr)
 			if err := s.httpSrv.Serve(s.HTTPListener); err != nil {
-				if err != http.ErrServerClosed {
+				if !errors.Is(err, http.ErrServerClosed) {
 					s.log.WithError(err).Error("while starting HTTP server")
 				}
 			}

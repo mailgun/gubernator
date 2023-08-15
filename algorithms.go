@@ -29,10 +29,8 @@ import (
 
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket
 func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
-	ctx = tracing.StartScopeDebug(ctx)
-	defer func() {
-		tracing.EndScope(ctx, err)
-	}()
+	ctx = tracing.StartNamedScopeDebug(ctx, "tokenBucket")
+	defer func() { tracing.EndScope(ctx, err) }()
 	span := trace.SpanFromContext(ctx)
 
 	tokenBucketTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("tokenBucket"))
@@ -201,10 +199,8 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 // Called by tokenBucket() when adding a new item in the store.
 func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
-	ctx = tracing.StartScopeDebug(ctx)
-	defer func() {
-		tracing.EndScope(ctx, err)
-	}()
+	ctx = tracing.StartNamedScopeDebug(ctx, "tokenBucketNewItem")
+	defer func() { tracing.EndScope(ctx, err) }()
 	span := trace.SpanFromContext(ctx)
 
 	now := MillisecondNow()
@@ -259,10 +255,8 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 
 // Implements leaky bucket algorithm for rate limiting https://en.wikipedia.org/wiki/Leaky_bucket
 func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
-	ctx = tracing.StartScopeDebug(ctx)
-	defer func() {
-		tracing.EndScope(ctx, err)
-	}()
+	ctx = tracing.StartNamedScopeDebug(ctx, "leakyBucket")
+	defer func() { tracing.EndScope(ctx, err) }()
 	span := trace.SpanFromContext(ctx)
 
 	leakyBucketTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getRateLimit_leakyBucket"))
@@ -431,10 +425,8 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 // Called by leakyBucket() when adding a new item in the store.
 func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
-	ctx = tracing.StartScopeDebug(ctx)
-	defer func() {
-		tracing.EndScope(ctx, err)
-	}()
+	ctx = tracing.StartNamedScopeDebug(ctx, "leakyBucketNewItem")
+	defer func() { tracing.EndScope(ctx, err) }()
 
 	now := MillisecondNow()
 	duration := r.Duration

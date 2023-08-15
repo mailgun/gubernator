@@ -30,6 +30,8 @@ import (
 	"github.com/mailgun/holster/v4/ctxutil"
 	"github.com/mailgun/holster/v4/tracing"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/sdk/resource"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"k8s.io/klog"
 )
 
@@ -53,19 +55,23 @@ func main() {
 	klog.InitFlags(nil)
 	flag.Set("logtostderr", "true")
 
-	// Initialize tracing.
-	res, err := tracing.NewResource("gubernator", Version)
+	res, err := tracing.NewResource("gubernator", Version, resource.NewWithAttributes(
+		semconv.SchemaURL,
+		semconv.ServiceInstanceID(gubernator.GetInstanceID()),
+	))
 	if err != nil {
-		log.WithError(err).Fatal("Error in tracing.NewResource")
+		log.WithError(err).Fatal("during tracing.NewResource()")
 	}
 
+	// Initialize tracing.
 	ctx := context.Background()
 	err = tracing.InitTracing(ctx,
 		"github.com/mailgun/gubernator/v2",
+		tracing.WithLevel(gubernator.GetTracingLevel()),
 		tracing.WithResource(res),
 	)
 	if err != nil {
-		log.WithError(err).Warn("Error in tracing.InitTracing")
+		log.WithError(err).Fatal("during tracing.InitTracing()")
 	}
 
 	// Read our config from the environment or optional environment config file
@@ -73,7 +79,6 @@ func main() {
 	checkErr(err, "while getting config")
 
 	ctx, cancel := ctxutil.WithTimeout(ctx, clock.Second*10)
-	defer cancel()
 
 	// Start the daemon
 	daemon, err := gubernator.SpawnDaemon(ctx, conf)
@@ -86,7 +91,7 @@ func main() {
 	for range c {
 		log.Info("caught signal; shutting down")
 		daemon.Close()
-		tracing.CloseTracing(context.Background())
+		_ = tracing.CloseTracing(context.Background())
 		exit(0)
 	}
 }

@@ -16,7 +16,7 @@ limitations under the License.
 
 package gubernator
 
-// Threadsafe worker pool for handling concurrent Gubernator requests.
+// Thread-safe worker pool for handling concurrent Gubernator requests.
 // Ensures requests are synchronized to avoid caching conflicts.
 // Handle concurrent requests by sharding cache key space across multiple
 // workers.
@@ -49,98 +49,96 @@ import (
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/tracing"
 	"github.com/sirupsen/logrus"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
-type GubernatorPool struct {
-	workers         []*poolWorker
+type WorkerPool struct {
+	hasher          workerHasher
+	workers         []*Worker
 	workerCacheSize int
-	hasher          ipoolHasher
 	hashRingStep    uint64
 	conf            *Config
 	done            chan struct{}
 }
 
-type poolWorker struct {
+type Worker struct {
 	name                string
 	conf                *Config
 	cache               Cache
 	getRateLimitRequest chan *request
-	storeRequest        chan poolStoreRequest
-	loadRequest         chan poolLoadRequest
-	addCacheItemRequest chan poolAddCacheItemRequest
-	getCacheItemRequest chan poolGetCacheItemRequest
+	storeRequest        chan workerStoreRequest
+	loadRequest         chan workerLoadRequest
+	addCacheItemRequest chan workerAddCacheItemRequest
+	getCacheItemRequest chan workerGetCacheItemRequest
 }
 
-type ipoolHasher interface {
-	// Return a 63-bit hash derived from input.
+type workerHasher interface {
+	// ComputeHash63 returns a 63-bit hash derived from input.
 	ComputeHash63(input string) uint64
 }
 
-// Standard implementation of ipoolHasher.
-type poolHasher struct {
-}
+// hasher is the default implementation of workerHasher.
+type hasher struct{}
 
 // Method request/response structs.
-type poolStoreRequest struct {
+type workerStoreRequest struct {
 	ctx      context.Context
-	response chan poolStoreResponse
+	response chan workerStoreResponse
 	out      chan<- *CacheItem
 }
 
-type poolStoreResponse struct{}
+type workerStoreResponse struct{}
 
-type poolLoadRequest struct {
+type workerLoadRequest struct {
 	ctx      context.Context
-	response chan poolLoadResponse
+	response chan workerLoadResponse
 	in       <-chan *CacheItem
 }
 
-type poolLoadResponse struct{}
+type workerLoadResponse struct{}
 
-type poolAddCacheItemRequest struct {
+type workerAddCacheItemRequest struct {
 	ctx      context.Context
-	response chan poolAddCacheItemResponse
+	response chan workerAddCacheItemResponse
 	item     *CacheItem
 }
 
-type poolAddCacheItemResponse struct {
+type workerAddCacheItemResponse struct {
 	exists bool
 }
 
-type poolGetCacheItemRequest struct {
+type workerGetCacheItemRequest struct {
 	ctx      context.Context
-	response chan poolGetCacheItemResponse
+	response chan workerGetCacheItemResponse
 	key      string
 }
 
-type poolGetCacheItemResponse struct {
+type workerGetCacheItemResponse struct {
 	item *CacheItem
 	ok   bool
 }
 
-var _ io.Closer = &GubernatorPool{}
-var _ ipoolHasher = &poolHasher{}
+var _ io.Closer = &WorkerPool{}
+var _ workerHasher = &hasher{}
 
-var poolWorkerCounter int64
+var workerCounter int64
 
-func NewGubernatorPool(conf *Config, concurrency int, cacheSize int) *GubernatorPool {
-	setter.SetDefault(&cacheSize, 50_000)
+func NewWorkerPool(conf *Config) *WorkerPool {
+	setter.SetDefault(&conf.CacheSize, 50_000)
 
 	// Compute hashRingStep as interval between workers' 63-bit hash ranges.
 	// 64th bit is used here as a max value that is just out of range of 63-bit space to calculate the step.
-	chp := &GubernatorPool{
-		workers:         make([]*poolWorker, concurrency),
-		workerCacheSize: cacheSize / concurrency,
-		hasher:          newPoolHasher(),
-		hashRingStep:    uint64(1<<63) / uint64(concurrency),
+	chp := &WorkerPool{
+		workers:         make([]*Worker, conf.Workers),
+		workerCacheSize: conf.CacheSize / conf.Workers,
+		hasher:          newHasher(),
+		hashRingStep:    uint64(1<<63) / uint64(conf.Workers),
 		conf:            conf,
 		done:            make(chan struct{}),
 	}
 
 	// Create workers.
-	for i := 0; i < concurrency; i++ {
+	for i := 0; i < conf.Workers; i++ {
 		chp.workers[i] = chp.newWorker()
 		go chp.worker(chp.workers[i])
 	}
@@ -148,114 +146,108 @@ func NewGubernatorPool(conf *Config, concurrency int, cacheSize int) *Gubernator
 	return chp
 }
 
-func newPoolHasher() *poolHasher {
-	return &poolHasher{}
+func newHasher() *hasher {
+	return &hasher{}
 }
 
-func (ph *poolHasher) ComputeHash63(input string) uint64 {
+func (ph *hasher) ComputeHash63(input string) uint64 {
 	return xxhash.ChecksumString64S(input, 0) >> 1
 }
 
-func (chp *GubernatorPool) Close() error {
-	close(chp.done)
+func (p *WorkerPool) Close() error {
+	close(p.done)
 	return nil
 }
 
 // Create a new pool worker instance.
-func (chp *GubernatorPool) newWorker() *poolWorker {
+func (p *WorkerPool) newWorker() *Worker {
 	const commandChannelSize = 10000
 
-	worker := &poolWorker{
-		cache:               chp.conf.CacheFactory(chp.workerCacheSize),
+	worker := &Worker{
+		cache:               p.conf.CacheFactory(p.workerCacheSize),
 		getRateLimitRequest: make(chan *request, commandChannelSize),
-		storeRequest:        make(chan poolStoreRequest, commandChannelSize),
-		loadRequest:         make(chan poolLoadRequest, commandChannelSize),
-		addCacheItemRequest: make(chan poolAddCacheItemRequest, commandChannelSize),
-		getCacheItemRequest: make(chan poolGetCacheItemRequest, commandChannelSize),
+		storeRequest:        make(chan workerStoreRequest, commandChannelSize),
+		loadRequest:         make(chan workerLoadRequest, commandChannelSize),
+		addCacheItemRequest: make(chan workerAddCacheItemRequest, commandChannelSize),
+		getCacheItemRequest: make(chan workerGetCacheItemRequest, commandChannelSize),
 	}
-	workerNumber := atomic.AddInt64(&poolWorkerCounter, 1) - 1
+	workerNumber := atomic.AddInt64(&workerCounter, 1) - 1
 	worker.name = strconv.FormatInt(workerNumber, 10)
 	return worker
 }
 
-// Returns the request channel associated with the key.
+// getWorker Returns the request channel associated with the key.
 // Hash the key, then lookup hash ring to find the worker.
-func (chp *GubernatorPool) getWorker(key string) *poolWorker {
-	hash := chp.hasher.ComputeHash63(key)
-	idx := hash / chp.hashRingStep
-	return chp.workers[idx]
+func (p *WorkerPool) getWorker(key string) *Worker {
+	hash := p.hasher.ComputeHash63(key)
+	idx := hash / p.hashRingStep
+	return p.workers[idx]
 }
 
 // Pool worker for processing Gubernator requests.
 // Each worker maintains its own state.
 // A hash ring will distribute requests to an assigned worker by key.
 // See: getWorker()
-func (chp *GubernatorPool) worker(worker *poolWorker) {
+func (p *WorkerPool) worker(worker *Worker) {
 	for {
 		// Dispatch requests from each channel.
 		select {
 		case req, ok := <-worker.getRateLimitRequest:
 			if !ok {
 				// Channel closed.  Unexpected, but should be handled.
-				logrus.Error("checkHandlerPool worker stopped because channel closed")
+				logrus.Error("workerPool worker stopped because channel closed")
 				return
 			}
 
-			chp.handleGetRateLimit(req, worker.cache)
+			p.handleGetRateLimit(req, worker.cache)
 
 		case req, ok := <-worker.storeRequest:
 			if !ok {
 				// Channel closed.  Unexpected, but should be handled.
-				logrus.Error("checkHandlerPool worker stopped because channel closed")
+				logrus.Error("workerPool worker stopped because channel closed")
 				return
 			}
 
-			chp.handleStore(req, worker.cache)
+			p.handleStore(req, worker.cache)
 
 		case req, ok := <-worker.loadRequest:
 			if !ok {
 				// Channel closed.  Unexpected, but should be handled.
-				logrus.Error("checkHandlerPool worker stopped because channel closed")
+				logrus.Error("workerPool worker stopped because channel closed")
 				return
 			}
 
-			chp.handleLoad(req, worker.cache)
+			p.handleLoad(req, worker.cache)
 
 		case req, ok := <-worker.addCacheItemRequest:
 			if !ok {
 				// Channel closed.  Unexpected, but should be handled.
-				logrus.Error("checkHandlerPool worker stopped because channel closed")
+				logrus.Error("workerPool worker stopped because channel closed")
 				return
 			}
 
-			chp.handleAddCacheItem(req, worker.cache)
+			p.handleAddCacheItem(req, worker.cache)
 
 		case req, ok := <-worker.getCacheItemRequest:
 			if !ok {
 				// Channel closed.  Unexpected, but should be handled.
-				logrus.Error("checkHandlerPool worker stopped because channel closed")
+				logrus.Error("workerPool worker stopped because channel closed")
 				return
 			}
 
-			chp.handleGetCacheItem(req, worker.cache)
+			p.handleGetCacheItem(req, worker.cache)
 
-		case <-chp.done:
+		case <-p.done:
 			// Clean up.
 			return
 		}
 	}
 }
 
-// Send a GetRateLimit request to worker pool.
-func (chp *GubernatorPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) (retval *RateLimitResp, reterr error) {
-	ctx = tracing.StartScope(ctx)
-	defer func() {
-		tracing.EndScope(ctx, reterr)
-	}()
-	span := trace.SpanFromContext(ctx)
-
+// GetRateLimit sends a GetRateLimit request to worker pool.
+func (p *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) (retval *RateLimitResp, reterr error) {
 	// Delegate request to assigned channel based on request key.
-	worker := chp.getWorker(rlRequest.UniqueKey)
+	worker := p.getWorker(rlRequest.UniqueKey)
 	handlerRequest := &request{
 		ctx:     ctx,
 		resp:    make(chan *response, 1),
@@ -263,10 +255,6 @@ func (chp *GubernatorPool) GetRateLimit(ctx context.Context, rlRequest *RateLimi
 	}
 
 	// Send request.
-	span.AddEvent("Sending request...", trace.WithAttributes(
-		attribute.Int("channelLength", len(worker.getRateLimitRequest)),
-	))
-
 	select {
 	case worker.getRateLimitRequest <- handlerRequest:
 		// Successfully sent request.
@@ -274,10 +262,9 @@ func (chp *GubernatorPool) GetRateLimit(ctx context.Context, rlRequest *RateLimi
 		return nil, ctx.Err()
 	}
 
-	poolWorkerQueueLength.WithLabelValues("GetRateLimit", worker.name).Observe(float64(len(worker.getRateLimitRequest)))
+	metricWorkerQueueLength.WithLabelValues("GetRateLimit", worker.name).Observe(float64(len(worker.getRateLimitRequest)))
 
 	// Wait for response.
-	span.AddEvent("Waiting for response...")
 	select {
 	case handlerResponse := <-handlerRequest.resp:
 		// Successfully read response.
@@ -288,8 +275,8 @@ func (chp *GubernatorPool) GetRateLimit(ctx context.Context, rlRequest *RateLimi
 }
 
 // Handle request received by worker.
-func (chp *GubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cache) {
-	ctx := tracing.StartScopeDebug(handlerRequest.ctx)
+func (p *WorkerPool) handleGetRateLimit(handlerRequest *request, cache Cache) {
+	ctx := tracing.StartNamedScopeDebug(handlerRequest.ctx, "WorkerPool.handleGetRateLimit")
 	defer tracing.EndScope(ctx, nil)
 
 	var rlResponse *RateLimitResp
@@ -297,7 +284,7 @@ func (chp *GubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cac
 
 	switch handlerRequest.request.Algorithm {
 	case Algorithm_TOKEN_BUCKET:
-		rlResponse, err = tokenBucket(ctx, chp.conf.Store, cache, handlerRequest.request)
+		rlResponse, err = tokenBucket(ctx, p.conf.Store, cache, handlerRequest.request)
 		if err != nil {
 			msg := "Error in tokenBucket"
 			countError(err, msg)
@@ -306,7 +293,7 @@ func (chp *GubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cac
 		}
 
 	case Algorithm_LEAKY_BUCKET:
-		rlResponse, err = leakyBucket(ctx, chp.conf.Store, cache, handlerRequest.request)
+		rlResponse, err = leakyBucket(ctx, p.conf.Store, cache, handlerRequest.request)
 		if err != nil {
 			msg := "Error in leakyBucket"
 			countError(err, msg)
@@ -317,7 +304,7 @@ func (chp *GubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cac
 	default:
 		err = errors.Errorf("Invalid rate limit algorithm '%d'", handlerRequest.request.Algorithm)
 		trace.SpanFromContext(ctx).RecordError(err)
-		checkErrorCounter.WithLabelValues("Invalid algorithm").Add(1)
+		metricCheckErrorCounter.WithLabelValues("Invalid algorithm").Add(1)
 	}
 
 	handlerResponse := &response{
@@ -335,31 +322,29 @@ func (chp *GubernatorPool) handleGetRateLimit(handlerRequest *request, cache Cac
 	}
 }
 
-// Atomically load cache from persistent storage.
+// Load atomically loads cache from persistent storage.
 // Read from persistent storage.  Load into each appropriate worker's cache.
 // Workers are locked during this load operation to prevent race conditions.
-func (chp *GubernatorPool) Load(ctx context.Context) (reterr error) {
-	ctx = tracing.StartScope(ctx)
-	defer func() {
-		tracing.EndScope(ctx, reterr)
-	}()
+func (p *WorkerPool) Load(ctx context.Context) (err error) {
+	ctx = tracing.StartNamedScope(ctx, "WorkerPool.Load")
+	defer func() { tracing.EndScope(ctx, err) }()
 
-	ch, err := chp.conf.Loader.Load()
+	ch, err := p.conf.Loader.Load()
 	if err != nil {
 		return errors.Wrap(err, "Error in loader.Load")
 	}
 
 	type loadChannel struct {
 		ch       chan *CacheItem
-		worker   *poolWorker
-		respChan chan poolLoadResponse
+		worker   *Worker
+		respChan chan workerLoadResponse
 	}
 
 	// Map request channel hash to load channel.
-	loadChMap := map[*poolWorker]loadChannel{}
+	loadChMap := map[*Worker]loadChannel{}
 
-	// Send each item to assigned channel's cache.
-mainloop:
+	// Send each item to the assigned channel's cache.
+MAIN:
 	for {
 		var item *CacheItem
 		var ok bool
@@ -367,7 +352,7 @@ mainloop:
 		select {
 		case item, ok = <-ch:
 			if !ok {
-				break mainloop
+				break MAIN
 			}
 			// Successfully received item.
 
@@ -376,7 +361,7 @@ mainloop:
 			return ctx.Err()
 		}
 
-		worker := chp.getWorker(item.Key)
+		worker := p.getWorker(item.Key)
 
 		// Initiate a load channel with each worker.
 		loadCh, exist := loadChMap[worker]
@@ -384,12 +369,12 @@ mainloop:
 			loadCh = loadChannel{
 				ch:       make(chan *CacheItem),
 				worker:   worker,
-				respChan: make(chan poolLoadResponse),
+				respChan: make(chan workerLoadResponse),
 			}
 			loadChMap[worker] = loadCh
 
 			// Tie up the worker while loading.
-			worker.loadRequest <- poolLoadRequest{
+			worker.loadRequest <- workerLoadRequest{
 				ctx:      ctx,
 				response: loadCh.respChan,
 				in:       loadCh.ch,
@@ -426,11 +411,11 @@ mainloop:
 	return nil
 }
 
-func (chp *GubernatorPool) handleLoad(request poolLoadRequest, cache Cache) {
-	ctx := tracing.StartScopeDebug(request.ctx)
+func (p *WorkerPool) handleLoad(request workerLoadRequest, cache Cache) {
+	ctx := tracing.StartNamedScopeDebug(request.ctx, "WorkerPool.handleLoad")
 	defer tracing.EndScope(ctx, nil)
 
-mainloop:
+MAIN:
 	for {
 		var item *CacheItem
 		var ok bool
@@ -438,7 +423,7 @@ mainloop:
 		select {
 		case item, ok = <-request.in:
 			if !ok {
-				break mainloop
+				break MAIN
 			}
 			// Successfully received item.
 
@@ -450,7 +435,7 @@ mainloop:
 		cache.Add(item)
 	}
 
-	response := poolLoadResponse{}
+	response := workerLoadResponse{}
 
 	select {
 	case request.response <- response:
@@ -462,29 +447,27 @@ mainloop:
 	}
 }
 
-// Atomically store cache to persistent storage.
+// Store atomically stores cache to persistent storage.
 // Save all workers' caches to persistent storage.
 // Workers are locked during this store operation to prevent race conditions.
-func (chp *GubernatorPool) Store(ctx context.Context) (reterr error) {
-	ctx = tracing.StartScope(ctx)
-	defer func() {
-		tracing.EndScope(ctx, reterr)
-	}()
+func (p *WorkerPool) Store(ctx context.Context) (err error) {
+	ctx = tracing.StartNamedScopeDebug(ctx, "WorkerPool.Store")
+	defer func() { tracing.EndScope(ctx, err) }()
 
 	var wg sync.WaitGroup
 	out := make(chan *CacheItem, 500)
 
 	// Iterate each worker's cache to `out` channel.
-	for _, worker := range chp.workers {
+	for _, worker := range p.workers {
 		wg.Add(1)
 
-		go func(ctx context.Context, worker *poolWorker) {
+		go func(ctx context.Context, worker *Worker) {
 			ctx = tracing.StartNamedScope(ctx, fmt.Sprintf("%p", worker))
 			defer tracing.EndScope(ctx, nil)
 			defer wg.Done()
 
-			respChan := make(chan poolStoreResponse)
-			req := poolStoreRequest{
+			respChan := make(chan workerStoreResponse)
+			req := workerStoreRequest{
 				ctx:      ctx,
 				response: respChan,
 				out:      out,
@@ -522,16 +505,15 @@ func (chp *GubernatorPool) Store(ctx context.Context) (reterr error) {
 		return ctx.Err()
 	}
 
-	err := chp.conf.Loader.Save(out)
-	if err != nil {
-		return errors.Wrap(err, "error in chp.conf.Loader.Save")
+	if err = p.conf.Loader.Save(out); err != nil {
+		return errors.Wrap(err, "while calling p.conf.Loader.Save()")
 	}
 
 	return nil
 }
 
-func (chp *GubernatorPool) handleStore(request poolStoreRequest, cache Cache) {
-	ctx := tracing.StartScopeDebug(request.ctx)
+func (p *WorkerPool) handleStore(request workerStoreRequest, cache Cache) {
+	ctx := tracing.StartNamedScopeDebug(request.ctx, "WorkerPool.handleStore")
 	defer tracing.EndScope(ctx, nil)
 
 	for item := range cache.Each() {
@@ -546,7 +528,7 @@ func (chp *GubernatorPool) handleStore(request poolStoreRequest, cache Cache) {
 		}
 	}
 
-	response := poolStoreResponse{}
+	response := workerStoreResponse{}
 
 	select {
 	case request.response <- response:
@@ -558,16 +540,14 @@ func (chp *GubernatorPool) handleStore(request poolStoreRequest, cache Cache) {
 	}
 }
 
-// Add to worker's cache.
-func (chp *GubernatorPool) AddCacheItem(ctx context.Context, key string, item *CacheItem) (reterr error) {
-	ctx = tracing.StartScope(ctx)
-	defer func() {
-		tracing.EndScope(ctx, reterr)
-	}()
+// AddCacheItem adds an item to the worker's cache.
+func (p *WorkerPool) AddCacheItem(ctx context.Context, key string, item *CacheItem) (err error) {
+	ctx = tracing.StartNamedScopeDebug(ctx, "WorkerPool.AddCacheItem")
+	tracing.EndScope(ctx, err)
 
-	respChan := make(chan poolAddCacheItemResponse)
-	worker := chp.getWorker(key)
-	req := poolAddCacheItemRequest{
+	respChan := make(chan workerAddCacheItemResponse)
+	worker := p.getWorker(key)
+	req := workerAddCacheItemRequest{
 		ctx:      ctx,
 		response: respChan,
 		item:     item,
@@ -576,7 +556,7 @@ func (chp *GubernatorPool) AddCacheItem(ctx context.Context, key string, item *C
 	select {
 	case worker.addCacheItemRequest <- req:
 		// Successfully sent request.
-		poolWorkerQueueLength.WithLabelValues("AddCacheItem", worker.name).Observe(float64(len(worker.addCacheItemRequest)))
+		metricWorkerQueueLength.WithLabelValues("AddCacheItem", worker.name).Observe(float64(len(worker.addCacheItemRequest)))
 
 		select {
 		case <-respChan:
@@ -594,12 +574,12 @@ func (chp *GubernatorPool) AddCacheItem(ctx context.Context, key string, item *C
 	}
 }
 
-func (chp *GubernatorPool) handleAddCacheItem(request poolAddCacheItemRequest, cache Cache) {
-	ctx := tracing.StartScopeDebug(request.ctx)
+func (p *WorkerPool) handleAddCacheItem(request workerAddCacheItemRequest, cache Cache) {
+	ctx := tracing.StartNamedScopeDebug(request.ctx, "WorkerPool.handleAddCacheItem")
 	defer tracing.EndScope(ctx, nil)
 
 	exists := cache.Add(request.item)
-	response := poolAddCacheItemResponse{exists}
+	response := workerAddCacheItemResponse{exists}
 
 	select {
 	case request.response <- response:
@@ -611,16 +591,14 @@ func (chp *GubernatorPool) handleAddCacheItem(request poolAddCacheItemRequest, c
 	}
 }
 
-// Get item from worker's cache.
-func (chp *GubernatorPool) GetCacheItem(ctx context.Context, key string) (item *CacheItem, found bool, reterr error) {
-	ctx = tracing.StartScope(ctx)
-	defer func() {
-		tracing.EndScope(ctx, reterr)
-	}()
+// GetCacheItem gets item from worker's cache.
+func (p *WorkerPool) GetCacheItem(ctx context.Context, key string) (item *CacheItem, found bool, err error) {
+	ctx = tracing.StartNamedScopeDebug(ctx, "WorkerPool.GetCacheItem")
+	tracing.EndScope(ctx, err)
 
-	respChan := make(chan poolGetCacheItemResponse)
-	worker := chp.getWorker(key)
-	req := poolGetCacheItemRequest{
+	respChan := make(chan workerGetCacheItemResponse)
+	worker := p.getWorker(key)
+	req := workerGetCacheItemRequest{
 		ctx:      ctx,
 		response: respChan,
 		key:      key,
@@ -628,8 +606,8 @@ func (chp *GubernatorPool) GetCacheItem(ctx context.Context, key string) (item *
 
 	select {
 	case worker.getCacheItemRequest <- req:
-		// Successfully sent requst.
-		poolWorkerQueueLength.WithLabelValues("GetCacheItem", worker.name).Observe(float64(len(worker.getCacheItemRequest)))
+		// Successfully sent request.
+		metricWorkerQueueLength.WithLabelValues("GetCacheItem", worker.name).Observe(float64(len(worker.getCacheItemRequest)))
 
 		select {
 		case resp := <-respChan:
@@ -647,12 +625,12 @@ func (chp *GubernatorPool) GetCacheItem(ctx context.Context, key string) (item *
 	}
 }
 
-func (chp *GubernatorPool) handleGetCacheItem(request poolGetCacheItemRequest, cache Cache) {
-	ctx := tracing.StartScopeDebug(request.ctx)
+func (p *WorkerPool) handleGetCacheItem(request workerGetCacheItemRequest, cache Cache) {
+	ctx := tracing.StartNamedScopeDebug(request.ctx, "WorkerPool.handleGetCacheItem")
 	defer tracing.EndScope(ctx, nil)
 
 	item, ok := cache.GetItem(request.key)
-	response := poolGetCacheItemResponse{item, ok}
+	response := workerGetCacheItemResponse{item, ok}
 
 	select {
 	case request.response <- response:

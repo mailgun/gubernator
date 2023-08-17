@@ -32,8 +32,8 @@ func TestGubernatorPool(t *testing.T) {
 	ctx := context.Background()
 
 	testCases := []struct {
-		name        string
-		concurrency int
+		name    string
+		workers int
 	}{
 		{"Single-threaded", 1},
 		{"Multi-threaded", 4},
@@ -59,10 +59,11 @@ func TestGubernatorPool(t *testing.T) {
 					CacheFactory: func(maxSize int) guber.Cache {
 						return mockCache
 					},
-					Loader: mockLoader,
+					Loader:  mockLoader,
+					Workers: testCase.workers,
 				}
 				conf.SetDefaults()
-				chp := guber.NewGubernatorPool(conf, testCase.concurrency, 0)
+				chp := guber.NewWorkerPool(conf)
 
 				// Mock Loader.
 				fakeLoadCh := make(chan *guber.CacheItem, NumCacheItems)
@@ -91,10 +92,11 @@ func TestGubernatorPool(t *testing.T) {
 					CacheFactory: func(maxSize int) guber.Cache {
 						return mockCache
 					},
-					Loader: mockLoader,
+					Loader:  mockLoader,
+					Workers: testCase.workers,
 				}
-				conf.SetDefaults()
-				chp := guber.NewGubernatorPool(conf, testCase.concurrency, 0)
+				require.NoError(t, conf.SetDefaults())
+				chp := guber.NewWorkerPool(conf)
 
 				// Mock Loader.
 				mockLoader.On("Save", mock.Anything).Once().Return(nil).
@@ -119,7 +121,7 @@ func TestGubernatorPool(t *testing.T) {
 					eachCh <- item
 				}
 				close(eachCh)
-				mockCache.On("Each").Times(testCase.concurrency).Return(eachCh)
+				mockCache.On("Each").Times(testCase.workers).Return(eachCh)
 
 				// Call code.
 				err := chp.Store(ctx)

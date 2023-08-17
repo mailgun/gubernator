@@ -1,17 +1,44 @@
-# OpenTelemetry Tracing with Jaeger
+# OpenTelemetry Tracing
 Gubernator supports [OpenTelemetry](https://opentelemetry.io) for generating
 detailed traces of application behavior and sending to [Jaeger
 Tracing](https://www.jaegertracing.io/) server.
-
-Read more at:
-[https://github.com/mailgun/holster/blob/master/tracing/README.md](https://github.com/mailgun/holster/blob/master/tracing/README.md)
 
 ## Enabling Jaeger Exporter
 Jaeger export is enabled by default and sends traces to localhost port
 6831/udp.
 
-Configure with environment variables.  See [OpenTelemetry configuration
-spec](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/sdk-environment-variables.md).
+Configure with environment variables.
+
+```
+OTEL_EXPORTER_JAEGER_PROTOCOL=http/thrift.binary
+OTEL_EXPORTER_JAEGER_ENDPOINT=http://<jaeger-server>:14268/api/traces
+```
+
+See [OpenTelemetry configuration
+spec](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/configuration/sdk-environment-variables.md).
+for a complete list of available environment variables and `example.conf` for 
+possible environment variable examples.
+
+#### Why not set `OTEL_EXPORTER_JAEGER_AGENT_HOST`?
+This setting works by exporting UDP datagrams to the remote host, instead of
+localhost.  This will work, but runs the risk of data loss.  If a span is
+exported with sufficient data, it will exceed the network interface's MTU size
+and the datagram will be dropped.  This is only a problem when sending to a
+remote host.  The loopback interface MTU is typically much larger and doesn't
+encounter this problem.
+
+When exporting via HTTP there is no MTU limit.  This effectively bypasses the
+Jaeger Agent and sends directly to Jaeger's collector.
+
+## HoneyComb.io
+Use the following to send trace data to honeycomb.io directly. For most production
+workloads you should setup [Refinery](https://github.com/honeycombio/refinery)
+```
+OTEL_TRACES_SAMPLER=always_on
+OTEL_EXPORTER_OTLP_PROTOCOL=otlp
+OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io:443
+OTEL_EXPORTER_OTLP_HEADERS=x-honeycomb-team=<your-api-key>
+```
 
 ## Sampling
 Because Gubernator generates a trace for each request, the tracing volume could
@@ -20,6 +47,11 @@ exceed Jaeger's resources.  In production, it is recommended to set
 type](https://opentelemetry.io/docs/concepts/sdk-configuration/general-sdk-configuration/#otel_traces_sampler) and
 `OTEL_TRACES_SAMPLER_ARG` to a decimal number between 0 (none) and 1 (all) for
 the proportion of traces to be sampled.
+
+```
+OTEL_TRACES_SAMPLER=always_on
+OTEL_TRACES_SAMPLER_ARG=1.0
+```
 
 ## Distributed Traces
 OpenTelemetry defines capabilities for clients to send trace ids to downstream
@@ -33,29 +65,7 @@ propagate the client's trace context to the server so it can add spans.
 
 See [gRPC](#gRPC) section and `cmd/gubernator-cli/main.go` for usage examples.
 
-## Exporting to Remote Jaeger Server
-Normally, Jaeger all-in-one or a Jaeger Agent is running locally on the server
-and listening to port 6831/udp.  Gubernator would talk to Jaeger by exporting
-traces to localhost port 6831/udp.
 
-However, in situations where Jaeger cannot be made accessable via localhost, it
-is recommended to export traces via HTTP using this configuration:
-
-```
-OTEL_EXPORTER_JAEGER_PROTOCOL=http/thrift.binary
-OTEL_EXPORTER_JAEGER_ENDPOINT=http://<jaeger-server>:14268/api/traces
-```
-
-**Why not set `OTEL_EXPORTER_JAEGER_AGENT_HOST`?**
-This setting works by exporting UDP datagrams to the remote host, instead of
-localhost.  This will work, but runs the risk of data loss.  If a span is
-exported with sufficient data, it will exceed the network interface's MTU size
-and the datagram will be dropped.  This is only a problem when sending to a
-remote host.  The loopback interface MTU is typically much larger and doesn't
-encounter this problem.
-
-When exporting via HTTP there is no MTU limit.  This effectively bypasses the
-Jaeger Agent and sends directly to Jaeger's collector.
 
 ## gRPC
 If using Gubernator's Golang gRPC client, the client must be created like so:
@@ -98,3 +108,8 @@ object.
 
 Follow the same steps to configure your codebase as the Gubernator standalone,
 above.
+
+## Holster Tracing Library
+Read more at:
+[https://github.com/mailgun/holster/blob/master/tracing/README.md](https://github.com/mailgun/holster/blob/master/tracing/README.md)
+

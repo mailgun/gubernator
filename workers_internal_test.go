@@ -24,22 +24,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type MockPoolHasher struct {
+type MockHasher struct {
 	mock.Mock
 }
 
-func (m *MockPoolHasher) ComputeHash63(input string) uint64 {
+func (m *MockHasher) ComputeHash63(input string) uint64 {
 	args := m.Called(input)
 	retval, _ := args.Get(0).(uint64)
 	return retval
 }
 
-func TestGubernatorPoolInternal(t *testing.T) {
+func TestWorkersInternal(t *testing.T) {
 	t.Run("getWorker()", func(t *testing.T) {
 		const concurrency = 32
-		const cacheSize = 1000
-		conf := &Config{}
-		conf.SetDefaults()
+		conf := &Config{
+			Workers:   concurrency,
+			CacheSize: 1000,
+		}
+		require.NoError(t, conf.SetDefaults())
 
 		// Test that getWorker() interpolates the hash to find the expected worker.
 		testCases := []struct {
@@ -49,15 +51,15 @@ func TestGubernatorPoolInternal(t *testing.T) {
 		}{
 			{"Hash 0%", 0, 0},
 			{"Hash 50%", 0x3fff_ffff_ffff_ffff, (concurrency / 2) - 1},
-			{"Hash 50% + 1", 0x4000_0000_0000_0000, (concurrency / 2)},
+			{"Hash 50% + 1", 0x4000_0000_0000_0000, concurrency / 2},
 			{"Hash 100%", 0x7fff_ffff_ffff_ffff, concurrency - 1},
 		}
 
 		for _, testCase := range testCases {
 			t.Run(testCase.Name, func(t *testing.T) {
-				pool := NewGubernatorPool(conf, concurrency, cacheSize)
+				pool := NewWorkerPool(conf)
 				defer pool.Close()
-				mockHasher := &MockPoolHasher{}
+				mockHasher := &MockHasher{}
 				pool.hasher = mockHasher
 
 				// Setup mocks.

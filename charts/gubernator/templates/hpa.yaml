@@ -1,3 +1,4 @@
+{{- if .Values.gubernator.autoscaling.enabled -}}
 {{- if semverCompare ">=1.23-0" .Capabilities.KubeVersion.GitVersion -}}
 apiVersion: autoscaling/v2
 {{- else -}}
@@ -25,3 +26,4 @@ spec:
         target:
           type: Utilization
           averageUtilization: {{ .Values.gubernator.autoscaling.cpuAverageUtilization }}
+{{- end }}

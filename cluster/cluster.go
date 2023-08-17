@@ -81,7 +81,17 @@ func NumOfDaemons() int {
 
 // Start a local cluster of gubernator servers
 func Start(numInstances int) error {
-	peers := make([]gubernator.PeerInfo, numInstances, numInstances)
+	// Ideally we should let the socket choose the port, but then
+	// some things like the logger will not be set correctly.
+	var peers []gubernator.PeerInfo
+	port := 1111
+	for i := 0; i < numInstances; i++ {
+		peers = append(peers, gubernator.PeerInfo{
+			HTTPAddress: fmt.Sprintf("localhost:%d", port),
+			GRPCAddress: fmt.Sprintf("localhost:%d", port+1),
+		})
+		port += 2
+	}
 	return StartWith(peers)
 }
 

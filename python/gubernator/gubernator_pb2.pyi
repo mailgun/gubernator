@@ -49,7 +49,14 @@ class GetRateLimitsResp(_message.Message):
     def __init__(self, responses: _Optional[_Iterable[_Union[RateLimitResp, _Mapping]]] = ...) -> None: ...
 
 class RateLimitReq(_message.Message):
-    __slots__ = ["name", "unique_key", "hits", "limit", "duration", "algorithm", "behavior", "burst"]
+    __slots__ = ["name", "unique_key", "hits", "limit", "duration", "algorithm", "behavior", "burst", "metadata"]
+    class MetadataEntry(_message.Message):
+        __slots__ = ["key", "value"]
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     NAME_FIELD_NUMBER: _ClassVar[int]
     UNIQUE_KEY_FIELD_NUMBER: _ClassVar[int]
     HITS_FIELD_NUMBER: _ClassVar[int]
@@ -58,6 +65,7 @@ class RateLimitReq(_message.Message):
     ALGORITHM_FIELD_NUMBER: _ClassVar[int]
     BEHAVIOR_FIELD_NUMBER: _ClassVar[int]
     BURST_FIELD_NUMBER: _ClassVar[int]
+    METADATA_FIELD_NUMBER: _ClassVar[int]
     name: str
     unique_key: str
     hits: int
@@ -66,7 +74,8 @@ class RateLimitReq(_message.Message):
     algorithm: Algorithm
     behavior: Behavior
     burst: int
-    def __init__(self, name: _Optional[str] = ..., unique_key: _Optional[str] = ..., hits: _Optional[int] = ..., limit: _Optional[int] = ..., duration: _Optional[int] = ..., algorithm: _Optional[_Union[Algorithm, str]] = ..., behavior: _Optional[_Union[Behavior, str]] = ..., burst: _Optional[int] = ...) -> None: ...
+    metadata: _containers.ScalarMap[str, str]
+    def __init__(self, name: _Optional[str] = ..., unique_key: _Optional[str] = ..., hits: _Optional[int] = ..., limit: _Optional[int] = ..., duration: _Optional[int] = ..., algorithm: _Optional[_Union[Algorithm, str]] = ..., behavior: _Optional[_Union[Behavior, str]] = ..., burst: _Optional[int] = ..., metadata: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class RateLimitResp(_message.Message):
     __slots__ = ["status", "limit", "remaining", "reset_time", "error", "metadata"]

@@ -76,7 +76,7 @@ func newV1Server(t *testing.T, address string, conf gubernator.Config) *v1Server
 func TestLoader(t *testing.T) {
 	loader := gubernator.NewMockLoader()
 
-	srv := newV1Server(t, "", gubernator.Config{
+	srv := newV1Server(t, "localhost:0", gubernator.Config{
 		Behaviors: gubernator.BehaviorConfig{
 			GlobalSyncWait: clock.Millisecond * 50, // Suitable for testing but not production
 			GlobalTimeout:  clock.Second,
@@ -129,7 +129,7 @@ func TestStore(t *testing.T) {
 	setup := func() (*MockStore2, *v1Server, gubernator.V1Client) {
 		store := &MockStore2{}
 
-		srv := newV1Server(t, "", gubernator.Config{
+		srv := newV1Server(t, "localhost:0", gubernator.Config{
 			Behaviors: gubernator.BehaviorConfig{
 				GlobalSyncWait: clock.Millisecond * 50, // Suitable for testing but not production
 				GlobalTimeout:  clock.Second,
@@ -352,7 +352,6 @@ func TestStore(t *testing.T) {
 			// Discovered a bug where changing the duration of rate limit caused infinite recursion.
 			// This test exercises that condition.  See PR #123.
 			// Duration changed logic implemented only in token bucket.
-			// TODO: Implement in leaky bucket.
 			if testCase.Algorithm == gubernator.Algorithm_TOKEN_BUCKET {
 				t.Run("Duration changed", func(t *testing.T) {
 					// Updates expiration timestamp in store.

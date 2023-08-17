@@ -17,8 +17,11 @@ limitations under the License.
 package gubernator
 
 import (
+	"bufio"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -32,11 +35,13 @@ import (
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/slice"
+	"github.com/mailgun/holster/v4/tracing"
 	"github.com/pkg/errors"
 	"github.com/segmentio/fasthash/fnv1"
 	"github.com/segmentio/fasthash/fnv1a"
 	"github.com/sirupsen/logrus"
 	etcd "go.etcd.io/etcd/client/v3"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 )
 
@@ -104,9 +109,15 @@ type Config struct {
 	// (Optional) The TLS config used when connecting to gubernator peers
 	PeerTLS *tls.Config
 
-	// (Optional) Number of worker goroutines to launch for request processing in GubernatorPool.
+	// (Optional) If true, will emit traces for GRPC client requests to other peers
+	PeerTraceGRPC bool
+
+	// (Optional) The number of go routine workers used to process concurrent rate limit requests
 	// Default is set to number of CPUs.
-	PoolWorkers int
+	Workers int
+
+	// (Optional) The total size of the cache used to store rate limits. Defaults to 50,000
+	CacheSize int
 }
 
 func (c *Config) SetDefaults() error {
@@ -125,8 +136,7 @@ func (c *Config) SetDefaults() error {
 	setter.SetDefault(&c.LocalPicker, NewReplicatedConsistentHash(nil, defaultReplicas))
 	setter.SetDefault(&c.RegionPicker, NewRegionPicker(nil))
 
-	numCpus := runtime.NumCPU()
-	setter.SetDefault(&c.PoolWorkers, numCpus)
+	setter.SetDefault(&c.Workers, runtime.NumCPU())
 
 	if c.CacheFactory == nil {
 		c.CacheFactory = func(maxSize int) Cache {
@@ -191,6 +201,10 @@ type DaemonConfig struct {
 	// (Optional) The number of items in the cache. Defaults to 50,000
 	CacheSize int
 
+	// (Optional) The number of go routine workers used to process concurrent rate limit requests
+	// Defaults to the number of CPUs returned by runtime.NumCPU()
+	Workers int
+
 	// (Optional) Configure how behaviours behave
 	Behaviors BehaviorConfig
 
@@ -224,8 +238,15 @@ type DaemonConfig struct {
 	// attempt to build a complete TLS config if one is not provided.
 	TLS *TLSConfig
 
-	// (Optional) Metrics Flags which enable or disable collection of some types of metrics
+	// (Optional) Metrics Flags which enable or disable a collection of some metric types
 	MetricFlags MetricFlags
+
+	// (Optional) Instance ID which is a unique id that identifies this instance of gubernator
+	InstanceID string
+
+	// (Optional) TraceLevel sets the tracing level, this controls the number of spans included in a single trace.
+	//  Valid options are (tracing.InfoLevel, tracing.DebugLevel) Defaults to tracing.InfoLevel
+	TraceLevel tracing.Level
 }
 
 func (d *DaemonConfig) ClientTLS() *tls.Config {
@@ -287,11 +308,15 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 	}
 
 	// Main config
-	setter.SetDefault(&conf.GRPCListenAddress, os.Getenv("GUBER_GRPC_ADDRESS"), "localhost:81")
-	setter.SetDefault(&conf.HTTPListenAddress, os.Getenv("GUBER_HTTP_ADDRESS"), "localhost:80")
+	setter.SetDefault(&conf.GRPCListenAddress, os.Getenv("GUBER_GRPC_ADDRESS"),
+		fmt.Sprintf("%s:81", LocalHost()))
+	setter.SetDefault(&conf.HTTPListenAddress, os.Getenv("GUBER_HTTP_ADDRESS"),
+		fmt.Sprintf("%s:80", LocalHost()))
+	setter.SetDefault(&conf.InstanceID, GetInstanceID())
 	setter.SetDefault(&conf.HTTPStatusListenAddress, os.Getenv("GUBER_STATUS_HTTP_ADDRESS"), "")
 	setter.SetDefault(&conf.GRPCMaxConnectionAgeSeconds, getEnvInteger(log, "GUBER_GRPC_MAX_CONN_AGE_SEC"), 0)
 	setter.SetDefault(&conf.CacheSize, getEnvInteger(log, "GUBER_CACHE_SIZE"), 50_000)
+	setter.SetDefault(&conf.Workers, getEnvInteger(log, "GUBER_WORKER_COUNT"), 0)
 	setter.SetDefault(&conf.AdvertiseAddress, os.Getenv("GUBER_ADVERTISE_ADDRESS"), conf.GRPCListenAddress)
 	setter.SetDefault(&conf.DataCenter, os.Getenv("GUBER_DATA_CENTER"), "")
 	setter.SetDefault(&conf.MetricFlags, getEnvMetricFlags(log, "GUBER_METRIC_FLAGS"))
@@ -448,7 +473,41 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 		log.Debug(spew.Sdump(conf))
 	}
 
+	setter.SetDefault(&conf.TraceLevel, GetTracingLevel())
+
 	return conf, nil
+}
+
+// LocalHost returns the local IPV interface which Gubernator should bind to by default.
+// There are a few reasons why the interface will be different on different platforms.
+//
+// ### Linux ###
+// Gubernator should bind to either localhost IPV6 or IPV4 on Linux. In most cases using the DNS name "localhost"
+// will result in binding to the correct interface depending on the Linux network configuration.
+//
+// ### GitHub Actions ###
+// GHA does not support IPV6, as such trying to bind to `[::1]` will result in an
+// error while running in GHA even if the linux runner defaults `localhost` to IPV6.
+// As such we explicitly bind to 127.0.0.1 for GHA.
+//
+// ### Darwin (Apple OSX) ###
+// Later versions of OSX bind to the publicly addressable interface if we use the DNS name "localhost"
+// which is not the loop back interface. As a result OSX will warn the user with the message
+// "Do you want the application to accept incoming network connections?" every time Gubernator is
+// run, including when running unit tests. So for OSX we return 127.0.0.1.
+func LocalHost() string {
+	// If running on OSX
+	if runtime.GOOS == "darwin" {
+		return "127.0.0.1"
+	}
+
+	// If running on Github Actions
+	if os.Getenv("RUNNER_OS") != "" {
+		return "127.0.0.1"
+	}
+
+	// All others (Linux) return "localhost"
+	return "localhost"
 }
 
 func setupEtcdTLS(conf *etcd.Config) error {
@@ -618,3 +677,75 @@ func validHash64Keys(m map[string]HashString64) string {
 	}
 	return strings.Join(rs, ",")
 }
+
+// GetInstanceID attempts to source a unique id from the environment,
+// if none is found, then it will generate a random instance id.
+func GetInstanceID() string {
+	var id string
+
+	// Use in order, if the result is "" (empty string) then the next option will be used
+	//  1. The environment variable `GUBER_INSTANCE_ID`
+	//  2. The id of the docker container we are running in
+	//  3. Generate a random id
+	setter.SetDefault(&id, os.Getenv("GUBER_INSTANCE_ID"), getDockerCID(), generateID())
+
+	return id
+}
+
+func generateID() string {
+	token := make([]byte, 5)
+	_, _ = rand.Read(token)
+	return hex.EncodeToString(token)
+}
+
+func getDockerCID() string {
+	f, err := os.Open("/proc/self/cgroup")
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.Split(line, "/docker/")
+		if len(parts) != 2 {
+			continue
+		}
+
+		fullDockerCID := parts[1]
+		return fullDockerCID[:12]
+	}
+	return ""
+}
+
+func GetTracingLevel() tracing.Level {
+	s := os.Getenv("GUBER_TRACING_LEVEL")
+	lvl, ok := map[string]tracing.Level{
+		"ERROR": tracing.ErrorLevel,
+		"INFO":  tracing.InfoLevel,
+		"DEBUG": tracing.DebugLevel,
+	}[s]
+	if ok {
+		return lvl
+	}
+	return tracing.InfoLevel
+}
+
+var TraceLevelInfoFilter = otelgrpc.Filter(func(info *otelgrpc.InterceptorInfo) bool {
+	if info.UnaryServerInfo != nil {
+		if info.UnaryServerInfo.FullMethod == "/pb.gubernator.PeersV1/GetPeerRateLimits" {
+			return false
+		}
+		if info.UnaryServerInfo.FullMethod == "/pb.gubernator.V1/HealthCheck" {
+			return false
+		}
+	}
+	if info.Method == "/pb.gubernator.PeersV1/GetPeerRateLimits" {
+		return false
+	}
+	if info.Method == "/pb.gubernator.V1/HealthCheck" {
+		return false
+	}
+	return true
+})

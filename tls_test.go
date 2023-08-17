@@ -20,7 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -279,7 +279,7 @@ func TestTLSClusterWithClientAuthentication(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	// Should have called GetPeerRateLimits on d2
 	assert.Contains(t, string(b), `{method="/pb.gubernator.PeersV1/GetPeerRateLimits"} 1`)
@@ -323,7 +323,7 @@ func TestHTTPSClientAuth(t *testing.T) {
 	// Test that a client without a cert can access /v1/HealthCheck at status address
 	resp, err := clientWithoutCert.Do(reqNoClientCertRequired)
 	require.NoError(t, err)
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	assert.Equal(t, `{"status":"healthy","message":"","peer_count":1}`, strings.ReplaceAll(string(b), " ", ""))
 
@@ -334,7 +334,7 @@ func TestHTTPSClientAuth(t *testing.T) {
 	// Check that with a valid client cert we can access /v1/HealthCheck at existing HTTPListenAddress
 	resp, err = clientWithCert.Do(reqCertRequired)
 	require.NoError(t, err)
-	b, err = ioutil.ReadAll(resp.Body)
+	b, err = io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	assert.Equal(t, `{"status":"healthy","message":"","peer_count":1}`, strings.ReplaceAll(string(b), " ", ""))
 }

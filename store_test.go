@@ -531,13 +531,3 @@ func TestStore(t *testing.T) {
 		})
 	}
 }
-
-func getRemaining(item *gubernator.CacheItem) int64 {
-	switch item.Algorithm {
-	case gubernator.Algorithm_TOKEN_BUCKET:
-		return item.Value.(*gubernator.TokenBucketItem).Remaining
-	case gubernator.Algorithm_LEAKY_BUCKET:
-		return int64(item.Value.(*gubernator.LeakyBucketItem).Remaining)
-	}
-	return 0
-}

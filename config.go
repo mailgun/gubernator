@@ -23,7 +23,7 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"os"
 	"runtime"
@@ -511,7 +511,7 @@ func setupEtcdTLS(conf *etcd.Config) error {
 		setter.SetDefault(&conf.TLS, &tls.Config{})
 
 		var certPool *x509.CertPool = nil
-		if pemBytes, err := ioutil.ReadFile(tlsCAFile); err == nil {
+		if pemBytes, err := os.ReadFile(tlsCAFile); err == nil {
 			certPool = x509.NewCertPool()
 			certPool.AppendCertsFromPEM(pemBytes)
 		} else {
@@ -521,7 +521,7 @@ func setupEtcdTLS(conf *etcd.Config) error {
 		conf.TLS.InsecureSkipVerify = false
 	}
 
-	// If the cert and key files are provided attempt to load them
+	// If the cert and key files are provided, attempt to load them
 	if tlsCertFile != "" && tlsKeyFile != "" {
 		tlsCert, err := tls.LoadX509KeyPair(tlsCertFile, tlsKeyFile)
 		if err != nil {
@@ -623,7 +623,7 @@ func fromEnvFile(log logrus.FieldLogger, configFile string) error {
 		return fmt.Errorf("while opening config file: %s", err)
 	}
 
-	contents, err := ioutil.ReadAll(fd)
+	contents, err := io.ReadAll(fd)
 	if err != nil {
 		return fmt.Errorf("while reading config file '%s': %s", configFile, err)
 	}
@@ -649,7 +649,7 @@ func fromEnvFile(log logrus.FieldLogger, configFile string) error {
 
 func validClientAuthTypes(m map[string]tls.ClientAuthType) string {
 	var rs []string
-	for k, _ := range m {
+	for k := range m {
 		rs = append(rs, k)
 	}
 	return strings.Join(rs, ",")
@@ -657,7 +657,7 @@ func validClientAuthTypes(m map[string]tls.ClientAuthType) string {
 
 func validHash64Keys(m map[string]HashString64) string {
 	var rs []string
-	for k, _ := range m {
+	for k := range m {
 		rs = append(rs, k)
 	}
 	return strings.Join(rs, ",")

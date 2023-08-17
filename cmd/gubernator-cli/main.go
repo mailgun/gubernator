@@ -147,7 +147,7 @@ func main() {
 				req := obj.(*guber.GetRateLimitsReq)
 
 				if reqRate > 0 {
-					limiter.Wait(ctx)
+					_ = limiter.Wait(ctx)
 				}
 
 				sendRequest(ctx, client, req)

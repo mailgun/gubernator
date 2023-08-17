@@ -19,7 +19,6 @@ package gubernator
 import (
 	"context"
 	"fmt"
-	"go.opentelemetry.io/otel/propagation"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -32,6 +31,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -536,28 +536,20 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (health
 	// Iterate through local peers and get their last errors
 	localPeers := s.conf.LocalPicker.Peers()
 	for _, peer := range localPeers {
-		lastErr := peer.GetLastErr()
-
-		if lastErr != nil {
-			for _, errMsg := range lastErr {
-				err := fmt.Errorf("Error returned from local peer.GetLastErr: %s", errMsg)
-				span.RecordError(err)
-				errs = append(errs, err.Error())
-			}
+		for _, errMsg := range peer.GetLastErr() {
+			err := fmt.Errorf("Error returned from local peer.GetLastErr: %s", errMsg)
+			span.RecordError(err)
+			errs = append(errs, err.Error())
 		}
 	}
 
 	// Do the same for region peers
 	regionPeers := s.conf.RegionPicker.Peers()
 	for _, peer := range regionPeers {
-		lastErr := peer.GetLastErr()
-
-		if lastErr != nil {
-			for _, errMsg := range lastErr {
-				err := fmt.Errorf("Error returned from region peer.GetLastErr: %s", errMsg)
-				span.RecordError(err)
-				errs = append(errs, err.Error())
-			}
+		for _, errMsg := range peer.GetLastErr() {
+			err := fmt.Errorf("Error returned from region peer.GetLastErr: %s", errMsg)
+			span.RecordError(err)
+			errs = append(errs, err.Error())
 		}
 	}
 

@@ -16,10 +16,6 @@ limitations under the License.
 
 package gubernator
 
-import (
-	"github.com/mailgun/holster/v4/syncutil"
-)
-
 type RegionPeerPicker interface {
 	GetClients(string) ([]*PeerClient, error)
 	GetByPeerInfo(PeerInfo) *PeerClient
@@ -36,15 +32,13 @@ type RegionPicker struct {
 	// A map of all the pickers by region
 	regions map[string]PeerPicker
 	// The implementation of picker we will use for each region
-	conf     BehaviorConfig
-	wg       syncutil.WaitGroup
 	reqQueue chan *RateLimitReq
 }
 
 func NewRegionPicker(fn HashString64) *RegionPicker {
 	rp := &RegionPicker{
 		regions:                  make(map[string]PeerPicker),
-		reqQueue:                 make(chan *RateLimitReq, 0),
+		reqQueue:                 make(chan *RateLimitReq),
 		ReplicatedConsistentHash: NewReplicatedConsistentHash(fn, defaultReplicas),
 	}
 	return rp
@@ -54,7 +48,7 @@ func (rp *RegionPicker) New() RegionPeerPicker {
 	hash := rp.ReplicatedConsistentHash.New().(*ReplicatedConsistentHash)
 	return &RegionPicker{
 		regions:                  make(map[string]PeerPicker),
-		reqQueue:                 make(chan *RateLimitReq, 0),
+		reqQueue:                 make(chan *RateLimitReq),
 		ReplicatedConsistentHash: hash,
 	}
 }
@@ -84,7 +78,7 @@ func (rp *RegionPicker) GetByPeerInfo(info PeerInfo) *PeerClient {
 	return nil
 }
 
-// Pickers returns a map of each region and its respective PeerPicker
+// Pickers return a map of each region and its respective PeerPicker
 func (rp *RegionPicker) Pickers() map[string]PeerPicker {
 	return rp.regions
 }
@@ -93,9 +87,7 @@ func (rp *RegionPicker) Peers() []*PeerClient {
 	var peers []*PeerClient
 
 	for _, picker := range rp.regions {
-		for _, peer := range picker.Peers() {
-			peers = append(peers, peer)
-		}
+		peers = append(peers, picker.Peers()...)
 	}
 
 	return peers

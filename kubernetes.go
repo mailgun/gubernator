@@ -22,7 +22,6 @@ import (
 	"reflect"
 
 	"github.com/mailgun/holster/v4/setter"
-	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	api_v1 "k8s.io/api/core/v1"
@@ -36,7 +35,6 @@ import (
 type K8sPool struct {
 	informer    cache.SharedIndexInformer
 	client      *kubernetes.Clientset
-	wg          syncutil.WaitGroup
 	log         FieldLogger
 	conf        K8sPoolConfig
 	watchCtx    context.Context

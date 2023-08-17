@@ -62,7 +62,7 @@ func TestGubernatorPool(t *testing.T) {
 					Loader:  mockLoader,
 					Workers: testCase.workers,
 				}
-				conf.SetDefaults()
+				assert.NoError(t, conf.SetDefaults())
 				chp := guber.NewWorkerPool(conf)
 
 				// Mock Loader.

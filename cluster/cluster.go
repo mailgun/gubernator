@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/mailgun/gubernator/v2"
+	gubernator "github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/ctxutil"
 	"github.com/mailgun/holster/v4/errors"
@@ -118,10 +118,9 @@ func StartWith(localPeers []gubernator.PeerInfo) error {
 			DataCenter:        peer.DataCenter,
 			Behaviors: gubernator.BehaviorConfig{
 				// Suitable for testing but not production
-				GlobalSyncWait:     clock.Millisecond * 50,
-				GlobalTimeout:      clock.Second * 5,
-				BatchTimeout:       clock.Second * 5,
-				MultiRegionTimeout: clock.Second * 5,
+				GlobalSyncWait: clock.Millisecond * 50,
+				GlobalTimeout:  clock.Second * 5,
+				BatchTimeout:   clock.Second * 5,
 			},
 		})
 		cancel()

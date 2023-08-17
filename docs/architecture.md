@@ -1,6 +1,6 @@
 ## Gubernator Architecture
 
-![architecture diagram](/images/architecture.png)
+![architecture diagram](../contrib/assets/architecture.png)
 
 Gubernator is designed to run as a distributed cluster of peers which utilize
 an in memory cache of all the currently active rate limits, as such no data is

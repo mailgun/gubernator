@@ -1060,14 +1060,11 @@ func TestHealthCheck(t *testing.T) {
 	})
 	require.Nil(t, err)
 
-	// Stop the rest of the cluster to ensure errors occur on our instance and
-	// collect daemons to restart the stopped peers after the test completes
-	var daemons []*guber.Daemon
+	// Stop the rest of the cluster to ensure errors occur on our instance
 	for i := 1; i < cluster.NumOfDaemons(); i++ {
 		d := cluster.DaemonAt(i)
 		require.NotNil(t, d)
 		d.Close()
-		daemons = append(daemons, d)
 	}
 
 	// Hit the global rate limit again this time causing a connection error
@@ -1191,6 +1188,7 @@ func TestGRPCGateway(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	b, err = io.ReadAll(resp.Body)
+	require.NoError(t, err)
 	var r guber.GetRateLimitsResp
 
 	// NOTE: It is important to use 'protojson' instead of the standard 'json' package

@@ -35,6 +35,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type PeerPicker interface {
@@ -143,7 +144,7 @@ func (c *PeerClient) connect(ctx context.Context) (err error) {
 		if c.conf.TLS != nil {
 			opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(c.conf.TLS)))
 		} else {
-			opts = append(opts, grpc.WithInsecure())
+			opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		}
 
 		var err error
@@ -272,7 +273,7 @@ func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 
 	resp, err = c.client.UpdatePeerGlobals(ctx, r)
 	if err != nil {
-		c.setLastErr(err)
+		_ = c.setLastErr(err)
 	}
 
 	return resp, err
@@ -469,7 +470,7 @@ func (c *PeerClient) sendBatch(ctx context.Context, queue []*request) {
 			}).
 			Error(logPart)
 		err = errors.Wrap(err, logPart)
-		c.setLastErr(err)
+		_ = c.setLastErr(err)
 		// metricCheckErrorCounter is updated within client.GetPeerRateLimits().
 
 		for _, r := range queue {

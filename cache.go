@@ -1,5 +1,5 @@
 /*
-Modifications Copyright 2018 Mailgun Technologies Inc
+Modifications Copyright 2023 Mailgun Technologies Inc
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@ limitations under the License.
 
 package gubernator
 
-// So algorithms can interface with different cache implementations
 type Cache interface {
 	Add(item *CacheItem) bool
 	UpdateExpiration(key string, expireAt int64) bool

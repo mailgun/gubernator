@@ -124,7 +124,7 @@ func BenchmarkReplicatedConsistantHash(b *testing.B) {
 			b.ResetTimer()
 
 			for i := 0; i < b.N; i++ {
-				hash.Get(ips[i])
+				_, _ = hash.Get(ips[i])
 			}
 		})
 	}

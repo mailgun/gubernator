@@ -1,10 +1,14 @@
 .DEFAULT_GOAL := release
 VERSION=$(shell cat version)
 LDFLAGS="-X main.Version=$(VERSION)"
+GOLINT = $(GOPATH)/bin/golangci-lint
+
+$(GOLINT):
+	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOPATH)/bin v1.54.1
 
 .PHONY: lint
-lint:
-	go vet ./...
+lint: $(GOLINT)
+	$(GOLINT) run --out-format tab --path-prefix `pwd`
 
 .PHONY: test
 test:

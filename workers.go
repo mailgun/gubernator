@@ -63,7 +63,6 @@ type WorkerPool struct {
 
 type Worker struct {
 	name                string
-	conf                *Config
 	cache               Cache
 	getRateLimitRequest chan *request
 	storeRequest        chan workerStoreRequest

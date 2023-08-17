@@ -25,9 +25,9 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"io/ioutil"
 	"math/big"
 	"net"
+	"os"
 	"strings"
 	"time"
 
@@ -130,7 +130,7 @@ func fromFile(name string) (*bytes.Buffer, error) {
 		return nil, nil
 	}
 
-	b, err := ioutil.ReadFile(name)
+	b, err := os.ReadFile(name)
 	if err != nil {
 		return nil, errors.Wrapf(err, "while reading file '%s'", name)
 	}
@@ -269,6 +269,7 @@ func SetupTLS(conf *TLSConfig) error {
 		}
 
 		// error if neither was provided
+		// nolint:staticcheck // ignoring tlsCert.RootCAs.Subjects is deprecated because cert does not come from SystemCertPool.
 		if len(clientPool.Subjects()) == 0 {
 			return errors.New("client auth enabled, but no CA's provided")
 		}
@@ -316,9 +317,7 @@ func selfCert(conf *TLSConfig) error {
 	}
 
 	// Ensure all our names and ip addresses are included in the Certificate
-	for _, dnsNames := range network.DNSNames {
-		cert.DNSNames = append(cert.DNSNames, dnsNames)
-	}
+	cert.DNSNames = append(cert.DNSNames, network.DNSNames...)
 
 	for _, ipStr := range network.IPAddresses {
 		if ip := net.ParseIP(ipStr); ip != nil {

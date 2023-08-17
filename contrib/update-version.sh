@@ -20,5 +20,5 @@ echo "Updating version file..."
 echo v$version > version
 
 echo "Updating Helm chart..."
-sed -i '' 's/^version:.*$/version: '$version'/' charts/gubernator/Chart.yaml
-sed -i '' 's/^appVersion:.*$/appVersion: '$version'/' charts/gubernator/Chart.yaml
+sed -i '' 's/^version:.*$/version: '$version'/' contrib/charts/gubernator/Chart.yaml
+sed -i '' 's/^appVersion:.*$/appVersion: '$version'/' contrib/charts/gubernator/Chart.yaml

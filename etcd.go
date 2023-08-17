@@ -20,8 +20,8 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/mailgun/errors"
 	"github.com/mailgun/holster/v4/clock"
-	"github.com/mailgun/holster/v4/errors"
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/sirupsen/logrus"
@@ -74,8 +74,8 @@ func NewEtcdPool(conf EtcdPoolConfig) (*EtcdPool, error) {
 	setter.SetDefault(&conf.KeyPrefix, defaultBaseKey)
 	setter.SetDefault(&conf.Logger, logrus.WithField("category", "gubernator"))
 
-	if conf.Advertise.GRPCAddress == "" {
-		return nil, errors.New("Advertise.GRPCAddress is required")
+	if conf.Advertise.HTTPAddress == "" {
+		return nil, errors.New("Advertise.HTTPAddress is required")
 	}
 
 	if conf.Client == nil {
@@ -150,7 +150,7 @@ func (e *EtcdPool) collectPeers(revision *int64) error {
 	// Collect all the peers
 	for _, v := range resp.Kvs {
 		p := e.unMarshallValue(v.Value)
-		peers[p.GRPCAddress] = p
+		peers[p.HTTPAddress] = p
 	}
 
 	e.peers = peers
@@ -165,7 +165,7 @@ func (e *EtcdPool) unMarshallValue(v []byte) PeerInfo {
 	// for backward compatible with older gubernator versions
 	if err := json.Unmarshal(v, &p); err != nil {
 		e.log.WithError(err).Errorf("while unmarshalling peer info from key value")
-		return PeerInfo{GRPCAddress: string(v)}
+		return PeerInfo{HTTPAddress: string(v)}
 	}
 	return p
 }
@@ -219,7 +219,7 @@ func (e *EtcdPool) watch() error {
 }
 
 func (e *EtcdPool) register(peer PeerInfo) error {
-	instanceKey := e.conf.KeyPrefix + peer.GRPCAddress
+	instanceKey := e.conf.KeyPrefix + peer.HTTPAddress
 	e.log.Infof("Registering peer '%#v' with etcd", peer)
 
 	b, err := json.Marshal(peer)
@@ -323,7 +323,7 @@ func (e *EtcdPool) callOnUpdate() {
 	var peers []PeerInfo
 
 	for _, p := range e.peers {
-		if p.GRPCAddress == e.conf.Advertise.GRPCAddress {
+		if p.HTTPAddress == e.conf.Advertise.HTTPAddress {
 			p.IsOwner = true
 		}
 		peers = append(peers, p)

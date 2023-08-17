@@ -10,3 +10,5 @@ coverage.out
 coverage.html
 /gubernator
 /gubernator-cli
+.run/
+tmp/

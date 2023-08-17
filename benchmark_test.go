@@ -18,52 +18,51 @@ package gubernator_test
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"testing"
 
-	guber "github.com/mailgun/gubernator/v2"
-	"github.com/mailgun/gubernator/v2/cluster"
-	"github.com/mailgun/holster/v4/syncutil"
+	guber "github.com/mailgun/gubernator/v3"
+	"github.com/mailgun/gubernator/v3/cluster"
 	"github.com/stretchr/testify/require"
 )
 
-func BenchmarkServer(b *testing.B) {
+// go test benchmark_test.go -bench=BenchmarkTrace -benchtime=20s -trace=trace.out
+// go tool trace trace.out
+func BenchmarkTrace(b *testing.B) {
+	if err := cluster.StartWith([]guber.PeerInfo{
+		{HTTPAddress: "127.0.0.1:9980", DataCenter: cluster.DataCenterNone},
+		{HTTPAddress: "127.0.0.1:9981", DataCenter: cluster.DataCenterNone},
+		{HTTPAddress: "127.0.0.1:9982", DataCenter: cluster.DataCenterNone},
+		{HTTPAddress: "127.0.0.1:9983", DataCenter: cluster.DataCenterNone},
+		{HTTPAddress: "127.0.0.1:9984", DataCenter: cluster.DataCenterNone},
+		{HTTPAddress: "127.0.0.1:9985", DataCenter: cluster.DataCenterNone},
+
+		// DataCenterOne
+		{HTTPAddress: "127.0.0.1:9880", DataCenter: cluster.DataCenterOne},
+		{HTTPAddress: "127.0.0.1:9881", DataCenter: cluster.DataCenterOne},
+		{HTTPAddress: "127.0.0.1:9882", DataCenter: cluster.DataCenterOne},
+		{HTTPAddress: "127.0.0.1:9883", DataCenter: cluster.DataCenterOne},
+	}); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	defer cluster.Stop()
 	ctx := context.Background()
 	conf := guber.Config{}
 	err := conf.SetDefaults()
 	require.NoError(b, err, "Error in conf.SetDefaults")
 
-	b.Run("GetPeerRateLimit() with no batching", func(b *testing.B) {
-		client := guber.NewPeerClient(guber.PeerConfig{
-			Info:     cluster.GetRandomPeer(cluster.DataCenterNone),
-			Behavior: conf.Behaviors,
-		})
+	b.Run("CheckRateLimits() BATCHING", func(b *testing.B) {
+		client, err := guber.NewClient(guber.WithNoTLS(cluster.GetRandomPeerInfo(cluster.DataCenterNone).HTTPAddress))
+		require.NoError(b, err, "Error in guber.NewClient")
 
 		b.ResetTimer()
 
 		for n := 0; n < b.N; n++ {
-			_, err := client.GetPeerRateLimit(context.Background(), &guber.RateLimitReq{
-				Name:      "get_peer_rate_limits_benchmark",
-				UniqueKey: guber.RandomString(10),
-				Behavior:  guber.Behavior_NO_BATCHING,
-				Limit:     10,
-				Duration:  5,
-				Hits:      1,
-			})
-			if err != nil {
-				b.Errorf("Error in client.GetPeerRateLimit: %s", err)
-			}
-		}
-	})
-
-	b.Run("GetRateLimit()", func(b *testing.B) {
-		client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
-		require.NoError(b, err, "Error in guber.DialV1Server")
-
-		b.ResetTimer()
-
-		for n := 0; n < b.N; n++ {
-			_, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
-				Requests: []*guber.RateLimitReq{
+			var resp guber.CheckRateLimitsResponse
+			err := client.CheckRateLimits(ctx, &guber.CheckRateLimitsRequest{
+				Requests: []*guber.RateLimitRequest{
 					{
 						Name:      "get_rate_limit_benchmark",
 						UniqueKey: guber.RandomString(10),
@@ -72,77 +71,186 @@ func BenchmarkServer(b *testing.B) {
 						Hits:      1,
 					},
 				},
-			})
+			}, &resp)
 			if err != nil {
-				b.Errorf("Error in client.GetRateLimits(): %s", err)
+				b.Errorf("Error in client.CheckRateLimits(): %s", err)
 			}
 		}
 	})
+}
 
-	b.Run("GetRateLimitGlobal()", func(b *testing.B) {
-		client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
-		require.NoError(b, err, "Error in guber.DialV1Server")
+//
+// go test -bench=BenchmarkServer -benchmem=1  -benchtime=20s
+//
+
+func BenchmarkServer(b *testing.B) {
+	if err := cluster.StartWith([]guber.PeerInfo{
+		{HTTPAddress: "127.0.0.1:9980", DataCenter: cluster.DataCenterNone},
+		{HTTPAddress: "127.0.0.1:9981", DataCenter: cluster.DataCenterNone},
+		{HTTPAddress: "127.0.0.1:9982", DataCenter: cluster.DataCenterNone},
+		{HTTPAddress: "127.0.0.1:9983", DataCenter: cluster.DataCenterNone},
+		{HTTPAddress: "127.0.0.1:9984", DataCenter: cluster.DataCenterNone},
+		{HTTPAddress: "127.0.0.1:9985", DataCenter: cluster.DataCenterNone},
+
+		// DataCenterOne
+		{HTTPAddress: "127.0.0.1:9880", DataCenter: cluster.DataCenterOne},
+		{HTTPAddress: "127.0.0.1:9881", DataCenter: cluster.DataCenterOne},
+		{HTTPAddress: "127.0.0.1:9882", DataCenter: cluster.DataCenterOne},
+		{HTTPAddress: "127.0.0.1:9883", DataCenter: cluster.DataCenterOne},
+	}); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	defer cluster.Stop()
+	ctx := context.Background()
+	conf := guber.Config{}
+	err := conf.SetDefaults()
+	require.NoError(b, err, "Error in conf.SetDefaults")
+
+	//b.Run("Forward() NO_BATCHING", func(b *testing.B) {
+	//	client, err := guber.NewPeer(guber.PeerConfig{
+	//		Info:     cluster.GetRandomPeerInfo(cluster.DataCenterNone),
+	//		Behavior: conf.Behaviors,
+	//	})
+	//	if err != nil {
+	//		b.Errorf("during guber.NewPeer(): %s", err)
+	//	}
+	//
+	//	b.ResetTimer()
+	//
+	//	for n := 0; n < b.N; n++ {
+	//		_, err := client.Forward(context.Background(), &guber.RateLimitRequest{
+	//			Name:      "get_peer_rate_limits_benchmark",
+	//			UniqueKey: guber.RandomString(10),
+	//			Behavior:  guber.Behavior_NO_BATCHING,
+	//			Limit:     10,
+	//			Duration:  5,
+	//			Hits:      1,
+	//		})
+	//		if err != nil {
+	//			b.Errorf("Error in client.Forward: %s", err)
+	//		}
+	//	}
+	//})
+
+	//b.Run("CheckRateLimits() BATCHING", func(b *testing.B) {
+	//	client, err := guber.NewClient(guber.WithNoTLS(cluster.GetRandomPeerInfo(cluster.DataCenterNone).HTTPAddress))
+	//	require.NoError(b, err, "Error in guber.NewClient")
+	//
+	//	b.ResetTimer()
+	//
+	//	for n := 0; n < b.N; n++ {
+	//		var resp guber.CheckRateLimitsResponse
+	//		err := client.CheckRateLimits(ctx, &guber.CheckRateLimitsRequest{
+	//			Requests: []*guber.RateLimitRequest{
+	//				{
+	//					Name:      "get_rate_limit_benchmark",
+	//					UniqueKey: guber.RandomString(10),
+	//					Limit:     10,
+	//					Duration:  guber.Second * 5,
+	//					Hits:      1,
+	//				},
+	//			},
+	//		}, &resp)
+	//		if err != nil {
+	//			b.Errorf("Error in client.CheckRateLimits(): %s", err)
+	//		}
+	//	}
+	//})
+
+	b.Run("CheckRateLimits() NO_BATCHING", func(b *testing.B) {
+		client, err := guber.NewClient(guber.WithNoTLS(cluster.GetRandomPeerInfo(cluster.DataCenterNone).HTTPAddress))
+		require.NoError(b, err, "Error in guber.NewClient")
 
 		b.ResetTimer()
 
 		for n := 0; n < b.N; n++ {
-			_, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
-				Requests: []*guber.RateLimitReq{
+			var resp guber.CheckRateLimitsResponse
+			err := client.CheckRateLimits(ctx, &guber.CheckRateLimitsRequest{
+				Requests: []*guber.RateLimitRequest{
 					{
 						Name:      "get_rate_limit_benchmark",
 						UniqueKey: guber.RandomString(10),
-						Behavior:  guber.Behavior_GLOBAL,
+						Behavior:  guber.Behavior_NO_BATCHING,
 						Limit:     10,
 						Duration:  guber.Second * 5,
 						Hits:      1,
 					},
 				},
-			})
+			}, &resp)
 			if err != nil {
-				b.Errorf("Error in client.GetRateLimits: %s", err)
+				b.Errorf("Error in client.CheckRateLimits(): %s", err)
 			}
 		}
 	})
 
-	b.Run("HealthCheck", func(b *testing.B) {
-		client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
-		require.NoError(b, err, "Error in guber.DialV1Server")
+	//b.Run("CheckRateLimits() GLOBAL", func(b *testing.B) {
+	//	client, err := guber.NewClient(guber.WithNoTLS(cluster.GetRandomPeerInfo(cluster.DataCenterNone).HTTPAddress))
+	//	require.NoError(b, err, "Error in guber.NewClient")
+	//
+	//	b.ResetTimer()
+	//
+	//	for n := 0; n < b.N; n++ {
+	//		var resp guber.CheckRateLimitsResponse
+	//		err := client.CheckRateLimits(context.Background(), &guber.CheckRateLimitsRequest{
+	//			Requests: []*guber.RateLimitRequest{
+	//				{
+	//					Name:      "get_rate_limit_benchmark",
+	//					UniqueKey: guber.RandomString(10),
+	//					Behavior:  guber.Behavior_GLOBAL,
+	//					Limit:     10,
+	//					Duration:  guber.Second * 5,
+	//					Hits:      1,
+	//				},
+	//			},
+	//		}, &resp)
+	//		if err != nil {
+	//			b.Errorf("Error in client.CheckRateLimits: %s", err)
+	//		}
+	//	}
+	//})
 
-		b.ResetTimer()
-
-		for n := 0; n < b.N; n++ {
-			if _, err := client.HealthCheck(context.Background(), &guber.HealthCheckReq{}); err != nil {
-				b.Errorf("Error in client.HealthCheck: %s", err)
-			}
-		}
-	})
-
-	b.Run("Thundering herd", func(b *testing.B) {
-		client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
-		require.NoError(b, err, "Error in guber.DialV1Server")
-
-		b.ResetTimer()
-
-		fan := syncutil.NewFanOut(100)
-
-		for n := 0; n < b.N; n++ {
-			fan.Run(func(o interface{}) error {
-				_, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
-					Requests: []*guber.RateLimitReq{
-						{
-							Name:      "get_rate_limit_benchmark",
-							UniqueKey: guber.RandomString(10),
-							Limit:     10,
-							Duration:  guber.Second * 5,
-							Hits:      1,
-						},
-					},
-				})
-				if err != nil {
-					b.Errorf("Error in client.GetRateLimits: %s", err)
-				}
-				return nil
-			}, nil)
-		}
-	})
+	//b.Run("HealthCheck", func(b *testing.B) {
+	//	client, err := guber.NewClient(guber.WithNoTLS(cluster.GetRandomPeerInfo(cluster.DataCenterNone).HTTPAddress))
+	//	require.NoError(b, err, "Error in guber.NewClient")
+	//
+	//	b.ResetTimer()
+	//
+	//	for n := 0; n < b.N; n++ {
+	//		var resp guber.HealthCheckResponse
+	//		if err := client.HealthCheck(context.Background(), &resp); err != nil {
+	//			b.Errorf("Error in client.HealthCheck: %s", err)
+	//		}
+	//	}
+	//})
+	//
+	//b.Run("Thundering herd", func(b *testing.B) {
+	//	client, err := guber.NewClient(guber.WithNoTLS(cluster.GetRandomPeerInfo(cluster.DataCenterNone).HTTPAddress))
+	//	require.NoError(b, err, "Error in guber.NewClient")
+	//
+	//	b.ResetTimer()
+	//
+	//	fan := syncutil.NewFanOut(100)
+	//
+	//	for n := 0; n < b.N; n++ {
+	//		fan.Run(func(o interface{}) error {
+	//			var resp guber.CheckRateLimitsResponse
+	//			err := client.CheckRateLimits(context.Background(), &guber.CheckRateLimitsRequest{
+	//				Requests: []*guber.RateLimitRequest{
+	//					{
+	//						Name:      "get_rate_limit_benchmark",
+	//						UniqueKey: guber.RandomString(10),
+	//						Limit:     10,
+	//						Duration:  guber.Second * 5,
+	//						Hits:      1,
+	//					},
+	//				},
+	//			}, &resp)
+	//			if err != nil {
+	//				b.Errorf("Error in client.CheckRateLimits: %s", err)
+	//			}
+	//			return nil
+	//		}, nil)
+	//	}
+	//})
 }

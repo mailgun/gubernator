@@ -118,11 +118,14 @@ type DNSPoolConfig struct {
 	// (Required) Filesystem path to "/etc/resolv.conf", override for testing
 	ResolvConf string
 
-	// (Required) Own GRPC address
+	// (Required) Own HTTP address
 	OwnAddress string
 
 	// (Required) Called when the list of gubernators in the pool updates
 	OnUpdate UpdateFunc
+
+	// (Required) The default client used to contact peers discovered
+	Client PeerClient
 
 	Logger FieldLogger
 }
@@ -138,7 +141,7 @@ func NewDNSPool(conf DNSPoolConfig) (*DNSPool, error) {
 	setter.SetDefault(&conf.Logger, logrus.WithField("category", "gubernator"))
 
 	if conf.OwnAddress == "" {
-		return nil, errors.New("Advertise.GRPCAddress is required")
+		return nil, errors.New("Advertise.OwnAddress is required")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -157,14 +160,12 @@ func peer(ip string, self string, ipv6 bool) PeerInfo {
 	if ipv6 {
 		ip = "[" + ip + "]"
 	}
-	grpc := ip + ":81"
+	http := ip + ":80"
 	return PeerInfo{
 		DataCenter:  "",
-		HTTPAddress: ip + ":80",
-		GRPCAddress: grpc,
-		IsOwner:     grpc == self,
+		HTTPAddress: http,
+		IsOwner:     http == self,
 	}
-
 }
 
 func min(a uint32, b uint32) uint32 {

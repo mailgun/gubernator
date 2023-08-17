@@ -37,7 +37,7 @@ clean:
 
 .PHONY: proto
 proto:
-	scripts/proto.sh
+	buf build
 
 .PHONY: certs
 certs:

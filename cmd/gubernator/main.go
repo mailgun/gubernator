@@ -25,7 +25,7 @@ import (
 	"runtime"
 	"syscall"
 
-	gubernator "github.com/mailgun/gubernator/v2"
+	gubernator "github.com/mailgun/gubernator/v3"
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/tracing"
 	"github.com/sirupsen/logrus"
@@ -89,7 +89,7 @@ func main() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	for range c {
 		log.Info("caught signal; shutting down")
-		daemon.Close()
+		daemon.Close(context.Background())
 		_ = tracing.CloseTracing(context.Background())
 		exit(0)
 	}

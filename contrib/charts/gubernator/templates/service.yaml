@@ -10,10 +10,6 @@ spec:
   type: ClusterIP
   clusterIP: None
   ports:
-    - port: {{ include "gubernator.grpc.port" .  }}
-      targetPort: {{ include "gubernator.grpc.port" .  }}
-      protocol: TCP
-      name: grpc
     - port: {{ include "gubernator.http.port" .  }}
       targetPort: {{ include "gubernator.http.port" .  }}
       protocol: TCP

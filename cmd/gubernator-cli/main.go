@@ -26,9 +26,8 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	guber "github.com/mailgun/gubernator/v2"
+	guber "github.com/mailgun/gubernator/v3"
 	"github.com/mailgun/holster/v4/clock"
-	"github.com/mailgun/holster/v4/errors"
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/mailgun/holster/v4/tracing"
@@ -40,7 +39,7 @@ import (
 
 var (
 	log                     *logrus.Logger
-	configFile, grpcAddress string
+	configFile, httpAddress string
 	concurrency             uint64
 	timeout                 time.Duration
 	checksPerRequest        uint64
@@ -51,7 +50,7 @@ var (
 func main() {
 	log = logrus.StandardLogger()
 	flag.StringVar(&configFile, "config", "", "Environment config file")
-	flag.StringVar(&grpcAddress, "e", "", "Gubernator GRPC endpoint address")
+	flag.StringVar(&httpAddress, "e", "", "Gubernator HTTP endpoint address")
 	flag.Uint64Var(&concurrency, "concurrency", 1, "Concurrent threads (default 1)")
 	flag.DurationVar(&timeout, "timeout", 100*time.Millisecond, "Request timeout (default 100ms)")
 	flag.Uint64Var(&checksPerRequest, "checks", 1, "Rate checks per request (default 1)")
@@ -78,45 +77,35 @@ func main() {
 	}
 
 	// Print startup message.
-	startCtx := tracing.StartScope(ctx)
 	argsMsg := fmt.Sprintf("Command line: %s", strings.Join(os.Args[1:], " "))
 	log.Info(argsMsg)
-	tracing.EndScope(startCtx, nil)
 
-	var client guber.V1Client
-	err = tracing.CallScope(ctx, func(ctx context.Context) error {
-		// Print startup message.
-		cmdLine := strings.Join(os.Args[1:], " ")
-		logrus.WithContext(ctx).Info("Command line: " + cmdLine)
+	var client guber.Client
+	// Print startup message.
+	cmdLine := strings.Join(os.Args[1:], " ")
+	logrus.WithContext(ctx).Info("Command line: " + cmdLine)
 
-		conf, err := guber.SetupDaemonConfig(log, configFile)
-		if err != nil {
-			return err
-		}
-		setter.SetOverride(&conf.GRPCListenAddress, grpcAddress)
+	conf, err := guber.SetupDaemonConfig(log, configFile)
+	checkErr(err)
+	setter.SetOverride(&conf.HTTPListenAddress, httpAddress)
 
-		if configFile == "" && grpcAddress == "" && os.Getenv("GUBER_GRPC_ADDRESS") == "" {
-			return errors.New("please provide a GRPC endpoint via -e or from a config " +
-				"file via -config or set the env GUBER_GRPC_ADDRESS")
-		}
+	if configFile == "" && httpAddress == "" && os.Getenv("GUBER_HTTP_ADDRESS") == "" {
+		log.Fatal("please provide a endpoint via -e or from a config " +
+			"file via -config or set the env GUBER_HTTP_ADDRESS")
+	}
 
-		err = guber.SetupTLS(conf.TLS)
-		if err != nil {
-			return err
-		}
+	err = guber.SetupTLS(conf.TLS)
+	checkErr(err)
 
-		log.WithContext(ctx).Infof("Connecting to '%s'...", conf.GRPCListenAddress)
-		client, err = guber.DialV1Server(conf.GRPCListenAddress, conf.ClientTLS())
-		return err
-	})
-
+	log.WithContext(ctx).Infof("Connecting to '%s'...", conf.HTTPListenAddress)
+	client, err = guber.NewClient(guber.WithDaemonConfig(conf, conf.HTTPListenAddress))
 	checkErr(err)
 
 	// Generate a selection of rate limits with random limits.
-	var rateLimits []*guber.RateLimitReq
+	var rateLimits []*guber.RateLimitRequest
 
 	for i := 0; i < 2000; i++ {
-		rateLimits = append(rateLimits, &guber.RateLimitReq{
+		rateLimits = append(rateLimits, &guber.RateLimitRequest{
 			Name:      fmt.Sprintf("gubernator-cli-%d", i),
 			UniqueKey: guber.RandomString(10),
 			Hits:      1,
@@ -138,12 +127,12 @@ func main() {
 	// Replay requests in endless loop.
 	for {
 		for i := int(0); i < len(rateLimits); i += int(checksPerRequest) {
-			req := &guber.GetRateLimitsReq{
+			req := &guber.CheckRateLimitsRequest{
 				Requests: rateLimits[i:min(i+int(checksPerRequest), len(rateLimits))],
 			}
 
 			fan.Run(func(obj interface{}) error {
-				req := obj.(*guber.GetRateLimitsReq)
+				req := obj.(*guber.CheckRateLimitsRequest)
 
 				if reqRate > 0 {
 					_ = limiter.Wait(ctx)
@@ -174,49 +163,46 @@ func randInt(min, max int) int {
 	return rand.Intn(max-min) + min
 }
 
-func sendRequest(ctx context.Context, client guber.V1Client, req *guber.GetRateLimitsReq) {
+func sendRequest(ctx context.Context, client guber.Client, req *guber.CheckRateLimitsRequest) {
 	ctx = tracing.StartScope(ctx)
 	defer tracing.EndScope(ctx, nil)
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 
 	// Now hit our cluster with the rate limits
-	resp, err := client.GetRateLimits(ctx, req)
+	var resp guber.CheckRateLimitsResponse
+	err := client.CheckRateLimits(ctx, req, &resp)
 	cancel()
 	if err != nil {
-		log.WithContext(ctx).WithError(err).Error("Error in client.GetRateLimits")
+		log.WithContext(ctx).WithError(err).Error("Error in client.CheckRateLimits")
 		return
 	}
 
-	// Sanity checks.
-	if resp == nil {
-		log.WithContext(ctx).Error("Response object is unexpectedly nil")
-		return
-	}
+	// Sanity check
 	if resp.Responses == nil {
 		log.WithContext(ctx).Error("Responses array is unexpectedly nil")
 		return
 	}
 
-	// Check for overlimit response.
-	overlimit := false
+	// Check for over limit response.
+	overLimit := false
 
 	for itemNum, resp := range resp.Responses {
 		if resp.Status == guber.Status_OVER_LIMIT {
-			overlimit = true
+			overLimit = true
 			log.WithContext(ctx).WithField("name", req.Requests[itemNum].Name).
 				Info("Overlimit!")
 		}
 	}
 
-	if overlimit {
+	if overLimit {
 		span := trace.SpanFromContext(ctx)
 		span.SetAttributes(
 			attribute.Bool("overlimit", true),
 		)
 
 		if !quiet {
-			dumpResp := spew.Sdump(resp)
+			dumpResp := spew.Sdump(&resp)
 			log.WithContext(ctx).Info(dumpResp)
 		}
 	}

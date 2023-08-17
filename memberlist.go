@@ -224,7 +224,7 @@ func (e *memberListEventHandler) callOnUpdate() {
 	var peers []PeerInfo
 
 	for _, p := range e.peers {
-		if p.GRPCAddress == e.conf.Advertise.GRPCAddress {
+		if p.HTTPAddress == e.conf.Advertise.HTTPAddress {
 			p.IsOwner = true
 		}
 		peers = append(peers, p)
@@ -260,7 +260,7 @@ func unmarshallPeer(b []byte, ip string) (PeerInfo, error) {
 		if metadata.AdvertiseAddress == "" {
 			metadata.AdvertiseAddress = makeAddress(ip, metadata.GubernatorPort)
 		}
-		return PeerInfo{GRPCAddress: metadata.AdvertiseAddress, DataCenter: metadata.DataCenter}, nil
+		return PeerInfo{HTTPAddress: metadata.AdvertiseAddress, DataCenter: metadata.DataCenter}, nil
 	}
 	return peer, nil
 }

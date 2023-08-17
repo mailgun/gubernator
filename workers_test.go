@@ -22,7 +22,7 @@ import (
 	"sort"
 	"testing"
 
-	guber "github.com/mailgun/gubernator/v2"
+	guber "github.com/mailgun/gubernator/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

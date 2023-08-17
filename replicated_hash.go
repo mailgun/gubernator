@@ -26,6 +26,14 @@ import (
 	"github.com/segmentio/fasthash/fnv1"
 )
 
+type PeerPicker interface {
+	GetByPeerInfo(PeerInfo) *Peer
+	Peers() []*Peer
+	Get(string) (*Peer, error)
+	New() PeerPicker
+	Add(*Peer)
+}
+
 const defaultReplicas = 512
 
 type HashString64 func(data string) uint64
@@ -36,19 +44,19 @@ var defaultHashString64 HashString64 = fnv1.HashString64
 type ReplicatedConsistentHash struct {
 	hashFunc HashString64
 	peerKeys []peerInfo
-	peers    map[string]*PeerClient
+	peers    map[string]*Peer
 	replicas int
 }
 
 type peerInfo struct {
 	hash uint64
-	peer *PeerClient
+	peer *Peer
 }
 
 func NewReplicatedConsistentHash(fn HashString64, replicas int) *ReplicatedConsistentHash {
 	ch := &ReplicatedConsistentHash{
 		hashFunc: fn,
-		peers:    make(map[string]*PeerClient),
+		peers:    make(map[string]*Peer),
 		replicas: replicas,
 	}
 
@@ -61,13 +69,13 @@ func NewReplicatedConsistentHash(fn HashString64, replicas int) *ReplicatedConsi
 func (ch *ReplicatedConsistentHash) New() PeerPicker {
 	return &ReplicatedConsistentHash{
 		hashFunc: ch.hashFunc,
-		peers:    make(map[string]*PeerClient),
+		peers:    make(map[string]*Peer),
 		replicas: ch.replicas,
 	}
 }
 
-func (ch *ReplicatedConsistentHash) Peers() []*PeerClient {
-	var results []*PeerClient
+func (ch *ReplicatedConsistentHash) Peers() []*Peer {
+	var results []*Peer
 	for _, v := range ch.peers {
 		results = append(results, v)
 	}
@@ -75,10 +83,10 @@ func (ch *ReplicatedConsistentHash) Peers() []*PeerClient {
 }
 
 // Adds a peer to the hash
-func (ch *ReplicatedConsistentHash) Add(peer *PeerClient) {
-	ch.peers[peer.Info().GRPCAddress] = peer
+func (ch *ReplicatedConsistentHash) Add(peer *Peer) {
+	ch.peers[peer.Info().HTTPAddress] = peer
 
-	key := fmt.Sprintf("%x", md5.Sum([]byte(peer.Info().GRPCAddress)))
+	key := fmt.Sprintf("%x", md5.Sum([]byte(peer.Info().HTTPAddress)))
 	for i := 0; i < ch.replicas; i++ {
 		hash := ch.hashFunc(strconv.Itoa(i) + key)
 		ch.peerKeys = append(ch.peerKeys, peerInfo{
@@ -96,12 +104,12 @@ func (ch *ReplicatedConsistentHash) Size() int {
 }
 
 // Returns the peer by hostname
-func (ch *ReplicatedConsistentHash) GetByPeerInfo(peer PeerInfo) *PeerClient {
-	return ch.peers[peer.GRPCAddress]
+func (ch *ReplicatedConsistentHash) GetByPeerInfo(peer PeerInfo) *Peer {
+	return ch.peers[peer.HTTPAddress]
 }
 
 // Given a key, return the peer that key is assigned too
-func (ch *ReplicatedConsistentHash) Get(key string) (*PeerClient, error) {
+func (ch *ReplicatedConsistentHash) Get(key string) (*Peer, error) {
 	if ch.Size() == 0 {
 		return nil, errors.New("unable to pick a peer; pool is empty")
 	}

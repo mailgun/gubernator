@@ -1,6 +1,5 @@
 version: v1
-deps:
-  - buf.build/googleapis/googleapis
+deps: []
 build:
   excludes: []
 breaking:
@@ -9,6 +8,3 @@ breaking:
 lint:
   use:
     - DEFAULT
-  rpc_allow_same_request_response: false
-  rpc_allow_google_protobuf_empty_requests: true
-  rpc_allow_google_protobuf_empty_responses: true

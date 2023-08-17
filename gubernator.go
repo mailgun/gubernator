@@ -48,7 +48,6 @@ type V1Instance struct {
 	UnimplementedV1Server
 	UnimplementedPeersV1Server
 	global               *globalManager
-	mutliRegion          *mutliRegionManager
 	peerMutex            sync.RWMutex
 	log                  FieldLogger
 	conf                 Config
@@ -134,7 +133,6 @@ func NewV1Instance(conf Config) (s *V1Instance, err error) {
 
 	s.workerPool = NewWorkerPool(&conf)
 	s.global = newGlobalManager(conf.Behaviors, s)
-	s.mutliRegion = newMultiRegionManager(conf.Behaviors, s)
 
 	// Register our instance with all GRPC servers
 	for _, srv := range conf.GRPCServers {
@@ -167,7 +165,6 @@ func (s *V1Instance) Close() (err error) {
 	}
 
 	s.global.Close()
-	s.mutliRegion.Close()
 
 	err = s.workerPool.Store(ctx)
 	if err != nil {
@@ -601,10 +598,6 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (*R
 
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
 		s.global.QueueUpdate(r)
-	}
-
-	if HasBehavior(r.Behavior, Behavior_MULTI_REGION) {
-		s.mutliRegion.QueueHits(r)
 	}
 
 	resp, err := s.workerPool.GetRateLimit(ctx, r)

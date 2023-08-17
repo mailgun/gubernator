@@ -1,4 +1,4 @@
-#! /bin/sh
+#!/bin/bash
 
 # Copyright 2018-2022 Mailgun Technologies Inc
 #
@@ -72,6 +72,6 @@ python3 -m grpc.tools.protoc \
     --mypy_grpc_out=$PYTHON_DST_DIR \
     $PROTO_DIR/*.proto
 # Rewrite imports to import from package
-sed -i '' 's/import gubernator_pb2/from gubernator import gubernator_pb2/' "${PYTHON_DST_DIR}/"gubernator_pb2_grpc.py*
-sed -i '' 's/import gubernator_pb2/from gubernator import gubernator_pb2/' "${PYTHON_DST_DIR}/"peers_pb2.py*
-sed -i '' 's/import peers_pb2/from gubernator import peers_pb2/' "${PYTHON_DST_DIR}/"peers_pb2_grpc.py*
+sed -i'' -e 's/import gubernator_pb2/from gubernator import gubernator_pb2/' "${PYTHON_DST_DIR}/"gubernator_pb2_grpc.py*
+sed -i'' -e 's/import gubernator_pb2/from gubernator import gubernator_pb2/' "${PYTHON_DST_DIR}/"peers_pb2.py*
+sed -i'' -e 's/import peers_pb2/from gubernator import peers_pb2/' "${PYTHON_DST_DIR}/"peers_pb2_grpc.py*

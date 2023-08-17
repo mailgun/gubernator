@@ -21,7 +21,7 @@ else
 fi
 
 # Check Helm chart.
-HELM_VERSION=$(yq .version charts/gubernator/Chart.yaml)
+HELM_VERSION=$(yq .version contrib/charts/gubernator/Chart.yaml)
 if [ "$VERSION" != "$HELM_VERSION" ]; then
   echo "Helm chart version mismatch: $VERSION <=> $HELM_VERSION" >&2
   RETCODE=1
@@ -29,7 +29,7 @@ else
   echo 'Helm chart version OK'
 fi
 
-HELM_APPVERSION=$(yq .appVersion charts/gubernator/Chart.yaml)
+HELM_APPVERSION=$(yq .appVersion contrib/charts/gubernator/Chart.yaml)
 if [ "$VERSION" != "$HELM_APPVERSION" ]; then
   echo "Helm chart appVersion mismatch: $VERSION <=> $HELM_APPVERSION" >&2
   RETCODE=1

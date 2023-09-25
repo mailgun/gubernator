@@ -25,7 +25,7 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/mailgun/gubernator/v2"
+	gubernator "github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/ctxutil"
 	"github.com/mailgun/holster/v4/tracing"
@@ -53,7 +53,7 @@ func main() {
 	// klog (https://github.com/kubernetes/klog), we need to
 	// initialize klog in the way it prints to stderr only.
 	klog.InitFlags(nil)
-	flag.Set("logtostderr", "true")
+	_ = flag.Set("logtostderr", "true")
 
 	res, err := tracing.NewResource("gubernator", Version, resource.NewWithAttributes(
 		semconv.SchemaURL,

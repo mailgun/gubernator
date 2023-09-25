@@ -190,7 +190,7 @@ func (e *EtcdPool) watch() error {
 				e.log.Errorf("watch error: %v", err)
 				goto restart
 			}
-			e.collectPeers(&rev)
+			_ = e.collectPeers(&rev)
 		}
 
 	restart:

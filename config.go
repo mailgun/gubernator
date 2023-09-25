@@ -23,7 +23,7 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"os"
 	"runtime"
@@ -60,13 +60,6 @@ type BehaviorConfig struct {
 	GlobalTimeout time.Duration
 	// The max number of global updates we can batch into a single peer request
 	GlobalBatchLimit int
-
-	// How long the current region will collect request before pushing them to other regions
-	MultiRegionSyncWait time.Duration
-	// How long the current region will wait for responses from other regions
-	MultiRegionTimeout time.Duration
-	// The max number of requests the current region will collect
-	MultiRegionBatchLimit int
 }
 
 // Config for a gubernator instance
@@ -128,10 +121,6 @@ func (c *Config) SetDefaults() error {
 	setter.SetDefault(&c.Behaviors.GlobalTimeout, time.Millisecond*500)
 	setter.SetDefault(&c.Behaviors.GlobalBatchLimit, maxBatchSize)
 	setter.SetDefault(&c.Behaviors.GlobalSyncWait, time.Microsecond*500)
-
-	setter.SetDefault(&c.Behaviors.MultiRegionTimeout, time.Millisecond*500)
-	setter.SetDefault(&c.Behaviors.MultiRegionBatchLimit, maxBatchSize)
-	setter.SetDefault(&c.Behaviors.MultiRegionSyncWait, time.Second)
 
 	setter.SetDefault(&c.LocalPicker, NewReplicatedConsistentHash(nil, defaultReplicas))
 	setter.SetDefault(&c.RegionPicker, NewRegionPicker(nil))
@@ -349,10 +338,6 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 	setter.SetDefault(&conf.Behaviors.GlobalBatchLimit, getEnvInteger(log, "GUBER_GLOBAL_BATCH_LIMIT"))
 	setter.SetDefault(&conf.Behaviors.GlobalSyncWait, getEnvDuration(log, "GUBER_GLOBAL_SYNC_WAIT"))
 
-	setter.SetDefault(&conf.Behaviors.MultiRegionTimeout, getEnvDuration(log, "GUBER_MULTI_REGION_TIMEOUT"))
-	setter.SetDefault(&conf.Behaviors.MultiRegionBatchLimit, getEnvInteger(log, "GUBER_MULTI_REGION_BATCH_LIMIT"))
-	setter.SetDefault(&conf.Behaviors.MultiRegionSyncWait, getEnvDuration(log, "GUBER_MULTI_REGION_SYNC_WAIT"))
-
 	// TLS Config
 	if anyHasPrefix("GUBER_TLS_", os.Environ()) {
 		conf.TLS = &TLSConfig{}
@@ -526,7 +511,7 @@ func setupEtcdTLS(conf *etcd.Config) error {
 		setter.SetDefault(&conf.TLS, &tls.Config{})
 
 		var certPool *x509.CertPool = nil
-		if pemBytes, err := ioutil.ReadFile(tlsCAFile); err == nil {
+		if pemBytes, err := os.ReadFile(tlsCAFile); err == nil {
 			certPool = x509.NewCertPool()
 			certPool.AppendCertsFromPEM(pemBytes)
 		} else {
@@ -536,7 +521,7 @@ func setupEtcdTLS(conf *etcd.Config) error {
 		conf.TLS.InsecureSkipVerify = false
 	}
 
-	// If the cert and key files are provided attempt to load them
+	// If the cert and key files are provided, attempt to load them
 	if tlsCertFile != "" && tlsKeyFile != "" {
 		tlsCert, err := tls.LoadX509KeyPair(tlsCertFile, tlsKeyFile)
 		if err != nil {
@@ -638,7 +623,7 @@ func fromEnvFile(log logrus.FieldLogger, configFile string) error {
 		return fmt.Errorf("while opening config file: %s", err)
 	}
 
-	contents, err := ioutil.ReadAll(fd)
+	contents, err := io.ReadAll(fd)
 	if err != nil {
 		return fmt.Errorf("while reading config file '%s': %s", configFile, err)
 	}
@@ -664,7 +649,7 @@ func fromEnvFile(log logrus.FieldLogger, configFile string) error {
 
 func validClientAuthTypes(m map[string]tls.ClientAuthType) string {
 	var rs []string
-	for k, _ := range m {
+	for k := range m {
 		rs = append(rs, k)
 	}
 	return strings.Join(rs, ",")
@@ -672,7 +657,7 @@ func validClientAuthTypes(m map[string]tls.ClientAuthType) string {
 
 func validHash64Keys(m map[string]HashString64) string {
 	var rs []string
-	for k, _ := range m {
+	for k := range m {
 		rs = append(rs, k)
 	}
 	return strings.Join(rs, ",")

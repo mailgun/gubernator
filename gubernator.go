@@ -19,7 +19,6 @@ package gubernator
 import (
 	"context"
 	"fmt"
-	"go.opentelemetry.io/otel/propagation"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -32,6 +31,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -48,7 +48,6 @@ type V1Instance struct {
 	UnimplementedV1Server
 	UnimplementedPeersV1Server
 	global               *globalManager
-	mutliRegion          *mutliRegionManager
 	peerMutex            sync.RWMutex
 	log                  FieldLogger
 	conf                 Config
@@ -134,7 +133,6 @@ func NewV1Instance(conf Config) (s *V1Instance, err error) {
 
 	s.workerPool = NewWorkerPool(&conf)
 	s.global = newGlobalManager(conf.Behaviors, s)
-	s.mutliRegion = newMultiRegionManager(conf.Behaviors, s)
 
 	// Register our instance with all GRPC servers
 	for _, srv := range conf.GRPCServers {
@@ -167,7 +165,6 @@ func (s *V1Instance) Close() (err error) {
 	}
 
 	s.global.Close()
-	s.mutliRegion.Close()
 
 	err = s.workerPool.Store(ctx)
 	if err != nil {
@@ -539,28 +536,20 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (health
 	// Iterate through local peers and get their last errors
 	localPeers := s.conf.LocalPicker.Peers()
 	for _, peer := range localPeers {
-		lastErr := peer.GetLastErr()
-
-		if lastErr != nil {
-			for _, errMsg := range lastErr {
-				err := fmt.Errorf("Error returned from local peer.GetLastErr: %s", errMsg)
-				span.RecordError(err)
-				errs = append(errs, err.Error())
-			}
+		for _, errMsg := range peer.GetLastErr() {
+			err := fmt.Errorf("Error returned from local peer.GetLastErr: %s", errMsg)
+			span.RecordError(err)
+			errs = append(errs, err.Error())
 		}
 	}
 
 	// Do the same for region peers
 	regionPeers := s.conf.RegionPicker.Peers()
 	for _, peer := range regionPeers {
-		lastErr := peer.GetLastErr()
-
-		if lastErr != nil {
-			for _, errMsg := range lastErr {
-				err := fmt.Errorf("Error returned from region peer.GetLastErr: %s", errMsg)
-				span.RecordError(err)
-				errs = append(errs, err.Error())
-			}
+		for _, errMsg := range peer.GetLastErr() {
+			err := fmt.Errorf("Error returned from region peer.GetLastErr: %s", errMsg)
+			span.RecordError(err)
+			errs = append(errs, err.Error())
 		}
 	}
 
@@ -601,10 +590,6 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (*R
 
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
 		s.global.QueueUpdate(r)
-	}
-
-	if HasBehavior(r.Behavior, Behavior_MULTI_REGION) {
-		s.mutliRegion.QueueHits(r)
 	}
 
 	resp, err := s.workerPool.GetRateLimit(ctx, r)

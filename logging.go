@@ -1,5 +1,5 @@
 /*
-Copyright 2018-2022 Mailgun Technologies Inc
+Copyright 2018-2023 Mailgun Technologies Inc
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package logging
+package gubernator
 
 import (
 	"encoding/json"

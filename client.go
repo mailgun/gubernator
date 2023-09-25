@@ -17,6 +17,7 @@ limitations under the License.
 package gubernator
 
 import (
+	crand "crypto/rand"
 	"crypto/tls"
 	"math/rand"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 const (
@@ -52,7 +54,7 @@ func DialV1Server(server string, tls *tls.Config) (V1Client, error) {
 	if tls != nil {
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tls)))
 	} else {
-		opts = append(opts, grpc.WithInsecure())
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
 	conn, err := grpc.Dial(server, opts...)
@@ -94,11 +96,11 @@ func RandomPeer(peers []PeerInfo) PeerInfo {
 
 // RandomString returns a random alpha string of 'n' length
 func RandomString(n int) string {
-	const alphanum = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	const alphanumeric = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 	var bytes = make([]byte, n)
-	rand.Read(bytes)
+	_, _ = crand.Read(bytes)
 	for i, b := range bytes {
-		bytes[i] = alphanum[b%byte(len(alphanum))]
+		bytes[i] = alphanumeric[b%byte(len(alphanumeric))]
 	}
 	return string(bytes)
 }

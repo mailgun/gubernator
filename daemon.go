@@ -38,6 +38,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/encoding/protojson"
 )
@@ -96,7 +97,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 
 	// Handler to collect duration and API access metrics for GRPC
 	s.statsHandler = NewGRPCStatsHandler()
-	s.promRegister.Register(s.statsHandler)
+	_ = s.promRegister.Register(s.statsHandler)
 
 	var filters []otelgrpc.Option
 	if s.conf.TraceLevel != tracing.DebugLevel {
@@ -151,7 +152,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 	}
 
 	// V1Server instance also implements prometheus.Collector interface
-	s.promRegister.Register(s.V1Server)
+	_ = s.promRegister.Register(s.V1Server)
 
 	l, err := net.Listen("tcp", s.conf.GRPCListenAddress)
 	if err != nil {
@@ -222,7 +223,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 		s.conf.MemberListPoolConf.OnUpdate = s.V1Server.SetPeers
 		s.conf.MemberListPoolConf.Logger = s.log
 
-		// Register peer on member list
+		// Register peer on the member list
 		s.pool, err = NewMemberListPool(ctx, s.conf.MemberListPoolConf)
 		if err != nil {
 			return errors.Wrap(err, "while creating member list pool")
@@ -232,7 +233,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 	// We override the default Marshaller to enable the `UseProtoNames` option.
 	// We do this is because the default JSONPb in 2.5.0 marshals proto structs using
 	// `camelCase`, while all the JSON annotations are `under_score`.
-	// Our protobuf files follow convention described here
+	// Our protobuf files follow the convention described here
 	// https://developers.google.com/protocol-buffers/docs/style#message-and-field-names
 	// Camel case breaks unmarshalling our GRPC gateway responses with protobuf structs.
 	gateway := runtime.NewServeMux(
@@ -247,10 +248,11 @@ func (s *Daemon) Start(ctx context.Context) error {
 		}),
 	)
 
-	// Setup an JSON Gateway API for our GRPC methods
+	// Set up an JSON Gateway API for our GRPC methods
 	var gwCtx context.Context
 	gwCtx, s.gwCancel = context.WithCancel(context.Background())
-	err = RegisterV1HandlerFromEndpoint(gwCtx, gateway, gatewayAddr, []grpc.DialOption{grpc.WithInsecure()})
+	err = RegisterV1HandlerFromEndpoint(gwCtx, gateway, gatewayAddr,
+		[]grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())})
 	if err != nil {
 		return errors.Wrap(err, "while registering GRPC gateway handler")
 	}
@@ -361,10 +363,10 @@ func (s *Daemon) Close() {
 	}
 
 	s.log.Infof("HTTP Gateway close for %s ...", s.conf.HTTPListenAddress)
-	s.httpSrv.Shutdown(context.Background())
+	_ = s.httpSrv.Shutdown(context.Background())
 	if s.httpSrvNoMTLS != nil {
 		s.log.Infof("HTTP Status Gateway close for %s ...", s.conf.HTTPStatusListenAddress)
-		s.httpSrvNoMTLS.Shutdown(context.Background())
+		_ = s.httpSrvNoMTLS.Shutdown(context.Background())
 	}
 	for i, srv := range s.grpcSrvs {
 		s.log.Infof("GRPC close for %s ...", s.GRPCListeners[i].Addr())
@@ -417,7 +419,7 @@ func WaitForConnect(ctx context.Context, addresses []string) error {
 				continue
 			}
 
-			// TODO: golang 15.3 introduces tls.DialContext(). When we are ready to drop
+			// TODO: golang 1.15.3 introduces tls.DialContext(). When we are ready to drop
 			//  support for older versions we can detect tls and use the tls.DialContext to
 			//  avoid the `http: TLS handshake error` we get when using TLS.
 			conn, err := d.DialContext(ctx, "tcp", addr)
@@ -425,17 +427,15 @@ func WaitForConnect(ctx context.Context, addresses []string) error {
 				errs = append(errs, err)
 				continue
 			}
-			conn.Close()
+			_ = conn.Close()
 		}
 
 		if len(errs) == 0 {
 			break
 		}
 
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+		<-ctx.Done()
+		return ctx.Err()
 	}
 
 	if len(errs) != 0 {

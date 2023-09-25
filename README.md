@@ -1,10 +1,12 @@
+<h2 align="center">
+    <img src="contrib/assets/gubernator-logo.png" alt="Gubernator Logo" width="336px" /><br />
+    Distributed RateLimiting Service
+</h2>
+
 # Gubernator
+Gubernator is a distributed, high performance, cloud native and stateless rate-limiting service.
 
-Gubernator is a distributed, high performance, cloud native and stateless rate
-limiting service.
-
-
-#### Features of Gubernator
+#### Features
 * Gubernator evenly distributes rate limit requests across the entire cluster,
   which means you can scale the system by simply adding more nodes. 
 * Gubernator doesn’t rely on external caches like memcached or redis, as such
@@ -13,11 +15,11 @@ limiting service.
   kubernetes or nomad trivial.
 * Gubernator holds no state on disk, It’s configuration is passed to it by the
   client on a per-request basis.
-* Gubernator provides both GRPC and HTTP access to it’s API.
-* Can be run as a sidecar to services that need rate limiting or as a separate service.
-* Can be used as a library to implement a domain specific rate limiting service.
+* Gubernator provides both GRPC and HTTP access to the API.
+* It Can be run as a sidecar to services that need rate limiting or as a separate service.
+* It Can be used as a library to implement a domain-specific rate limiting service.
 * Supports optional eventually consistent rate limit distribution for extremely
-  high throughput environments. (See GLOBAL behavior [architecture.md](/architecture.md))
+  high throughput environments. (See GLOBAL behavior [architecture.md](docs/architecture.md))
 * Gubernator is the english pronunciation of governor in Russian, also it sounds cool.
 
 ### Stateless configuration
@@ -26,6 +28,36 @@ configuration or cache data is ever synced to disk. This is because every
 request to gubernator includes the config for the rate limit. At first you
 might think this an unnecessary overhead to each request. However, In reality a
 rate limit config is made up of only 4, 64bit integers.
+
+### Quick Start
+```bash
+# Download the docker-compose file
+$ curl -O https://raw.githubusercontent.com/mailgun/gubernator/master/docker-compose.yaml
+# Run the docker container
+$ docker-compose up -d
+```
+Now you can make rate limit requests via CURL
+```
+# Hit the HTTP API at localhost:9080 (GRPC is at 9081)
+$ curl http://localhost:9080/v1/HealthCheck
+
+# Make a rate limit request
+$ curl http://localhost:9080/v1/GetRateLimits \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "requests": [
+        {
+            "name": "requests_per_sec",
+            "uniqueKey": "account:12345",
+            "hits": "1",
+            "limit": "10",
+            "duration": "1000"
+        }
+    ]
+}'
+```
+
+### ProtoBuf Structure
 
 An example rate limit request sent via GRPC might look like the following
 ```yaml
@@ -99,11 +131,11 @@ email too within the specific duration. Under this setup a single gubernator
 node fields over 2,000 requests a second with most batched responses returned
 in under 1 millisecond.
 
-![requests graph](/images/requests-graph.png)
+![requests graph](contrib/assets/requests-graph.png)
 
 Peer requests forwarded to owning nodes typically respond in under 30 microseconds. 
 
-![peer requests graph](/images/peer-requests-graph.png)
+![peer requests graph](contrib/assets/peer-requests-graph.png)
 
 NOTE The above graphs only report the slowest request within the 1 second sample time.
  So you are seeing the slowest requests that gubernator fields to clients.
@@ -261,36 +293,7 @@ NOTE: Gubernator uses `etcd`, Kubernetes or round-robin DNS to discover peers an
 establish a cluster. If you don't have either, the docker-compose method is the
 simplest way to try gubernator out.
 
-##### Docker compose cluster
-The docker compose file uses member-list for peer discovery
-```bash
-# Download the docker-compose file
-$ curl -O https://raw.githubusercontent.com/mailgun/gubernator/master/docker-compose.yaml
 
-# Edit the compose file to change the environment config variables
-$ vi docker-compose.yaml
-
-# Run the docker container
-$ docker-compose up -d
-
-# Hit the HTTP API at localhost:9080 (GRPC is at 9081)
-$ curl http://localhost:9080/v1/HealthCheck
-
-# Make a rate limit request
-$ curl http://localhost:9080/v1/GetRateLimits \
-  --header 'Content-Type: application/json' \
-  --data '{
-    "requests": [
-        {
-            "name": "requests_per_sec",
-            "uniqueKey": "account:12345",
-            "hits": "1",
-            "limit": "10",
-            "duration": "1000"
-        }
-    ]
-}'
-```
 ##### Docker with existing etcd cluster
 ```bash
 $ docker run -p 8081:81 -p 9080:80 -e GUBER_ETCD_ENDPOINTS=etcd1:2379,etcd2:2379 \
@@ -335,12 +338,12 @@ which takes a file of key/values and places them into the local environment befo
 See the `example.conf` for all available config options and their descriptions.
 
 ### Architecture
-See [architecture.md](/architecture.md) for a full description of the architecture and the inner 
+See [architecture.md](docs/architecture.md) for a full description of the architecture and the inner 
 workings of gubernator.
 
 ## Monitoring
 Gubernator publishes Prometheus metrics for realtime monitoring.  See
-[prometheus.md](prometheus.md) for details.
+[prometheus.md](docs/prometheus.md) for details.
 
 ## OpenTelemetry Tracing (OTEL)
-Gubernator supports OpenTelemetry. See [tracing.md](tracing.md) for details.
+Gubernator supports OpenTelemetry. See [tracing.md](docs/tracing.md) for details.

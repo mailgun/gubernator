@@ -378,7 +378,7 @@ func TestLRUCache(t *testing.T) {
 		<-collChan
 		m := <-collChan // gubernator_unexpired_evictions_count
 		met := new(dto.Metric)
-		m.Write(met)
+		_ = m.Write(met)
 		assert.Contains(t, m.Desc().String(), "gubernator_unexpired_evictions_count")
 		assert.Equal(t, 0, int(*met.Counter.Value))
 	})
@@ -422,7 +422,7 @@ func TestLRUCache(t *testing.T) {
 		<-collChan
 		m := <-collChan // gubernator_unexpired_evictions_count
 		met := new(dto.Metric)
-		m.Write(met)
+		_ = m.Write(met)
 		assert.Contains(t, m.Desc().String(), "gubernator_unexpired_evictions_count")
 		assert.Equal(t, 1, int(*met.Counter.Value))
 	})

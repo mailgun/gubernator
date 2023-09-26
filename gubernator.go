@@ -53,7 +53,7 @@ type V1Instance struct {
 	conf                 Config
 	isClosed             bool
 	getRateLimitsCounter int64
-	workerPool           *WorkerPool
+	workerPool           WorkerPool
 }
 
 var metricGetRateLimitCounter = prometheus.NewCounterVec(prometheus.CounterOpts{

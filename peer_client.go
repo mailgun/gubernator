@@ -154,7 +154,10 @@ func (c *PeerClient) connect(ctx context.Context) (err error) {
 		}
 		c.client = NewPeersV1Client(c.conn)
 		c.status = peerConnected
-		go c.run()
+
+		if !c.conf.Behavior.DisableBatching {
+			go c.runBatch()
+		}
 		return nil
 	}
 	c.mutex.RUnlock()
@@ -187,7 +190,7 @@ func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (res
 	)
 
 	// If config asked for no batching
-	if HasBehavior(r.Behavior, Behavior_NO_BATCHING) {
+	if c.conf.Behavior.DisableBatching || HasBehavior(r.Behavior, Behavior_NO_BATCHING) {
 		// If no metadata is provided
 		if r.Metadata == nil {
 			r.Metadata = make(map[string]string)
@@ -368,9 +371,10 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	}
 }
 
-// run waits for requests to be queued, when either c.batchWait time
-// has elapsed or the queue reaches c.batchLimit. Send what is in the queue.
-func (c *PeerClient) run() {
+// run processes batching requests by waiting for requests to be queued.  Send
+// the queue as a batch when either c.batchWait time has elapsed or the queue
+// reaches c.batchLimit.
+func (c *PeerClient) runBatch() {
 	var interval = NewInterval(c.conf.Behavior.BatchWait)
 	defer interval.Stop()
 
@@ -397,7 +401,7 @@ func (c *PeerClient) run() {
 						"queueLen":   len(queue),
 						"batchLimit": c.conf.Behavior.BatchLimit,
 					}).
-					Debug("run() reached batch limit")
+					Debug("runBatch() reached batch limit")
 				ref := queue
 				queue = nil
 				go c.sendBatch(ctx, ref)

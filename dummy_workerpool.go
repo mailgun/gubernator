@@ -2,10 +2,8 @@ package gubernator
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
-	"github.com/mailgun/holster/v4/tracing"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -60,9 +58,6 @@ func (p *dummyWorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimit
 // Read from persistent storage.  Load into each appropriate worker's cache.
 // Workers are locked during this load operation to prevent race conditions.
 func (p *dummyWorkerPool) Load(ctx context.Context) (err error) {
-	ctx = tracing.StartNamedScope(ctx, "WorkerPool.Load")
-	defer func() { tracing.EndScope(ctx, err) }()
-
 	ch, err := p.conf.Loader.Load()
 	if err != nil {
 		return errors.Wrap(err, "Error in loader.Load")
@@ -149,9 +144,6 @@ MAIN:
 // Save all workers' caches to persistent storage.
 // Workers are locked during this store operation to prevent race conditions.
 func (p *dummyWorkerPool) Store(ctx context.Context) (err error) {
-	ctx = tracing.StartNamedScopeDebug(ctx, "WorkerPool.Store")
-	defer func() { tracing.EndScope(ctx, err) }()
-
 	var wg sync.WaitGroup
 	out := make(chan *CacheItem, 500)
 
@@ -160,8 +152,6 @@ func (p *dummyWorkerPool) Store(ctx context.Context) (err error) {
 	wg.Add(1)
 
 	go func(ctx context.Context, worker *Worker) {
-		ctx = tracing.StartNamedScope(ctx, fmt.Sprintf("%p", worker))
-		defer tracing.EndScope(ctx, nil)
 		defer wg.Done()
 
 		respChan := make(chan workerStoreResponse)
@@ -211,9 +201,6 @@ func (p *dummyWorkerPool) Store(ctx context.Context) (err error) {
 
 // AddCacheItem adds an item to the worker's cache.
 func (p *dummyWorkerPool) AddCacheItem(ctx context.Context, key string, item *CacheItem) (err error) {
-	ctx = tracing.StartNamedScopeDebug(ctx, "WorkerPool.AddCacheItem")
-	tracing.EndScope(ctx, err)
-
 	respChan := make(chan workerAddCacheItemResponse)
 	worker := p.worker
 	req := workerAddCacheItemRequest{
@@ -245,9 +232,6 @@ func (p *dummyWorkerPool) AddCacheItem(ctx context.Context, key string, item *Ca
 
 // GetCacheItem gets item from worker's cache.
 func (p *dummyWorkerPool) GetCacheItem(ctx context.Context, key string) (item *CacheItem, found bool, err error) {
-	ctx = tracing.StartNamedScopeDebug(ctx, "WorkerPool.GetCacheItem")
-	tracing.EndScope(ctx, err)
-
 	respChan := make(chan workerGetCacheItemResponse)
 	worker := p.worker
 	req := workerGetCacheItemRequest{

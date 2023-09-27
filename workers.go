@@ -232,7 +232,17 @@ func (worker *Worker) dispatch(p WorkerPool) {
 				return
 			}
 
-			worker.handleGetRateLimit(req, worker.cache)
+			resp := new(response)
+			resp.rl, resp.err = worker.handleGetRateLimit(req.ctx, req.request, worker.cache)
+
+			select {
+			case req.resp <- resp:
+				// Success.
+
+			case <-req.ctx.Done():
+				// Context canceled.
+				trace.SpanFromContext(req.ctx).RecordError(resp.err)
+			}
 
 		case req, ok := <-worker.storeRequest:
 			if !ok {
@@ -308,16 +318,16 @@ func (p *guberWorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimit
 }
 
 // Handle request received by worker.
-func (worker *Worker) handleGetRateLimit(handlerRequest *request, cache Cache) {
-	ctx := tracing.StartNamedScopeDebug(handlerRequest.ctx, "WorkerPool.handleGetRateLimit")
+func (worker *Worker) handleGetRateLimit(ctx context.Context, req *RateLimitReq, cache Cache) (*RateLimitResp, error) {
+	ctx = tracing.StartNamedScopeDebug(ctx, "WorkerPool.handleGetRateLimit")
 	defer tracing.EndScope(ctx, nil)
 
 	var rlResponse *RateLimitResp
 	var err error
 
-	switch handlerRequest.request.Algorithm {
+	switch req.Algorithm {
 	case Algorithm_TOKEN_BUCKET:
-		rlResponse, err = tokenBucket(ctx, worker.conf.Store, cache, handlerRequest.request)
+		rlResponse, err = tokenBucket(ctx, worker.conf.Store, cache, req)
 		if err != nil {
 			msg := "Error in tokenBucket"
 			countError(err, msg)
@@ -326,7 +336,7 @@ func (worker *Worker) handleGetRateLimit(handlerRequest *request, cache Cache) {
 		}
 
 	case Algorithm_LEAKY_BUCKET:
-		rlResponse, err = leakyBucket(ctx, worker.conf.Store, cache, handlerRequest.request)
+		rlResponse, err = leakyBucket(ctx, worker.conf.Store, cache, req)
 		if err != nil {
 			msg := "Error in leakyBucket"
 			countError(err, msg)
@@ -335,24 +345,12 @@ func (worker *Worker) handleGetRateLimit(handlerRequest *request, cache Cache) {
 		}
 
 	default:
-		err = errors.Errorf("Invalid rate limit algorithm '%d'", handlerRequest.request.Algorithm)
+		err = errors.Errorf("Invalid rate limit algorithm '%d'", req.Algorithm)
 		trace.SpanFromContext(ctx).RecordError(err)
 		metricCheckErrorCounter.WithLabelValues("Invalid algorithm").Add(1)
 	}
 
-	handlerResponse := &response{
-		rl:  rlResponse,
-		err: err,
-	}
-
-	select {
-	case handlerRequest.resp <- handlerResponse:
-		// Success.
-
-	case <-ctx.Done():
-		// Context canceled.
-		trace.SpanFromContext(ctx).RecordError(err)
-	}
+	return rlResponse, err
 }
 
 // Load atomically loads cache from persistent storage.

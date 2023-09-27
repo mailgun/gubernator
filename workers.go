@@ -38,7 +38,6 @@ package gubernator
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"strconv"
 	"sync"
@@ -47,7 +46,6 @@ import (
 	"github.com/OneOfOne/xxhash"
 	"github.com/mailgun/holster/v4/errors"
 	"github.com/mailgun/holster/v4/setter"
-	"github.com/mailgun/holster/v4/tracing"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -63,6 +61,7 @@ type WorkerPool struct {
 
 type Worker struct {
 	name                string
+	conf                *Config
 	cache               Cache
 	getRateLimitRequest chan *request
 	storeRequest        chan workerStoreRequest
@@ -139,7 +138,7 @@ func NewWorkerPool(conf *Config) *WorkerPool {
 	// Create workers.
 	for i := 0; i < conf.Workers; i++ {
 		chp.workers[i] = chp.newWorker()
-		go chp.worker(chp.workers[i])
+		go chp.dispatch(chp.workers[i])
 	}
 
 	return chp
@@ -163,6 +162,7 @@ func (p *WorkerPool) newWorker() *Worker {
 	const commandChannelSize = 10000
 
 	worker := &Worker{
+		conf:                p.conf,
 		cache:               p.conf.CacheFactory(p.workerCacheSize),
 		getRateLimitRequest: make(chan *request, commandChannelSize),
 		storeRequest:        make(chan workerStoreRequest, commandChannelSize),
@@ -187,7 +187,7 @@ func (p *WorkerPool) getWorker(key string) *Worker {
 // Each worker maintains its own state.
 // A hash ring will distribute requests to an assigned worker by key.
 // See: getWorker()
-func (p *WorkerPool) worker(worker *Worker) {
+func (p *WorkerPool) dispatch(worker *Worker) {
 	for {
 		// Dispatch requests from each channel.
 		select {
@@ -198,7 +198,17 @@ func (p *WorkerPool) worker(worker *Worker) {
 				return
 			}
 
-			p.handleGetRateLimit(req, worker.cache)
+			resp := new(response)
+			resp.rl, resp.err = worker.handleGetRateLimit(req.ctx, req.request, worker.cache)
+
+			select {
+			case req.resp <- resp:
+				// Success.
+
+			case <-req.ctx.Done():
+				// Context canceled.
+				trace.SpanFromContext(req.ctx).RecordError(resp.err)
+			}
 
 		case req, ok := <-worker.storeRequest:
 			if !ok {
@@ -207,7 +217,7 @@ func (p *WorkerPool) worker(worker *Worker) {
 				return
 			}
 
-			p.handleStore(req, worker.cache)
+			worker.handleStore(req, worker.cache)
 
 		case req, ok := <-worker.loadRequest:
 			if !ok {
@@ -216,7 +226,7 @@ func (p *WorkerPool) worker(worker *Worker) {
 				return
 			}
 
-			p.handleLoad(req, worker.cache)
+			worker.handleLoad(req, worker.cache)
 
 		case req, ok := <-worker.addCacheItemRequest:
 			if !ok {
@@ -225,7 +235,7 @@ func (p *WorkerPool) worker(worker *Worker) {
 				return
 			}
 
-			p.handleAddCacheItem(req, worker.cache)
+			worker.handleAddCacheItem(req, worker.cache)
 
 		case req, ok := <-worker.getCacheItemRequest:
 			if !ok {
@@ -234,7 +244,7 @@ func (p *WorkerPool) worker(worker *Worker) {
 				return
 			}
 
-			p.handleGetCacheItem(req, worker.cache)
+			worker.handleGetCacheItem(req, worker.cache)
 
 		case <-p.done:
 			// Clean up.
@@ -274,16 +284,13 @@ func (p *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) 
 }
 
 // Handle request received by worker.
-func (p *WorkerPool) handleGetRateLimit(handlerRequest *request, cache Cache) {
-	ctx := tracing.StartNamedScopeDebug(handlerRequest.ctx, "WorkerPool.handleGetRateLimit")
-	defer tracing.EndScope(ctx, nil)
-
+func (worker *Worker) handleGetRateLimit(ctx context.Context, req *RateLimitReq, cache Cache) (*RateLimitResp, error) {
 	var rlResponse *RateLimitResp
 	var err error
 
-	switch handlerRequest.request.Algorithm {
+	switch req.Algorithm {
 	case Algorithm_TOKEN_BUCKET:
-		rlResponse, err = tokenBucket(ctx, p.conf.Store, cache, handlerRequest.request)
+		rlResponse, err = tokenBucket(ctx, worker.conf.Store, cache, req)
 		if err != nil {
 			msg := "Error in tokenBucket"
 			countError(err, msg)
@@ -292,7 +299,7 @@ func (p *WorkerPool) handleGetRateLimit(handlerRequest *request, cache Cache) {
 		}
 
 	case Algorithm_LEAKY_BUCKET:
-		rlResponse, err = leakyBucket(ctx, p.conf.Store, cache, handlerRequest.request)
+		rlResponse, err = leakyBucket(ctx, worker.conf.Store, cache, req)
 		if err != nil {
 			msg := "Error in leakyBucket"
 			countError(err, msg)
@@ -301,33 +308,18 @@ func (p *WorkerPool) handleGetRateLimit(handlerRequest *request, cache Cache) {
 		}
 
 	default:
-		err = errors.Errorf("Invalid rate limit algorithm '%d'", handlerRequest.request.Algorithm)
+		err = errors.Errorf("Invalid rate limit algorithm '%d'", req.Algorithm)
 		trace.SpanFromContext(ctx).RecordError(err)
 		metricCheckErrorCounter.WithLabelValues("Invalid algorithm").Add(1)
 	}
 
-	handlerResponse := &response{
-		rl:  rlResponse,
-		err: err,
-	}
-
-	select {
-	case handlerRequest.resp <- handlerResponse:
-		// Success.
-
-	case <-ctx.Done():
-		// Context canceled.
-		trace.SpanFromContext(ctx).RecordError(err)
-	}
+	return rlResponse, err
 }
 
 // Load atomically loads cache from persistent storage.
 // Read from persistent storage.  Load into each appropriate worker's cache.
 // Workers are locked during this load operation to prevent race conditions.
 func (p *WorkerPool) Load(ctx context.Context) (err error) {
-	ctx = tracing.StartNamedScope(ctx, "WorkerPool.Load")
-	defer func() { tracing.EndScope(ctx, err) }()
-
 	ch, err := p.conf.Loader.Load()
 	if err != nil {
 		return errors.Wrap(err, "Error in loader.Load")
@@ -410,10 +402,7 @@ MAIN:
 	return nil
 }
 
-func (p *WorkerPool) handleLoad(request workerLoadRequest, cache Cache) {
-	ctx := tracing.StartNamedScopeDebug(request.ctx, "WorkerPool.handleLoad")
-	defer tracing.EndScope(ctx, nil)
-
+func (worker *Worker) handleLoad(request workerLoadRequest, cache Cache) {
 MAIN:
 	for {
 		var item *CacheItem
@@ -426,7 +415,7 @@ MAIN:
 			}
 			// Successfully received item.
 
-		case <-ctx.Done():
+		case <-request.ctx.Done():
 			// Context canceled.
 			return
 		}
@@ -440,9 +429,9 @@ MAIN:
 	case request.response <- response:
 		// Successfully sent response.
 
-	case <-ctx.Done():
+	case <-request.ctx.Done():
 		// Context canceled.
-		trace.SpanFromContext(ctx).RecordError(ctx.Err())
+		trace.SpanFromContext(request.ctx).RecordError(request.ctx.Err())
 	}
 }
 
@@ -450,9 +439,6 @@ MAIN:
 // Save all workers' caches to persistent storage.
 // Workers are locked during this store operation to prevent race conditions.
 func (p *WorkerPool) Store(ctx context.Context) (err error) {
-	ctx = tracing.StartNamedScopeDebug(ctx, "WorkerPool.Store")
-	defer func() { tracing.EndScope(ctx, err) }()
-
 	var wg sync.WaitGroup
 	out := make(chan *CacheItem, 500)
 
@@ -461,8 +447,6 @@ func (p *WorkerPool) Store(ctx context.Context) (err error) {
 		wg.Add(1)
 
 		go func(ctx context.Context, worker *Worker) {
-			ctx = tracing.StartNamedScope(ctx, fmt.Sprintf("%p", worker))
-			defer tracing.EndScope(ctx, nil)
 			defer wg.Done()
 
 			respChan := make(chan workerStoreResponse)
@@ -511,18 +495,15 @@ func (p *WorkerPool) Store(ctx context.Context) (err error) {
 	return nil
 }
 
-func (p *WorkerPool) handleStore(request workerStoreRequest, cache Cache) {
-	ctx := tracing.StartNamedScopeDebug(request.ctx, "WorkerPool.handleStore")
-	defer tracing.EndScope(ctx, nil)
-
+func (worker *Worker) handleStore(request workerStoreRequest, cache Cache) {
 	for item := range cache.Each() {
 		select {
 		case request.out <- item:
 			// Successfully sent item.
 
-		case <-ctx.Done():
+		case <-request.ctx.Done():
 			// Context canceled.
-			trace.SpanFromContext(ctx).RecordError(ctx.Err())
+			trace.SpanFromContext(request.ctx).RecordError(request.ctx.Err())
 			return
 		}
 	}
@@ -533,17 +514,14 @@ func (p *WorkerPool) handleStore(request workerStoreRequest, cache Cache) {
 	case request.response <- response:
 		// Successfully sent response.
 
-	case <-ctx.Done():
+	case <-request.ctx.Done():
 		// Context canceled.
-		trace.SpanFromContext(ctx).RecordError(ctx.Err())
+		trace.SpanFromContext(request.ctx).RecordError(request.ctx.Err())
 	}
 }
 
 // AddCacheItem adds an item to the worker's cache.
 func (p *WorkerPool) AddCacheItem(ctx context.Context, key string, item *CacheItem) (err error) {
-	ctx = tracing.StartNamedScopeDebug(ctx, "WorkerPool.AddCacheItem")
-	tracing.EndScope(ctx, err)
-
 	respChan := make(chan workerAddCacheItemResponse)
 	worker := p.getWorker(key)
 	req := workerAddCacheItemRequest{
@@ -573,10 +551,7 @@ func (p *WorkerPool) AddCacheItem(ctx context.Context, key string, item *CacheIt
 	}
 }
 
-func (p *WorkerPool) handleAddCacheItem(request workerAddCacheItemRequest, cache Cache) {
-	ctx := tracing.StartNamedScopeDebug(request.ctx, "WorkerPool.handleAddCacheItem")
-	defer tracing.EndScope(ctx, nil)
-
+func (worker *Worker) handleAddCacheItem(request workerAddCacheItemRequest, cache Cache) {
 	exists := cache.Add(request.item)
 	response := workerAddCacheItemResponse{exists}
 
@@ -584,17 +559,14 @@ func (p *WorkerPool) handleAddCacheItem(request workerAddCacheItemRequest, cache
 	case request.response <- response:
 		// Successfully sent response.
 
-	case <-ctx.Done():
+	case <-request.ctx.Done():
 		// Context canceled.
-		trace.SpanFromContext(ctx).RecordError(ctx.Err())
+		trace.SpanFromContext(request.ctx).RecordError(request.ctx.Err())
 	}
 }
 
 // GetCacheItem gets item from worker's cache.
 func (p *WorkerPool) GetCacheItem(ctx context.Context, key string) (item *CacheItem, found bool, err error) {
-	ctx = tracing.StartNamedScopeDebug(ctx, "WorkerPool.GetCacheItem")
-	tracing.EndScope(ctx, err)
-
 	respChan := make(chan workerGetCacheItemResponse)
 	worker := p.getWorker(key)
 	req := workerGetCacheItemRequest{
@@ -624,10 +596,7 @@ func (p *WorkerPool) GetCacheItem(ctx context.Context, key string) (item *CacheI
 	}
 }
 
-func (p *WorkerPool) handleGetCacheItem(request workerGetCacheItemRequest, cache Cache) {
-	ctx := tracing.StartNamedScopeDebug(request.ctx, "WorkerPool.handleGetCacheItem")
-	defer tracing.EndScope(ctx, nil)
-
+func (worker *Worker) handleGetCacheItem(request workerGetCacheItemRequest, cache Cache) {
 	item, ok := cache.GetItem(request.key)
 	response := workerGetCacheItemResponse{item, ok}
 
@@ -635,8 +604,8 @@ func (p *WorkerPool) handleGetCacheItem(request workerGetCacheItemRequest, cache
 	case request.response <- response:
 		// Successfully sent response.
 
-	case <-ctx.Done():
+	case <-request.ctx.Done():
 		// Context canceled.
-		trace.SpanFromContext(ctx).RecordError(ctx.Err())
+		trace.SpanFromContext(request.ctx).RecordError(request.ctx.Err())
 	}
 }

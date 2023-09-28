@@ -257,7 +257,7 @@ func (p *WorkerPool) dispatch(worker *Worker) {
 // GetRateLimit sends a GetRateLimit request to worker pool.
 func (p *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) (retval *RateLimitResp, reterr error) {
 	// Delegate request to assigned channel based on request key.
-	worker := p.getWorker(rlRequest.UniqueKey)
+	worker := p.getWorker(rlRequest.HashKey())
 	handlerRequest := &request{
 		ctx:     ctx,
 		resp:    make(chan *response, 1),

@@ -125,11 +125,11 @@ func NewV1Instance(conf Config) (s *V1Instance, err error) {
 		return nil, err
 	}
 
+	setter.SetDefault(&conf.Logger, logrus.WithField("category", "gubernator"))
 	s = &V1Instance{
 		log:  conf.Logger,
 		conf: conf,
 	}
-	setter.SetDefault(&s.log, logrus.WithField("category", "gubernator"))
 
 	s.workerPool = NewWorkerPool(&conf)
 	s.global = newGlobalManager(conf.Behaviors, s)

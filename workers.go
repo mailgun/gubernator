@@ -136,7 +136,7 @@ func NewWorkerPool(conf *Config) *WorkerPool {
 	}
 
 	// Create workers.
-	logrus.Infof("Starting %d Gubernator workers...", conf.Workers)
+	conf.Logger.Infof("Starting %d Gubernator workers...", conf.Workers)
 	for i := 0; i < conf.Workers; i++ {
 		chp.workers[i] = chp.newWorker()
 		go chp.dispatch(chp.workers[i])

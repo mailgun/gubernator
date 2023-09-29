@@ -64,7 +64,9 @@ var metricFuncTimeDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 	Name: "gubernator_func_duration",
 	Help: "The timings of key functions in Gubernator in seconds.",
 	Objectives: map[float64]float64{
+		1:    0.001,
 		0.99: 0.001,
+		0.5:  0.01,
 	},
 }, []string{"name"})
 var metricAsyncRequestRetriesCounter = prometheus.NewCounterVec(prometheus.CounterOpts{

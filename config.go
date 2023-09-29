@@ -127,7 +127,9 @@ func (c *Config) SetDefaults() error {
 	setter.SetDefault(&c.LocalPicker, NewReplicatedConsistentHash(nil, defaultReplicas))
 	setter.SetDefault(&c.RegionPicker, NewRegionPicker(nil))
 
+	setter.SetDefault(&c.CacheSize, 50_000)
 	setter.SetDefault(&c.Workers, runtime.NumCPU())
+	setter.SetDefault(&c.Logger, logrus.New().WithField("category", "gubernator"))
 
 	if c.CacheFactory == nil {
 		c.CacheFactory = func(maxSize int) Cache {

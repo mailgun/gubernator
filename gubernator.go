@@ -25,11 +25,9 @@ import (
 
 	"github.com/mailgun/errors"
 	"github.com/mailgun/holster/v4/ctxutil"
-	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/mailgun/holster/v4/tracing"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
@@ -116,7 +114,6 @@ func NewV1Instance(conf Config) (s *V1Instance, err error) {
 		return nil, err
 	}
 
-	setter.SetDefault(&conf.Logger, logrus.WithField("category", "gubernator"))
 	s = &V1Instance{
 		log:  conf.Logger,
 		conf: conf,

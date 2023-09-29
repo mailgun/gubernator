@@ -115,9 +115,7 @@ var metricBatchSendDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 // NewV1Instance instantiate a single instance of a gubernator peer and register this
 // instance with the provided GRPCServer.
 func NewV1Instance(conf Config) (s *V1Instance, err error) {
-	ctx := tracing.StartNamedScopeDebug(context.Background(), "gubernator.NewV1Instance")
-	defer func() { tracing.EndScope(ctx, err) }()
-
+	ctx := context.Background()
 	if conf.GRPCServers == nil {
 		return nil, errors.New("at least one GRPCServer instance is required")
 	}
@@ -213,21 +211,21 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 
 	// For each item in the request body
 	for i, req := range r.Requests {
-		_ = tracing.CallNamedScopeDebug(ctx, "Iterate requests", func(ctx context.Context) error {
-			key := req.Name + "_" + req.UniqueKey
-			var peer *PeerClient
-			var err error
+		key := req.Name + "_" + req.UniqueKey
+		var peer *PeerClient
+		var err error
 
+		for {
 			if len(req.UniqueKey) == 0 {
 				metricCheckErrorCounter.WithLabelValues("Invalid request").Add(1)
 				resp.Responses[i] = &RateLimitResp{Error: "field 'unique_key' cannot be empty"}
-				return nil
+				break
 			}
 
 			if len(req.Name) == 0 {
 				metricCheckErrorCounter.WithLabelValues("Invalid request").Add(1)
 				resp.Responses[i] = &RateLimitResp{Error: "field 'namespace' cannot be empty"}
-				return nil
+				break
 			}
 
 			if ctx.Err() != nil {
@@ -236,7 +234,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 				resp.Responses[i] = &RateLimitResp{
 					Error: err.Error(),
 				}
-				return nil
+				break
 			}
 
 			peer, err = s.GetPeer(ctx, key)
@@ -246,7 +244,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 				resp.Responses[i] = &RateLimitResp{
 					Error: err.Error(),
 				}
-				return nil
+				break
 			}
 
 			// If our server instance is the owner of this rate limit
@@ -272,7 +270,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 
 					// Inform the client of the owner key of the key
 					resp.Responses[i].Metadata = map[string]string{"owner": peer.Info().GRPCAddress}
-					return nil
+					break
 				}
 
 				// Request must be forwarded to peer that owns the key.
@@ -287,9 +285,8 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 					Idx:     i,
 				})
 			}
-
-			return nil
-		})
+			break
+		}
 	}
 
 	// Wait for any async responses if any
@@ -577,12 +574,6 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (*R
 	span.SetAttributes(
 		attribute.String("request.key", r.UniqueKey),
 		attribute.String("request.name", r.Name),
-		attribute.Int64("request.algorithm", int64(r.Algorithm)),
-		attribute.Int64("request.behavior", int64(r.Behavior)),
-		attribute.Int64("request.duration", r.Duration),
-		attribute.Int64("request.limit", r.Limit),
-		attribute.Int64("request.hits", r.Hits),
-		attribute.Int64("request.burst", r.Burst),
 	)
 
 	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getLocalRateLimit")).ObserveDuration()

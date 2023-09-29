@@ -765,5 +765,8 @@ func countError(err error, defaultType string) {
 }
 
 func isDeadlineExceeded(err error) bool {
-	return errors.As(err, context.DeadlineExceeded)
+	if err == nil {
+		return false
+	}
+	return errors.Is(err, context.DeadlineExceeded)
 }

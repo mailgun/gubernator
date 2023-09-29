@@ -71,12 +71,9 @@ var metricAsyncRequestRetriesCounter = prometheus.NewCounterVec(prometheus.Count
 	Name: "gubernator_asyncrequest_retries",
 	Help: "The count of retries occurred in asyncRequest() forwarding a request to another peer.",
 }, []string{"name"})
-var metricQueueLength = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+var metricQueueLength = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 	Name: "gubernator_queue_length",
 	Help: "The getRateLimitsBatch() queue length in PeerClient.  This represents rate checks queued by for batching to a remote peer.",
-	Objectives: map[float64]float64{
-		0.99: 0.001,
-	},
 }, []string{"peerAddr"})
 var metricCheckCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Name: "gubernator_check_counter",
@@ -86,23 +83,17 @@ var metricOverLimitCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Name: "gubernator_over_limit_counter",
 	Help: "The number of rate limit checks that are over the limit.",
 })
-var metricConcurrentChecks = prometheus.NewSummary(prometheus.SummaryOpts{
+var metricConcurrentChecks = prometheus.NewGauge(prometheus.GaugeOpts{
 	Name: "gubernator_concurrent_checks_counter",
 	Help: "The number of concurrent GetRateLimits API calls.",
-	Objectives: map[float64]float64{
-		0.99: 0.001,
-	},
 })
 var metricCheckErrorCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Name: "gubernator_check_error_counter",
 	Help: "The number of errors while checking rate limits.",
 }, []string{"error"})
-var metricWorkerQueueLength = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+var metricWorkerQueueLength = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 	Name: "gubernator_pool_queue_length",
 	Help: "The number of GetRateLimit requests queued up in Gubernator workers.",
-	Objectives: map[float64]float64{
-		0.99: 0.001,
-	},
 }, []string{"method", "worker"})
 var metricBatchSendDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 	Name: "gubernator_batch_send_duration",
@@ -194,7 +185,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 	concurrentCounter := atomic.AddInt64(&s.getRateLimitsCounter, 1)
 	defer atomic.AddInt64(&s.getRateLimitsCounter, -1)
 	span.SetAttributes(attribute.Int64("concurrentCounter", concurrentCounter))
-	metricConcurrentChecks.Observe(float64(concurrentCounter))
+	metricConcurrentChecks.Set(float64(concurrentCounter))
 
 	if len(r.Requests) > maxBatchSize {
 		metricCheckErrorCounter.WithLabelValues("Request too large").Add(1)
@@ -215,77 +206,74 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 		var peer *PeerClient
 		var err error
 
-		for {
-			if len(req.UniqueKey) == 0 {
-				metricCheckErrorCounter.WithLabelValues("Invalid request").Add(1)
-				resp.Responses[i] = &RateLimitResp{Error: "field 'unique_key' cannot be empty"}
-				break
-			}
+		if len(req.UniqueKey) == 0 {
+			metricCheckErrorCounter.WithLabelValues("Invalid request").Add(1)
+			resp.Responses[i] = &RateLimitResp{Error: "field 'unique_key' cannot be empty"}
+			continue
+		}
 
-			if len(req.Name) == 0 {
-				metricCheckErrorCounter.WithLabelValues("Invalid request").Add(1)
-				resp.Responses[i] = &RateLimitResp{Error: "field 'namespace' cannot be empty"}
-				break
-			}
+		if len(req.Name) == 0 {
+			metricCheckErrorCounter.WithLabelValues("Invalid request").Add(1)
+			resp.Responses[i] = &RateLimitResp{Error: "field 'namespace' cannot be empty"}
+			continue
+		}
 
-			if ctx.Err() != nil {
-				err = errors.Wrap(ctx.Err(), "Error while iterating request items")
-				span.RecordError(err)
-				resp.Responses[i] = &RateLimitResp{
-					Error: err.Error(),
-				}
-				break
+		if ctx.Err() != nil {
+			err = errors.Wrap(ctx.Err(), "Error while iterating request items")
+			span.RecordError(err)
+			resp.Responses[i] = &RateLimitResp{
+				Error: err.Error(),
 			}
+			continue
+		}
 
-			peer, err = s.GetPeer(ctx, key)
+		peer, err = s.GetPeer(ctx, key)
+		if err != nil {
+			countError(err, "Error in GetPeer")
+			err = errors.Wrapf(err, "Error in GetPeer, looking up peer that owns rate limit '%s'", key)
+			resp.Responses[i] = &RateLimitResp{
+				Error: err.Error(),
+			}
+			continue
+		}
+
+		// If our server instance is the owner of this rate limit
+		if peer.Info().IsOwner {
+			// Apply our rate limit algorithm to the request
+			metricGetRateLimitCounter.WithLabelValues("local").Add(1)
+			funcTimer1 := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getLocalRateLimit (local)"))
+			resp.Responses[i], err = s.getLocalRateLimit(ctx, req)
+			funcTimer1.ObserveDuration()
 			if err != nil {
-				countError(err, "Error in GetPeer")
-				err = errors.Wrapf(err, "Error in GetPeer, looking up peer that owns rate limit '%s'", key)
-				resp.Responses[i] = &RateLimitResp{
-					Error: err.Error(),
-				}
-				break
+				err = errors.Wrapf(err, "Error while apply rate limit for '%s'", key)
+				span.RecordError(err)
+				resp.Responses[i] = &RateLimitResp{Error: err.Error()}
 			}
-
-			// If our server instance is the owner of this rate limit
-			if peer.Info().IsOwner {
-				// Apply our rate limit algorithm to the request
-				metricGetRateLimitCounter.WithLabelValues("local").Add(1)
-				funcTimer1 := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getLocalRateLimit (local)"))
-				resp.Responses[i], err = s.getLocalRateLimit(ctx, req)
-				funcTimer1.ObserveDuration()
+		} else {
+			if HasBehavior(req.Behavior, Behavior_GLOBAL) {
+				resp.Responses[i], err = s.getGlobalRateLimit(ctx, req)
 				if err != nil {
-					err = errors.Wrapf(err, "Error while apply rate limit for '%s'", key)
+					err = errors.Wrap(err, "Error in getGlobalRateLimit")
 					span.RecordError(err)
 					resp.Responses[i] = &RateLimitResp{Error: err.Error()}
 				}
-			} else {
-				if HasBehavior(req.Behavior, Behavior_GLOBAL) {
-					resp.Responses[i], err = s.getGlobalRateLimit(ctx, req)
-					if err != nil {
-						err = errors.Wrap(err, "Error in getGlobalRateLimit")
-						span.RecordError(err)
-						resp.Responses[i] = &RateLimitResp{Error: err.Error()}
-					}
 
-					// Inform the client of the owner key of the key
-					resp.Responses[i].Metadata = map[string]string{"owner": peer.Info().GRPCAddress}
-					break
-				}
-
-				// Request must be forwarded to peer that owns the key.
-				// Launch remote peer request in goroutine.
-				wg.Add(1)
-				go s.asyncRequest(ctx, &AsyncReq{
-					AsyncCh: asyncCh,
-					Peer:    peer,
-					Req:     req,
-					WG:      &wg,
-					Key:     key,
-					Idx:     i,
-				})
+				// Inform the client of the owner key of the key
+				resp.Responses[i].Metadata = map[string]string{"owner": peer.Info().GRPCAddress}
+				continue
 			}
-			break
+
+			// Request must be forwarded to peer that owns the key.
+			// Launch remote peer request in goroutine.
+			wg.Add(1)
+			go s.asyncRequest(ctx, &AsyncReq{
+				AsyncCh: asyncCh,
+				Peer:    peer,
+				Req:     req,
+				WG:      &wg,
+				Key:     key,
+				Idx:     i,
+			})
 		}
 	}
 

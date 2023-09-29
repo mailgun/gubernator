@@ -272,7 +272,7 @@ func (p *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) 
 		return nil, ctx.Err()
 	}
 
-	metricWorkerQueueLength.WithLabelValues("GetRateLimit", worker.name).Observe(float64(len(worker.getRateLimitRequest)))
+	metricWorkerQueueLength.WithLabelValues("GetRateLimit", worker.name).Set(float64(len(worker.getRateLimitRequest)))
 
 	// Wait for response.
 	select {
@@ -534,7 +534,7 @@ func (p *WorkerPool) AddCacheItem(ctx context.Context, key string, item *CacheIt
 	select {
 	case worker.addCacheItemRequest <- req:
 		// Successfully sent request.
-		metricWorkerQueueLength.WithLabelValues("AddCacheItem", worker.name).Observe(float64(len(worker.addCacheItemRequest)))
+		metricWorkerQueueLength.WithLabelValues("AddCacheItem", worker.name).Set(float64(len(worker.addCacheItemRequest)))
 
 		select {
 		case <-respChan:
@@ -579,7 +579,7 @@ func (p *WorkerPool) GetCacheItem(ctx context.Context, key string) (item *CacheI
 	select {
 	case worker.getCacheItemRequest <- req:
 		// Successfully sent request.
-		metricWorkerQueueLength.WithLabelValues("GetCacheItem", worker.name).Observe(float64(len(worker.getCacheItemRequest)))
+		metricWorkerQueueLength.WithLabelValues("GetCacheItem", worker.name).Set(float64(len(worker.getCacheItemRequest)))
 
 		select {
 		case resp := <-respChan:

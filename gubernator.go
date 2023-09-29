@@ -23,8 +23,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/mailgun/errors"
 	"github.com/mailgun/holster/v4/ctxutil"
-	"github.com/mailgun/holster/v4/errors"
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/mailgun/holster/v4/tracing"
@@ -763,14 +763,5 @@ func countError(err error, defaultType string) {
 }
 
 func isDeadlineExceeded(err error) bool {
-	for {
-		if err == nil {
-			return false
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			return true
-		}
-
-		err = errors.Unwrap(err)
-	}
+	return errors.As(err, context.DeadlineExceeded)
 }

@@ -63,7 +63,7 @@ type Worker struct {
 	name                string
 	conf                *Config
 	cache               Cache
-	getRateLimitRequest chan *request
+	getRateLimitRequest chan request
 	storeRequest        chan workerStoreRequest
 	loadRequest         chan workerLoadRequest
 	addCacheItemRequest chan workerAddCacheItemRequest
@@ -163,7 +163,7 @@ func (p *WorkerPool) newWorker() *Worker {
 	worker := &Worker{
 		conf:                p.conf,
 		cache:               p.conf.CacheFactory(p.workerCacheSize),
-		getRateLimitRequest: make(chan *request),
+		getRateLimitRequest: make(chan request),
 		storeRequest:        make(chan workerStoreRequest),
 		loadRequest:         make(chan workerLoadRequest),
 		addCacheItemRequest: make(chan workerAddCacheItemRequest),
@@ -276,7 +276,7 @@ func (p *WorkerPool) dispatch(worker *Worker) {
 func (p *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) (retval *RateLimitResp, reterr error) {
 	// Delegate request to assigned channel based on request key.
 	worker := p.getWorker(rlRequest.HashKey())
-	handlerRequest := &request{
+	handlerRequest := request{
 		ctx:     ctx,
 		resp:    make(chan *response, 1),
 		request: rlRequest,

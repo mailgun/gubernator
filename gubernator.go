@@ -51,7 +51,7 @@ type V1Instance struct {
 	conf                 Config
 	isClosed             bool
 	getRateLimitsCounter int64
-	workerPool           *WorkerPool
+	workerPool           *WorkerPool2
 }
 
 var metricGetRateLimitCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -119,7 +119,7 @@ func NewV1Instance(conf Config) (s *V1Instance, err error) {
 		conf: conf,
 	}
 
-	s.workerPool = NewWorkerPool(&conf)
+	s.workerPool = NewWorkerPool2(&conf)
 	s.global = newGlobalManager(conf.Behaviors, s)
 
 	// Register our instance with all GRPC servers

@@ -198,13 +198,8 @@ func (p *WorkerPool) dispatch(worker *Worker) {
 				return
 			}
 
-			lenMetric := metricWorkerQueueLength.WithLabelValues("GetRateLimit", worker.name)
-			lenMetric.Inc()
-
 			resp := new(response)
 			resp.rl, resp.err = worker.handleGetRateLimit(req.ctx, req.request, worker.cache)
-			lenMetric.Dec()
-
 			select {
 			case req.resp <- resp:
 				// Success.
@@ -213,6 +208,7 @@ func (p *WorkerPool) dispatch(worker *Worker) {
 				// Context canceled.
 				trace.SpanFromContext(req.ctx).RecordError(resp.err)
 			}
+			metricCommandCounter.WithLabelValues(worker.name, "GetRateLimit").Inc()
 
 		case req, ok := <-worker.storeRequest:
 			if !ok {
@@ -221,11 +217,8 @@ func (p *WorkerPool) dispatch(worker *Worker) {
 				return
 			}
 
-			lenMetric := metricWorkerQueueLength.WithLabelValues("Store", worker.name)
-			lenMetric.Inc()
-
 			worker.handleStore(req, worker.cache)
-			lenMetric.Dec()
+			metricCommandCounter.WithLabelValues(worker.name, "Store").Inc()
 
 		case req, ok := <-worker.loadRequest:
 			if !ok {
@@ -234,11 +227,8 @@ func (p *WorkerPool) dispatch(worker *Worker) {
 				return
 			}
 
-			lenMetric := metricWorkerQueueLength.WithLabelValues("Load", worker.name)
-			lenMetric.Inc()
-
 			worker.handleLoad(req, worker.cache)
-			lenMetric.Dec()
+			metricCommandCounter.WithLabelValues(worker.name, "Load").Inc()
 
 		case req, ok := <-worker.addCacheItemRequest:
 			if !ok {
@@ -247,11 +237,8 @@ func (p *WorkerPool) dispatch(worker *Worker) {
 				return
 			}
 
-			lenMetric := metricWorkerQueueLength.WithLabelValues("AddCacheItem", worker.name)
-			lenMetric.Inc()
-
 			worker.handleAddCacheItem(req, worker.cache)
-			lenMetric.Dec()
+			metricCommandCounter.WithLabelValues(worker.name, "AddCacheItem").Inc()
 
 		case req, ok := <-worker.getCacheItemRequest:
 			if !ok {
@@ -260,11 +247,8 @@ func (p *WorkerPool) dispatch(worker *Worker) {
 				return
 			}
 
-			lenMetric := metricWorkerQueueLength.WithLabelValues("GetCacheItem", worker.name)
-			lenMetric.Inc()
-
 			worker.handleGetCacheItem(req, worker.cache)
-			lenMetric.Dec()
+			metricCommandCounter.WithLabelValues(worker.name, "GetCacheItem").Inc()
 
 		case <-p.done:
 			// Clean up.
@@ -276,7 +260,11 @@ func (p *WorkerPool) dispatch(worker *Worker) {
 // GetRateLimit sends a GetRateLimit request to worker pool.
 func (p *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) (retval *RateLimitResp, reterr error) {
 	// Delegate request to assigned channel based on request key.
+	timer1 := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("WorkerPool.GetRateLimit_1"))
 	worker := p.getWorker(rlRequest.HashKey())
+	timer1.ObserveDuration()
+
+	timer2 := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("WorkerPool.GetRateLimit_2"))
 	handlerRequest := request{
 		ctx:     ctx,
 		resp:    make(chan *response, 1),
@@ -290,8 +278,10 @@ func (p *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) 
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+	timer2.ObserveDuration()
 
 	// Wait for response.
+	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("WorkerPool.GetRateLimit_3")).ObserveDuration()
 	select {
 	case handlerResponse := <-handlerRequest.resp:
 		// Successfully read response.
@@ -552,8 +542,6 @@ func (p *WorkerPool) AddCacheItem(ctx context.Context, key string, item *CacheIt
 	select {
 	case worker.addCacheItemRequest <- req:
 		// Successfully sent request.
-		metricWorkerQueueLength.WithLabelValues("AddCacheItem", worker.name).Set(float64(len(worker.addCacheItemRequest)))
-
 		select {
 		case <-respChan:
 			// Successfully received response.
@@ -597,8 +585,6 @@ func (p *WorkerPool) GetCacheItem(ctx context.Context, key string) (item *CacheI
 	select {
 	case worker.getCacheItemRequest <- req:
 		// Successfully sent request.
-		metricWorkerQueueLength.WithLabelValues("GetCacheItem", worker.name).Set(float64(len(worker.getCacheItemRequest)))
-
 		select {
 		case resp := <-respChan:
 			// Successfully received response.

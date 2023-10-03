@@ -226,6 +226,10 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 			continue
 		}
 
+		if s.conf.Behaviors.ForceGlobal {
+			req.Behavior |= Behavior_GLOBAL
+		}
+
 		peer, err = s.GetPeer(ctx, key)
 		if err != nil {
 			countError(err, "Error in GetPeer")
@@ -389,7 +393,7 @@ func (s *V1Instance) asyncRequest(ctx context.Context, req *AsyncReq) {
 // getGlobalRateLimit handles rate limits that are marked as `Behavior = GLOBAL`. Rate limit responses
 // are returned from the local cache and the hits are queued to be sent to the owning peer.
 func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) (resp *RateLimitResp, err error) {
-	ctx = tracing.StartNamedScopeDebug(ctx, "getGlobalRateLimit")
+	ctx = tracing.StartNamedScope(ctx, "V1Instance.getGlobalRateLimit")
 	defer func() { tracing.EndScope(ctx, err) }()
 
 	funcTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getGlobalRateLimit"))

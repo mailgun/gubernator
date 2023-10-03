@@ -62,6 +62,8 @@ type BehaviorConfig struct {
 	GlobalTimeout time.Duration
 	// The max number of global updates we can batch into a single peer request
 	GlobalBatchLimit int
+	// ForceGlobal forces global mode on all rate limit checks.
+	ForceGlobal bool
 }
 
 // Config for a gubernator instance

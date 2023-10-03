@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/mailgun/errors"
 	"github.com/mailgun/holster/v4/ctxutil"
@@ -50,7 +49,6 @@ type V1Instance struct {
 	log                  FieldLogger
 	conf                 Config
 	isClosed             bool
-	getRateLimitsCounter int64
 	workerPool           *WorkerPool2
 }
 
@@ -180,15 +178,12 @@ func (s *V1Instance) Close() (err error) {
 // rate limit `Name` and `UniqueKey` is not owned by this instance, then we forward the request to the
 // peer that does.
 func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*GetRateLimitsResp, error) {
-	span := trace.SpanFromContext(ctx)
 
 	funcTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.GetRateLimits"))
 	defer funcTimer.ObserveDuration()
 
-	concurrentCounter := atomic.AddInt64(&s.getRateLimitsCounter, 1)
-	defer atomic.AddInt64(&s.getRateLimitsCounter, -1)
-	span.SetAttributes(attribute.Int64("concurrentCounter", concurrentCounter))
-	metricConcurrentChecks.Set(float64(concurrentCounter))
+	metricConcurrentChecks.Inc()
+	defer metricConcurrentChecks.Dec()
 
 	if len(r.Requests) > maxBatchSize {
 		metricCheckErrorCounter.WithLabelValues("Request too large").Add(1)
@@ -223,6 +218,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 
 		if ctx.Err() != nil {
 			err = errors.Wrap(ctx.Err(), "Error while iterating request items")
+			span := trace.SpanFromContext(ctx)
 			span.RecordError(err)
 			resp.Responses[i] = &RateLimitResp{
 				Error: err.Error(),
@@ -249,6 +245,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 			funcTimer1.ObserveDuration()
 			if err != nil {
 				err = errors.Wrapf(err, "Error while apply rate limit for '%s'", key)
+				span := trace.SpanFromContext(ctx)
 				span.RecordError(err)
 				resp.Responses[i] = &RateLimitResp{Error: err.Error()}
 			}
@@ -257,6 +254,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 				resp.Responses[i], err = s.getGlobalRateLimit(ctx, req)
 				if err != nil {
 					err = errors.Wrap(err, "Error in getGlobalRateLimit")
+					span := trace.SpanFromContext(ctx)
 					span.RecordError(err)
 					resp.Responses[i] = &RateLimitResp{Error: err.Error()}
 				}

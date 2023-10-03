@@ -102,6 +102,10 @@ var metricCommandCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Name: "gubernator_command_counter",
 	Help: "The count of commands processed by each worker in WorkerPool.",
 }, []string{"worker", "method"})
+var metricWorkerQueue = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	Name: "gubernator_worker_queue",
+	Help: "The count of requests queued up in WorkerPool.",
+}, []string{"method"})
 
 // NewV1Instance instantiate a single instance of a gubernator peer and register this
 // instance with the provided GRPCServer.
@@ -711,6 +715,7 @@ func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
 	metricCheckCounter.Describe(ch)
 	metricBatchSendDuration.Describe(ch)
 	metricCommandCounter.Describe(ch)
+	metricWorkerQueue.Describe(ch)
 }
 
 // Collect fetches metrics from the server for use by prometheus
@@ -727,6 +732,7 @@ func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
 	metricCheckCounter.Collect(ch)
 	metricBatchSendDuration.Collect(ch)
 	metricCommandCounter.Collect(ch)
+	metricWorkerQueue.Collect(ch)
 }
 
 // HasBehavior returns true if the provided behavior is set

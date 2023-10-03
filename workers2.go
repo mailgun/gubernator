@@ -162,6 +162,9 @@ func (worker *Worker2) dispatch(p *WorkerPool2) {
 // GetRateLimit sends a GetRateLimit request to worker pool.
 func (p *WorkerPool2) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) (retval *RateLimitResp, reterr error) {
 	// Delegate request to assigned channel based on request key.
+	queueGauge := metricWorkerQueue.WithLabelValues("GetRateLimit")
+	queueGauge.Inc()
+	defer queueGauge.Dec()
 	timer2 := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("WorkerPool2.GetRateLimit_2"))
 	handlerRequest := request{
 		ctx:     ctx,
@@ -227,6 +230,9 @@ func (worker *Worker2) handleGetRateLimit(ctx context.Context, req *RateLimitReq
 // Read from persistent storage.  Load into each appropriate worker's cache.
 // Workers are locked during this load operation to prevent race conditions.
 func (p *WorkerPool2) Load(ctx context.Context) (err error) {
+	queueGauge := metricWorkerQueue.WithLabelValues("Load")
+	queueGauge.Inc()
+	defer queueGauge.Dec()
 	ch, err := p.conf.Loader.Load()
 	if err != nil {
 		return errors.Wrap(err, "Error in loader.Load")
@@ -328,6 +334,9 @@ MAIN:
 // Save all workers' caches to persistent storage.
 // Workers are locked during this store operation to prevent race conditions.
 func (p *WorkerPool2) Store(ctx context.Context) (err error) {
+	queueGauge := metricWorkerQueue.WithLabelValues("Store")
+	queueGauge.Inc()
+	defer queueGauge.Dec()
 	var wg sync.WaitGroup
 	out := make(chan *CacheItem, 500)
 
@@ -409,6 +418,9 @@ func (worker *Worker2) handleStore(request workerStoreRequest, cache Cache) {
 
 // AddCacheItem adds an item to the worker's cache.
 func (p *WorkerPool2) AddCacheItem(ctx context.Context, key string, item *CacheItem) (err error) {
+	queueGauge := metricWorkerQueue.WithLabelValues("AddCacheItem")
+	queueGauge.Inc()
+	defer queueGauge.Dec()
 	respChan := make(chan workerAddCacheItemResponse)
 	req := workerAddCacheItemRequest{
 		ctx:      ctx,
@@ -451,6 +463,9 @@ func (worker *Worker2) handleAddCacheItem(request workerAddCacheItemRequest, cac
 
 // GetCacheItem gets item from worker's cache.
 func (p *WorkerPool2) GetCacheItem(ctx context.Context, key string) (item *CacheItem, found bool, err error) {
+	queueGauge := metricWorkerQueue.WithLabelValues("GetCacheItem")
+	queueGauge.Inc()
+	defer queueGauge.Dec()
 	respChan := make(chan workerGetCacheItemResponse)
 	req := workerGetCacheItemRequest{
 		ctx:      ctx,

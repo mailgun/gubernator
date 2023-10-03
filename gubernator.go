@@ -104,6 +104,10 @@ var metricWorkerQueue = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 	Name: "gubernator_worker_queue",
 	Help: "The count of requests queued up in WorkerPool.",
 }, []string{"method"})
+var metricGlobalQueueLength = prometheus.NewGauge(prometheus.GaugeOpts{
+	Name: "gubernator_global_queue_length",
+	Help: "The count of requests queued up for global broadcast.  This is only used for GetRateLimit requests using global behavior.",
+})
 
 // NewV1Instance instantiate a single instance of a gubernator peer and register this
 // instance with the provided GRPCServer.
@@ -227,7 +231,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 		}
 
 		if s.conf.Behaviors.ForceGlobal {
-			req.Behavior |= Behavior_GLOBAL
+			SetBehavior(&req.Behavior, Behavior_GLOBAL, true)
 		}
 
 		peer, err = s.GetPeer(ctx, key)
@@ -718,6 +722,7 @@ func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
 	metricBatchSendDuration.Describe(ch)
 	metricCommandCounter.Describe(ch)
 	metricWorkerQueue.Describe(ch)
+	metricGlobalQueueLength.Describe(ch)
 }
 
 // Collect fetches metrics from the server for use by prometheus
@@ -735,6 +740,7 @@ func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
 	metricBatchSendDuration.Collect(ch)
 	metricCommandCounter.Collect(ch)
 	metricWorkerQueue.Collect(ch)
+	metricGlobalQueueLength.Collect(ch)
 }
 
 // HasBehavior returns true if the provided behavior is set

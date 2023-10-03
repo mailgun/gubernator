@@ -187,6 +187,8 @@ func (gm *globalManager) runBroadcasts() {
 			if len(updates) != 0 {
 				gm.broadcastPeers(context.Background(), updates)
 				updates = make(map[string]*RateLimitReq)
+			} else {
+				metricGlobalQueueLength.Set(0)
 			}
 		case <-done:
 			return false
@@ -197,8 +199,11 @@ func (gm *globalManager) runBroadcasts() {
 
 // broadcastPeers broadcasts global rate limit statuses to all other peers
 func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]*RateLimitReq) {
+	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("globalManager.broadcastPeers")).ObserveDuration()
 	var req UpdatePeerGlobalsReq
 	start := clock.Now()
+
+	metricGlobalQueueLength.Set(float64(len(updates)))
 
 	for _, r := range updates {
 		// Copy the original since we are removing the GLOBAL behavior

@@ -171,17 +171,8 @@ func (c *PeerClient) Info() PeerInfo {
 func (c *PeerClient) GetPeerRateLimit(ctx context.Context, r *RateLimitReq) (resp *RateLimitResp, err error) {
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(
-		// attribute.String("peer.GRPCAddress", c.conf.Info.GRPCAddress),
-		// attribute.String("peer.HTTPAddress", c.conf.Info.HTTPAddress),
-		// attribute.String("peer.Datacenter", c.conf.Info.DataCenter),
-		attribute.String("request.key", r.UniqueKey),
-		attribute.String("request.name", r.Name),
-		// attribute.Int64("request.algorithm", int64(r.Algorithm)),
-		// attribute.Int64("request.behavior", int64(r.Behavior)),
-		// attribute.Int64("request.duration", r.Duration),
-		// attribute.Int64("request.limit", r.Limit),
-		// attribute.Int64("request.hits", r.Hits),
-		// attribute.Int64("request.burst", r.Burst),
+		attribute.String("ratelimit.key", r.UniqueKey),
+		attribute.String("ratelimit.name", r.Name),
 	)
 
 	// If config asked for no batching

@@ -397,7 +397,10 @@ func (s *V1Instance) asyncRequest(ctx context.Context, req *AsyncReq) {
 // getGlobalRateLimit handles rate limits that are marked as `Behavior = GLOBAL`. Rate limit responses
 // are returned from the local cache and the hits are queued to be sent to the owning peer.
 func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) (resp *RateLimitResp, err error) {
-	ctx = tracing.StartNamedScope(ctx, "V1Instance.getGlobalRateLimit")
+	ctx = tracing.StartNamedScope(ctx, "V1Instance.getGlobalRateLimit", trace.WithAttributes(
+		attribute.String("ratelimit.key", req.UniqueKey),
+		attribute.String("ratelimit.name", req.Name),
+	))
 	defer func() { tracing.EndScope(ctx, err) }()
 
 	funcTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getGlobalRateLimit"))
@@ -566,12 +569,10 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (health
 }
 
 func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
-	ctx = tracing.StartNamedScope(ctx, "V1Instance.getLocalRateLimit")
-	span := trace.SpanFromContext(ctx)
-	span.SetAttributes(
-		attribute.String("request.key", r.UniqueKey),
-		attribute.String("request.name", r.Name),
-	)
+	ctx = tracing.StartNamedScope(ctx, "V1Instance.getLocalRateLimit", trace.WithAttributes(
+		attribute.String("ratelimit.key", r.UniqueKey),
+		attribute.String("ratelimit.name", r.Name),
+	))
 
 	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getLocalRateLimit")).ObserveDuration()
 	metricCheckCounter.Add(1)

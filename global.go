@@ -37,23 +37,28 @@ type globalManager struct {
 	log            FieldLogger
 	instance       *V1Instance
 
-	asyncMetrics     prometheus.Summary
-	broadcastMetrics prometheus.Summary
+	metricAsyncDuration     prometheus.Summary
+	metricBroadcastDuration prometheus.Summary
+	metricBroadcastCounter  *prometheus.CounterVec
 }
 
 func newGlobalManager(conf BehaviorConfig, instance *V1Instance) *globalManager {
 	gm := globalManager{
 		log: instance.log,
-		asyncMetrics: prometheus.NewSummary(prometheus.SummaryOpts{
+		metricAsyncDuration: prometheus.NewSummary(prometheus.SummaryOpts{
 			Help:       "The duration of GLOBAL async sends in seconds.",
 			Name:       "gubernator_async_durations",
 			Objectives: map[float64]float64{0.5: 0.05, 0.99: 0.001},
 		}),
-		broadcastMetrics: prometheus.NewSummary(prometheus.SummaryOpts{
+		metricBroadcastDuration: prometheus.NewSummary(prometheus.SummaryOpts{
 			Help:       "The duration of GLOBAL broadcasts to peers in seconds.",
 			Name:       "gubernator_broadcast_durations",
 			Objectives: map[float64]float64{0.5: 0.05, 0.99: 0.001},
 		}),
+		metricBroadcastCounter: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Help: "The count of broadcasts.",
+			Name: "gubernator_broadcast_counter",
+		}, []string{"condition"}),
 		asyncQueue:     make(chan *RateLimitReq, conf.GlobalBatchLimit),
 		broadcastQueue: make(chan *RateLimitReq, conf.GlobalBatchLimit),
 		instance:       instance,
@@ -157,7 +162,7 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 			continue
 		}
 	}
-	gm.asyncMetrics.Observe(time.Since(start).Seconds())
+	gm.metricAsyncDuration.Observe(time.Since(start).Seconds())
 }
 
 // runBroadcasts collects status changes for global rate limits and broadcasts the changes to each peer in the cluster.
@@ -171,7 +176,8 @@ func (gm *globalManager) runBroadcasts() {
 			updates[r.HashKey()] = r
 
 			// Send the hits if we reached our batch limit
-			if len(updates) == gm.conf.GlobalBatchLimit {
+			if len(updates) >= gm.conf.GlobalBatchLimit {
+				gm.metricBroadcastCounter.WithLabelValues("queue_full").Inc()
 				gm.broadcastPeers(context.Background(), updates)
 				updates = make(map[string]*RateLimitReq)
 				return true
@@ -185,6 +191,7 @@ func (gm *globalManager) runBroadcasts() {
 
 		case <-interval.C:
 			if len(updates) != 0 {
+				gm.metricBroadcastCounter.WithLabelValues("timer").Inc()
 				gm.broadcastPeers(context.Background(), updates)
 				updates = make(map[string]*RateLimitReq)
 			} else {
@@ -245,7 +252,7 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 		}
 	}
 
-	gm.broadcastMetrics.Observe(time.Since(start).Seconds())
+	gm.metricBroadcastDuration.Observe(time.Since(start).Seconds())
 }
 
 func (gm *globalManager) Close() {

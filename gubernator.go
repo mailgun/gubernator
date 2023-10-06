@@ -710,8 +710,9 @@ func (s *V1Instance) GetRegionPickers() map[string]PeerPicker {
 
 // Describe fetches prometheus metrics to be registered
 func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
-	ch <- s.global.asyncMetrics.Desc()
-	ch <- s.global.broadcastMetrics.Desc()
+	ch <- s.global.metricAsyncDuration.Desc()
+	ch <- s.global.metricBroadcastDuration.Desc()
+	s.global.metricBroadcastCounter.Describe(ch)
 	metricGetRateLimitCounter.Describe(ch)
 	metricFuncTimeDuration.Describe(ch)
 	metricAsyncRequestRetriesCounter.Describe(ch)
@@ -728,8 +729,9 @@ func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect fetches metrics from the server for use by prometheus
 func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
-	ch <- s.global.asyncMetrics
-	ch <- s.global.broadcastMetrics
+	ch <- s.global.metricAsyncDuration
+	ch <- s.global.metricBroadcastDuration
+	s.global.metricBroadcastCounter.Collect(ch)
 	metricGetRateLimitCounter.Collect(ch)
 	metricFuncTimeDuration.Collect(ch)
 	metricAsyncRequestRetriesCounter.Collect(ch)

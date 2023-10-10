@@ -20,7 +20,6 @@ import (
 	"context"
 
 	"github.com/mailgun/holster/v4/clock"
-	"github.com/mailgun/holster/v4/tracing"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/attribute"
@@ -29,9 +28,6 @@ import (
 
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket
 func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
-	ctx = tracing.StartNamedScopeDebug(ctx, "tokenBucket")
-	defer func() { tracing.EndScope(ctx, err) }()
-	span := trace.SpanFromContext(ctx)
 
 	tokenBucketTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("tokenBucket"))
 	defer tokenBucketTimer.ObserveDuration()
@@ -52,7 +48,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 	if ok {
 		if item.Value == nil {
 			msgPart := "tokenBucket: Invalid cache item; Value is nil"
-			span.AddEvent(msgPart, trace.WithAttributes(
+			trace.SpanFromContext(ctx).AddEvent(msgPart, trace.WithAttributes(
 				attribute.String("hashKey", hashKey),
 				attribute.String("key", r.UniqueKey),
 				attribute.String("name", r.Name),
@@ -61,7 +57,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			ok = false
 		} else if item.Key != hashKey {
 			msgPart := "tokenBucket: Invalid cache item; key mismatch"
-			span.AddEvent(msgPart, trace.WithAttributes(
+			trace.SpanFromContext(ctx).AddEvent(msgPart, trace.WithAttributes(
 				attribute.String("itemKey", item.Key),
 				attribute.String("hashKey", hashKey),
 				attribute.String("name", r.Name),
@@ -95,7 +91,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		t, ok := item.Value.(*TokenBucketItem)
 		if !ok {
 			// Client switched algorithms; perhaps due to a migration?
-			span.AddEvent("Client switched algorithms; perhaps due to a migration?")
+			trace.SpanFromContext(ctx).AddEvent("Client switched algorithms; perhaps due to a migration?")
 
 			c.Remove(hashKey)
 
@@ -125,6 +121,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 		// If the duration config changed, update the new ExpireAt.
 		if t.Duration != r.Duration {
+			span := trace.SpanFromContext(ctx)
 			span.AddEvent("Duration changed")
 			expire := t.CreatedAt + r.Duration
 			if HasBehavior(r.Behavior, Behavior_DURATION_IS_GREGORIAN) {
@@ -163,7 +160,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 		// If we are already at the limit.
 		if rl.Remaining == 0 && r.Hits > 0 {
-			span.AddEvent("Already over the limit")
+			trace.SpanFromContext(ctx).AddEvent("Already over the limit")
 			metricOverLimitCounter.Add(1)
 			rl.Status = Status_OVER_LIMIT
 			t.Status = rl.Status
@@ -172,7 +169,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 		// If requested hits takes the remainder.
 		if t.Remaining == r.Hits {
-			span.AddEvent("At the limit")
+			trace.SpanFromContext(ctx).AddEvent("At the limit")
 			t.Remaining = 0
 			rl.Remaining = 0
 			return rl, nil
@@ -181,13 +178,12 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		// If requested is more than available, then return over the limit
 		// without updating the cache.
 		if r.Hits > t.Remaining {
-			span.AddEvent("Over the limit")
+			trace.SpanFromContext(ctx).AddEvent("Over the limit")
 			metricOverLimitCounter.Add(1)
 			rl.Status = Status_OVER_LIMIT
 			return rl, nil
 		}
 
-		span.AddEvent("Under the limit")
 		t.Remaining -= r.Hits
 		rl.Remaining = t.Remaining
 		return rl, nil
@@ -199,10 +195,6 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 // Called by tokenBucket() when adding a new item in the store.
 func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
-	ctx = tracing.StartNamedScopeDebug(ctx, "tokenBucketNewItem")
-	defer func() { tracing.EndScope(ctx, err) }()
-	span := trace.SpanFromContext(ctx)
-
 	now := MillisecondNow()
 	expire := now + r.Duration
 
@@ -237,7 +229,7 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 
 	// Client could be requesting that we always return OVER_LIMIT.
 	if r.Hits > r.Limit {
-		span.AddEvent("Over the limit")
+		trace.SpanFromContext(ctx).AddEvent("Over the limit")
 		metricOverLimitCounter.Add(1)
 		rl.Status = Status_OVER_LIMIT
 		rl.Remaining = r.Limit
@@ -255,10 +247,6 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 
 // Implements leaky bucket algorithm for rate limiting https://en.wikipedia.org/wiki/Leaky_bucket
 func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
-	ctx = tracing.StartNamedScopeDebug(ctx, "leakyBucket")
-	defer func() { tracing.EndScope(ctx, err) }()
-	span := trace.SpanFromContext(ctx)
-
 	leakyBucketTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getRateLimit_leakyBucket"))
 	defer leakyBucketTimer.ObserveDuration()
 
@@ -284,7 +272,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 	if ok {
 		if item.Value == nil {
 			msgPart := "leakyBucket: Invalid cache item; Value is nil"
-			span.AddEvent(msgPart, trace.WithAttributes(
+			trace.SpanFromContext(ctx).AddEvent(msgPart, trace.WithAttributes(
 				attribute.String("hashKey", hashKey),
 				attribute.String("key", r.UniqueKey),
 				attribute.String("name", r.Name),
@@ -293,7 +281,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			ok = false
 		} else if item.Key != hashKey {
 			msgPart := "leakyBucket: Invalid cache item; key mismatch"
-			span.AddEvent(msgPart, trace.WithAttributes(
+			trace.SpanFromContext(ctx).AddEvent(msgPart, trace.WithAttributes(
 				attribute.String("itemKey", item.Key),
 				attribute.String("hashKey", hashKey),
 				attribute.String("name", r.Name),
@@ -425,9 +413,6 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 // Called by leakyBucket() when adding a new item in the store.
 func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
-	ctx = tracing.StartNamedScopeDebug(ctx, "leakyBucketNewItem")
-	defer func() { tracing.EndScope(ctx, err) }()
-
 	now := MillisecondNow()
 	duration := r.Duration
 	rate := float64(duration) / float64(r.Limit)

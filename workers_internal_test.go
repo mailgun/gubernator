@@ -38,8 +38,7 @@ func TestWorkersInternal(t *testing.T) {
 	t.Run("getWorker()", func(t *testing.T) {
 		const concurrency = 32
 		conf := &Config{
-			Workers:   concurrency,
-			CacheSize: 1000,
+			Workers: concurrency,
 		}
 		require.NoError(t, conf.SetDefaults())
 

@@ -53,6 +53,8 @@ type BehaviorConfig struct {
 	BatchWait time.Duration
 	// The max number of requests we can batch into a single peer request
 	BatchLimit int
+	// DisableBatching disables batching behavior for all ratelimits.
+	DisableBatching bool
 
 	// How long a non-owning peer should wait before syncing hits to the owning peer
 	GlobalSyncWait time.Duration
@@ -60,6 +62,8 @@ type BehaviorConfig struct {
 	GlobalTimeout time.Duration
 	// The max number of global updates we can batch into a single peer request
 	GlobalBatchLimit int
+	// ForceGlobal forces global mode on all rate limit checks.
+	ForceGlobal bool
 }
 
 // Config for a gubernator instance
@@ -120,12 +124,14 @@ func (c *Config) SetDefaults() error {
 
 	setter.SetDefault(&c.Behaviors.GlobalTimeout, time.Millisecond*500)
 	setter.SetDefault(&c.Behaviors.GlobalBatchLimit, maxBatchSize)
-	setter.SetDefault(&c.Behaviors.GlobalSyncWait, time.Microsecond*500)
+	setter.SetDefault(&c.Behaviors.GlobalSyncWait, time.Millisecond*500)
 
 	setter.SetDefault(&c.LocalPicker, NewReplicatedConsistentHash(nil, defaultReplicas))
 	setter.SetDefault(&c.RegionPicker, NewRegionPicker(nil))
 
+	setter.SetDefault(&c.CacheSize, 50_000)
 	setter.SetDefault(&c.Workers, runtime.NumCPU())
+	setter.SetDefault(&c.Logger, logrus.New().WithField("category", "gubernator"))
 
 	if c.CacheFactory == nil {
 		c.CacheFactory = func(maxSize int) Cache {
@@ -333,10 +339,12 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 	setter.SetDefault(&conf.Behaviors.BatchTimeout, getEnvDuration(log, "GUBER_BATCH_TIMEOUT"))
 	setter.SetDefault(&conf.Behaviors.BatchLimit, getEnvInteger(log, "GUBER_BATCH_LIMIT"))
 	setter.SetDefault(&conf.Behaviors.BatchWait, getEnvDuration(log, "GUBER_BATCH_WAIT"))
+	setter.SetDefault(&conf.Behaviors.DisableBatching, getEnvBool(log, "GUBER_DISABLE_BATCHING"))
 
 	setter.SetDefault(&conf.Behaviors.GlobalTimeout, getEnvDuration(log, "GUBER_GLOBAL_TIMEOUT"))
 	setter.SetDefault(&conf.Behaviors.GlobalBatchLimit, getEnvInteger(log, "GUBER_GLOBAL_BATCH_LIMIT"))
 	setter.SetDefault(&conf.Behaviors.GlobalSyncWait, getEnvDuration(log, "GUBER_GLOBAL_SYNC_WAIT"))
+	setter.SetDefault(&conf.Behaviors.ForceGlobal, getEnvBool(log, "GUBER_FORCE_GLOBAL"))
 
 	// TLS Config
 	if anyHasPrefix("GUBER_TLS_", os.Environ()) {

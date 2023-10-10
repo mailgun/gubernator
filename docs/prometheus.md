@@ -16,19 +16,28 @@ Finally, configure a Prometheus job to scrape the server's `/metrics` URI.
 
 | Metric                                 | Type    | Description |
 | -------------------------------------- | ------- | ----------- |
-| `gubernator_async_durations`           | Summary | The timings of GLOBAL async sends in seconds. |
-| `gubernator_asyncrequest_retries`      | Counter | The count of retries occurred in asyncRequests() forwarding a request to another peer. |
-| `gubernator_batch_send_duration`       | Summary | The timings of batch send operations to a remote peer. |
-| `gubernator_broadcast_durations`       | Summary | The timings of GLOBAL broadcasts to peers in seconds. |
 | `gubernator_cache_access_count`        | Counter | The count of LRUCache accesses during rate checks. |
 | `gubernator_cache_size`                | Gauge   | The number of items in LRU Cache which holds the rate limits. |
-| `gubernator_check_counter`             | Counter | The number of rate limits checked. |
 | `gubernator_check_error_counter`       | Counter | The number of errors while checking rate limits. |
-| `gubernator_concurrent_checks_counter` | Summary | 99th quantile of concurrent rate checks.  This includes rate checks processed locally and forwarded to other peers. |
-| `gubernator_func_duration`             | Summary | The 99th quantile of key function timings in seconds. |
-| `gubernator_getratelimit_counter`      | Counter | The count of getRateLimit() calls.  Label \"calltype\" may be \"local\" for calls handled by the same peer, \"forward\" for calls forwarded to another peer, or \"global\" for global rate limits. |
+| `gubernator_command_counter`           | Counter | The count of commands processed by each worker in WorkerPool. |
+| `gubernator_concurrent_checks_counter` | Gauge   | The number of concurrent GetRateLimits API calls. |
+| `gubernator_func_duration`             | Summary | The timings of key functions in Gubernator in seconds. |
+| `gubernator_getratelimit_counter`      | Counter | The count of getLocalRateLimit() calls.  Label \"calltype\" may be \"local\" for calls handled by the same peer, \"forward\" for calls forwarded to another peer, or \"global\" for global rate limits. |
 | `gubernator_grpc_request_counts`       | Counter | The count of gRPC requests. |
-| `gubernator_grpc_request_duration`     | Summary | The 99th quantile timings of gRPC requests in seconds. |
+| `gubernator_grpc_request_duration`     | Summary | The timings of gRPC requests in seconds. |
 | `gubernator_over_limit_counter`        | Counter | The number of rate limit checks that are over the limit. |
-| `gubernator_pool_queue_length`         | Summary | The 99th quantile of rate check requests queued up in GubernatorPool.  The is the work queue for local rate checks. |
-| `gubernator_queue_length`              | Summary | The 99th quantile of rate check requests queued up for batching to other peers by getPeerRateLimitsBatch().  This is the work queue for remote rate checks.  Label "peerAddr" indicates queued requests to that peer. |
+| `gubernator_worker_queue_length`       | Gauge   | The count of requests queued up in WorkerPool. |
+
+### Global Behavior
+| Metric                                 | Type    | Description |
+| -------------------------------------- | ------- | ----------- |
+| `gubernator_broadcast_counter`         | Counter | The count of broadcasts. |
+| `gubernator_broadcast_duration`        | Summary | The timings of GLOBAL broadcasts to peers in seconds. |
+| `gubernator_global_queue_length`       | Gauge   | The count of requests queued up for global broadcast.  This is only used for GetRateLimit requests using global behavior. |
+
+### Batch Behavior
+| Metric                                 | Type    | Description |
+| -------------------------------------- | ------- | ----------- |
+| `gubernator_batch_queue_length`        | Gauge   | The getRateLimitsBatch() queue length in PeerClient.  This represents rate checks queued by for batching to a remote peer. |
+| `gubernator_batch_send_duration`       | Summary | The timings of batch send operations to a remote peer. |
+| `gubernator_batch_send_retries`        | Counter | The count of retries occurred in asyncRequests() forwarding a request to another peer. |

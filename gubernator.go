@@ -21,15 +21,12 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"sync/atomic"
 
+	"github.com/mailgun/errors"
 	"github.com/mailgun/holster/v4/ctxutil"
-	"github.com/mailgun/holster/v4/errors"
-	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/mailgun/holster/v4/tracing"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
@@ -47,77 +44,91 @@ const (
 type V1Instance struct {
 	UnimplementedV1Server
 	UnimplementedPeersV1Server
-	global               *globalManager
-	peerMutex            sync.RWMutex
-	log                  FieldLogger
-	conf                 Config
-	isClosed             bool
-	getRateLimitsCounter int64
-	workerPool           *WorkerPool
+	global     *globalManager
+	peerMutex  sync.RWMutex
+	log        FieldLogger
+	conf       Config
+	isClosed   bool
+	workerPool *WorkerPool
 }
 
-var metricGetRateLimitCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
-	Name: "gubernator_getratelimit_counter",
-	Help: "The count of getLocalRateLimit() calls.  Label \"calltype\" may be \"local\" for calls handled by the same peer, \"forward\" for calls forwarded to another peer, or \"global\" for global rate limits.",
-}, []string{"calltype"})
-var metricFuncTimeDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
-	Name: "gubernator_func_duration",
-	Help: "The timings of key functions in Gubernator in seconds.",
-	Objectives: map[float64]float64{
-		0.99: 0.001,
-	},
-}, []string{"name"})
-var metricAsyncRequestRetriesCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
-	Name: "gubernator_asyncrequest_retries",
-	Help: "The count of retries occurred in asyncRequest() forwarding a request to another peer.",
-}, []string{"name"})
-var metricQueueLength = prometheus.NewSummaryVec(prometheus.SummaryOpts{
-	Name: "gubernator_queue_length",
-	Help: "The getRateLimitsBatch() queue length in PeerClient.  This represents rate checks queued by for batching to a remote peer.",
-	Objectives: map[float64]float64{
-		0.99: 0.001,
-	},
-}, []string{"peerAddr"})
-var metricCheckCounter = prometheus.NewCounter(prometheus.CounterOpts{
-	Name: "gubernator_check_counter",
-	Help: "The number of rate limits checked.",
-})
-var metricOverLimitCounter = prometheus.NewCounter(prometheus.CounterOpts{
-	Name: "gubernator_over_limit_counter",
-	Help: "The number of rate limit checks that are over the limit.",
-})
-var metricConcurrentChecks = prometheus.NewSummary(prometheus.SummaryOpts{
-	Name: "gubernator_concurrent_checks_counter",
-	Help: "The number of concurrent GetRateLimits API calls.",
-	Objectives: map[float64]float64{
-		0.99: 0.001,
-	},
-})
-var metricCheckErrorCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
-	Name: "gubernator_check_error_counter",
-	Help: "The number of errors while checking rate limits.",
-}, []string{"error"})
-var metricWorkerQueueLength = prometheus.NewSummaryVec(prometheus.SummaryOpts{
-	Name: "gubernator_pool_queue_length",
-	Help: "The number of GetRateLimit requests queued up in Gubernator workers.",
-	Objectives: map[float64]float64{
-		0.99: 0.001,
-	},
-}, []string{"method", "worker"})
-var metricBatchSendDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
-	Name: "gubernator_batch_send_duration",
-	Help: "The timings of batch send operations to a remote peer.",
-	Objectives: map[float64]float64{
-		0.99: 0.001,
-	},
-}, []string{"peerAddr"})
+var (
+	metricGetRateLimitCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "gubernator_getratelimit_counter",
+		Help: "The count of getLocalRateLimit() calls.  Label \"calltype\" may be \"local\" for calls handled by the same peer, \"forward\" for calls forwarded to another peer, or \"global\" for global rate limits.",
+	}, []string{"calltype"})
+	metricFuncTimeDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+		Name: "gubernator_func_duration",
+		Help: "The timings of key functions in Gubernator in seconds.",
+		Objectives: map[float64]float64{
+			1:    0.001,
+			0.99: 0.001,
+			0.5:  0.01,
+		},
+	}, []string{"name"})
+	metricOverLimitCounter = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "gubernator_over_limit_counter",
+		Help: "The number of rate limit checks that are over the limit.",
+	})
+	metricConcurrentChecks = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "gubernator_concurrent_checks_counter",
+		Help: "The number of concurrent GetRateLimits API calls.",
+	})
+	metricCheckErrorCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "gubernator_check_error_counter",
+		Help: "The number of errors while checking rate limits.",
+	}, []string{"error"})
+	metricCommandCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "gubernator_command_counter",
+		Help: "The count of commands processed by each worker in WorkerPool.",
+	}, []string{"worker", "method"})
+	metricWorkerQueue = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "gubernator_worker_queue_length",
+		Help: "The count of requests queued up in WorkerPool.",
+	}, []string{"method", "worker"})
+
+	// Batch behavior.
+	metricBatchSendRetries = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "gubernator_batch_send_retries",
+		Help: "The count of retries occurred in asyncRequest() forwarding a request to another peer.",
+	}, []string{"name"})
+	metricBatchQueueLength = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "gubernator_batch_queue_length",
+		Help: "The getRateLimitsBatch() queue length in PeerClient.  This represents rate checks queued by for batching to a remote peer.",
+	}, []string{"peerAddr"})
+	metricBatchSendDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+		Name: "gubernator_batch_send_duration",
+		Help: "The timings of batch send operations to a remote peer.",
+		Objectives: map[float64]float64{
+			0.99: 0.001,
+		},
+	}, []string{"peerAddr"})
+
+	// Global behavior.
+	metricGlobalSendDuration = prometheus.NewSummary(prometheus.SummaryOpts{
+		Name:       "gubernator_global_send_duration",
+		Help:       "The duration of GLOBAL async sends in seconds.",
+		Objectives: map[float64]float64{0.5: 0.05, 0.99: 0.001},
+	})
+	metricBroadcastDuration = prometheus.NewSummary(prometheus.SummaryOpts{
+		Name:       "gubernator_broadcast_duration",
+		Help:       "The duration of GLOBAL broadcasts to peers in seconds.",
+		Objectives: map[float64]float64{0.5: 0.05, 0.99: 0.001},
+	})
+	metricBroadcastCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "gubernator_broadcast_counter",
+		Help: "The count of broadcasts.",
+	}, []string{"condition"})
+	metricGlobalQueueLength = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "gubernator_global_queue_length",
+		Help: "The count of requests queued up for global broadcast.  This is only used for GetRateLimit requests using global behavior.",
+	})
+)
 
 // NewV1Instance instantiate a single instance of a gubernator peer and register this
 // instance with the provided GRPCServer.
 func NewV1Instance(conf Config) (s *V1Instance, err error) {
-	ctx := tracing.StartNamedScopeDebug(context.Background(), "gubernator.NewV1Instance")
-	defer func() { tracing.EndScope(ctx, err) }()
-
+	ctx := context.Background()
 	if conf.GRPCServers == nil {
 		return nil, errors.New("at least one GRPCServer instance is required")
 	}
@@ -129,7 +140,6 @@ func NewV1Instance(conf Config) (s *V1Instance, err error) {
 		log:  conf.Logger,
 		conf: conf,
 	}
-	setter.SetDefault(&s.log, logrus.WithField("category", "gubernator"))
 
 	s.workerPool = NewWorkerPool(&conf)
 	s.global = newGlobalManager(conf.Behaviors, s)
@@ -188,15 +198,12 @@ func (s *V1Instance) Close() (err error) {
 // rate limit `Name` and `UniqueKey` is not owned by this instance, then we forward the request to the
 // peer that does.
 func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*GetRateLimitsResp, error) {
-	span := trace.SpanFromContext(ctx)
 
 	funcTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.GetRateLimits"))
 	defer funcTimer.ObserveDuration()
 
-	concurrentCounter := atomic.AddInt64(&s.getRateLimitsCounter, 1)
-	defer atomic.AddInt64(&s.getRateLimitsCounter, -1)
-	span.SetAttributes(attribute.Int64("concurrentCounter", concurrentCounter))
-	metricConcurrentChecks.Observe(float64(concurrentCounter))
+	metricConcurrentChecks.Inc()
+	defer metricConcurrentChecks.Dec()
 
 	if len(r.Requests) > maxBatchSize {
 		metricCheckErrorCounter.WithLabelValues("Request too large").Add(1)
@@ -213,83 +220,86 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 
 	// For each item in the request body
 	for i, req := range r.Requests {
-		_ = tracing.CallNamedScopeDebug(ctx, "Iterate requests", func(ctx context.Context) error {
-			key := req.Name + "_" + req.UniqueKey
-			var peer *PeerClient
-			var err error
+		key := req.Name + "_" + req.UniqueKey
+		var peer *PeerClient
+		var err error
 
-			if len(req.UniqueKey) == 0 {
-				metricCheckErrorCounter.WithLabelValues("Invalid request").Add(1)
-				resp.Responses[i] = &RateLimitResp{Error: "field 'unique_key' cannot be empty"}
-				return nil
+		if len(req.UniqueKey) == 0 {
+			metricCheckErrorCounter.WithLabelValues("Invalid request").Add(1)
+			resp.Responses[i] = &RateLimitResp{Error: "field 'unique_key' cannot be empty"}
+			continue
+		}
+
+		if len(req.Name) == 0 {
+			metricCheckErrorCounter.WithLabelValues("Invalid request").Add(1)
+			resp.Responses[i] = &RateLimitResp{Error: "field 'namespace' cannot be empty"}
+			continue
+		}
+
+		if ctx.Err() != nil {
+			err = errors.Wrap(ctx.Err(), "Error while iterating request items")
+			span := trace.SpanFromContext(ctx)
+			span.RecordError(err)
+			resp.Responses[i] = &RateLimitResp{
+				Error: err.Error(),
 			}
+			continue
+		}
 
-			if len(req.Name) == 0 {
-				metricCheckErrorCounter.WithLabelValues("Invalid request").Add(1)
-				resp.Responses[i] = &RateLimitResp{Error: "field 'namespace' cannot be empty"}
-				return nil
+		if s.conf.Behaviors.ForceGlobal {
+			SetBehavior(&req.Behavior, Behavior_GLOBAL, true)
+		}
+
+		peer, err = s.GetPeer(ctx, key)
+		if err != nil {
+			countError(err, "Error in GetPeer")
+			err = errors.Wrapf(err, "Error in GetPeer, looking up peer that owns rate limit '%s'", key)
+			resp.Responses[i] = &RateLimitResp{
+				Error: err.Error(),
 			}
+			continue
+		}
 
-			if ctx.Err() != nil {
-				err = errors.Wrap(ctx.Err(), "Error while iterating request items")
-				span.RecordError(err)
-				resp.Responses[i] = &RateLimitResp{
-					Error: err.Error(),
-				}
-				return nil
-			}
-
-			peer, err = s.GetPeer(ctx, key)
+		// If our server instance is the owner of this rate limit
+		if peer.Info().IsOwner {
+			// Apply our rate limit algorithm to the request
+			metricGetRateLimitCounter.WithLabelValues("local").Add(1)
+			funcTimer1 := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getLocalRateLimit (local)"))
+			resp.Responses[i], err = s.getLocalRateLimit(ctx, req)
+			funcTimer1.ObserveDuration()
 			if err != nil {
-				countError(err, "Error in GetPeer")
-				err = errors.Wrapf(err, "Error in GetPeer, looking up peer that owns rate limit '%s'", key)
-				resp.Responses[i] = &RateLimitResp{
-					Error: err.Error(),
-				}
-				return nil
+				err = errors.Wrapf(err, "Error while apply rate limit for '%s'", key)
+				span := trace.SpanFromContext(ctx)
+				span.RecordError(err)
+				resp.Responses[i] = &RateLimitResp{Error: err.Error()}
 			}
-
-			// If our server instance is the owner of this rate limit
-			if peer.Info().IsOwner {
-				// Apply our rate limit algorithm to the request
-				metricGetRateLimitCounter.WithLabelValues("local").Add(1)
-				funcTimer1 := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getLocalRateLimit (local)"))
-				resp.Responses[i], err = s.getLocalRateLimit(ctx, req)
-				funcTimer1.ObserveDuration()
+		} else {
+			if HasBehavior(req.Behavior, Behavior_GLOBAL) {
+				resp.Responses[i], err = s.getGlobalRateLimit(ctx, req)
 				if err != nil {
-					err = errors.Wrapf(err, "Error while apply rate limit for '%s'", key)
+					err = errors.Wrap(err, "Error in getGlobalRateLimit")
+					span := trace.SpanFromContext(ctx)
 					span.RecordError(err)
 					resp.Responses[i] = &RateLimitResp{Error: err.Error()}
 				}
-			} else {
-				if HasBehavior(req.Behavior, Behavior_GLOBAL) {
-					resp.Responses[i], err = s.getGlobalRateLimit(ctx, req)
-					if err != nil {
-						err = errors.Wrap(err, "Error in getGlobalRateLimit")
-						span.RecordError(err)
-						resp.Responses[i] = &RateLimitResp{Error: err.Error()}
-					}
 
-					// Inform the client of the owner key of the key
-					resp.Responses[i].Metadata = map[string]string{"owner": peer.Info().GRPCAddress}
-					return nil
-				}
-
-				// Request must be forwarded to peer that owns the key.
-				// Launch remote peer request in goroutine.
-				wg.Add(1)
-				go s.asyncRequest(ctx, &AsyncReq{
-					AsyncCh: asyncCh,
-					Peer:    peer,
-					Req:     req,
-					WG:      &wg,
-					Key:     key,
-					Idx:     i,
-				})
+				// Inform the client of the owner key of the key
+				resp.Responses[i].Metadata = map[string]string{"owner": peer.Info().GRPCAddress}
+				continue
 			}
 
-			return nil
-		})
+			// Request must be forwarded to peer that owns the key.
+			// Launch remote peer request in goroutine.
+			wg.Add(1)
+			go s.asyncRequest(ctx, &AsyncReq{
+				AsyncCh: asyncCh,
+				Peer:    peer,
+				Req:     req,
+				WG:      &wg,
+				Key:     key,
+				Idx:     i,
+			})
+		}
 	}
 
 	// Wait for any async responses if any
@@ -366,7 +376,7 @@ func (s *V1Instance) asyncRequest(ctx context.Context, req *AsyncReq) {
 		if err != nil {
 			if IsNotReady(err) {
 				attempts++
-				metricAsyncRequestRetriesCounter.WithLabelValues(req.Req.Name).Add(1)
+				metricBatchSendRetries.WithLabelValues(req.Req.Name).Add(1)
 				req.Peer, err = s.GetPeer(ctx, req.Key)
 				if err != nil {
 					errPart := fmt.Sprintf("Error finding peer that owns rate limit '%s'", req.Key)
@@ -403,7 +413,10 @@ func (s *V1Instance) asyncRequest(ctx context.Context, req *AsyncReq) {
 // getGlobalRateLimit handles rate limits that are marked as `Behavior = GLOBAL`. Rate limit responses
 // are returned from the local cache and the hits are queued to be sent to the owning peer.
 func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) (resp *RateLimitResp, err error) {
-	ctx = tracing.StartNamedScopeDebug(ctx, "getGlobalRateLimit")
+	ctx = tracing.StartNamedScope(ctx, "V1Instance.getGlobalRateLimit", trace.WithAttributes(
+		attribute.String("ratelimit.key", req.UniqueKey),
+		attribute.String("ratelimit.name", req.Name),
+	))
 	defer func() { tracing.EndScope(ctx, err) }()
 
 	funcTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getGlobalRateLimit"))
@@ -572,30 +585,20 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (health
 }
 
 func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
-	ctx = tracing.StartNamedScope(ctx, "V1Instance.getLocalRateLimit")
-	span := trace.SpanFromContext(ctx)
-	span.SetAttributes(
-		attribute.String("request.key", r.UniqueKey),
-		attribute.String("request.name", r.Name),
-		attribute.Int64("request.algorithm", int64(r.Algorithm)),
-		attribute.Int64("request.behavior", int64(r.Behavior)),
-		attribute.Int64("request.duration", r.Duration),
-		attribute.Int64("request.limit", r.Limit),
-		attribute.Int64("request.hits", r.Hits),
-		attribute.Int64("request.burst", r.Burst),
-	)
+	ctx = tracing.StartNamedScope(ctx, "V1Instance.getLocalRateLimit", trace.WithAttributes(
+		attribute.String("ratelimit.key", r.UniqueKey),
+		attribute.String("ratelimit.name", r.Name),
+		attribute.Int64("ratelimit.limit", r.Limit),
+		attribute.Int64("ratelimit.hits", r.Hits),
+	))
 
 	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getLocalRateLimit")).ObserveDuration()
-	metricCheckCounter.Add(1)
 
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
 		s.global.QueueUpdate(r)
 	}
 
 	resp, err := s.workerPool.GetRateLimit(ctx, r)
-	if isDeadlineExceeded(err) {
-		metricCheckErrorCounter.WithLabelValues("Timeout").Add(1)
-	}
 
 	tracing.EndScope(ctx, err)
 	return resp, err
@@ -721,34 +724,38 @@ func (s *V1Instance) GetRegionPickers() map[string]PeerPicker {
 
 // Describe fetches prometheus metrics to be registered
 func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
-	ch <- s.global.asyncMetrics.Desc()
-	ch <- s.global.broadcastMetrics.Desc()
-	metricGetRateLimitCounter.Describe(ch)
-	metricFuncTimeDuration.Describe(ch)
-	metricAsyncRequestRetriesCounter.Describe(ch)
-	metricQueueLength.Describe(ch)
-	metricConcurrentChecks.Describe(ch)
-	metricCheckErrorCounter.Describe(ch)
-	metricOverLimitCounter.Describe(ch)
-	metricCheckCounter.Describe(ch)
-	metricWorkerQueueLength.Describe(ch)
+	metricBatchQueueLength.Describe(ch)
 	metricBatchSendDuration.Describe(ch)
+	metricBatchSendRetries.Describe(ch)
+	metricBroadcastCounter.Describe(ch)
+	metricBroadcastDuration.Describe(ch)
+	metricCheckErrorCounter.Describe(ch)
+	metricCommandCounter.Describe(ch)
+	metricConcurrentChecks.Describe(ch)
+	metricFuncTimeDuration.Describe(ch)
+	metricGetRateLimitCounter.Describe(ch)
+	metricGlobalQueueLength.Describe(ch)
+	metricGlobalSendDuration.Describe(ch)
+	metricOverLimitCounter.Describe(ch)
+	metricWorkerQueue.Describe(ch)
 }
 
 // Collect fetches metrics from the server for use by prometheus
 func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
-	ch <- s.global.asyncMetrics
-	ch <- s.global.broadcastMetrics
-	metricGetRateLimitCounter.Collect(ch)
-	metricFuncTimeDuration.Collect(ch)
-	metricAsyncRequestRetriesCounter.Collect(ch)
-	metricQueueLength.Collect(ch)
-	metricConcurrentChecks.Collect(ch)
-	metricCheckErrorCounter.Collect(ch)
-	metricOverLimitCounter.Collect(ch)
-	metricCheckCounter.Collect(ch)
-	metricWorkerQueueLength.Collect(ch)
+	metricBatchQueueLength.Collect(ch)
 	metricBatchSendDuration.Collect(ch)
+	metricBatchSendRetries.Collect(ch)
+	metricBroadcastCounter.Collect(ch)
+	metricBroadcastDuration.Collect(ch)
+	metricCheckErrorCounter.Collect(ch)
+	metricCommandCounter.Collect(ch)
+	metricConcurrentChecks.Collect(ch)
+	metricFuncTimeDuration.Collect(ch)
+	metricGetRateLimitCounter.Collect(ch)
+	metricGlobalQueueLength.Collect(ch)
+	metricGlobalSendDuration.Collect(ch)
+	metricOverLimitCounter.Collect(ch)
+	metricWorkerQueue.Collect(ch)
 }
 
 // HasBehavior returns true if the provided behavior is set
@@ -784,14 +791,8 @@ func countError(err error, defaultType string) {
 }
 
 func isDeadlineExceeded(err error) bool {
-	for {
-		if err == nil {
-			return false
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			return true
-		}
-
-		err = errors.Unwrap(err)
+	if err == nil {
+		return false
 	}
+	return errors.Is(err, context.DeadlineExceeded)
 }

@@ -26,7 +26,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mailgun/gubernator/v2"
 	guber "github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/gubernator/v2/cluster"
 	"github.com/mailgun/holster/v4/clock"
@@ -1156,6 +1155,7 @@ func TestGRPCGateway(t *testing.T) {
 	address := cluster.GetRandomPeer(cluster.DataCenterNone).HTTPAddress
 	resp, err := http.DefaultClient.Get("http://" + address + "/v1/HealthCheck")
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	b, err := io.ReadAll(resp.Body)
 
@@ -1196,12 +1196,12 @@ func TestGRPCGateway(t *testing.T) {
 	//  error.
 	require.NoError(t, json.Unmarshal(b, &r))
 	require.Equal(t, 1, len(r.Responses))
-	assert.Equal(t, gubernator.Status_UNDER_LIMIT, r.Responses[0].Status)
+	assert.Equal(t, guber.Status_UNDER_LIMIT, r.Responses[0].Status)
 }
 
 func TestGetPeerRateLimits(t *testing.T) {
 	ctx := context.Background()
-	peerClient := gubernator.NewPeerClient(gubernator.PeerConfig{
+	peerClient := guber.NewPeerClient(guber.PeerConfig{
 		Info: cluster.GetRandomPeer(cluster.DataCenterNone),
 	})
 
@@ -1213,18 +1213,18 @@ func TestGetPeerRateLimits(t *testing.T) {
 		for _, n := range testCases {
 			t.Run(fmt.Sprintf("Batch size %d", n), func(t *testing.T) {
 				// Build request.
-				req := &gubernator.GetPeerRateLimitsReq{
-					Requests: make([]*gubernator.RateLimitReq, n),
+				req := &guber.GetPeerRateLimitsReq{
+					Requests: make([]*guber.RateLimitReq, n),
 				}
 				for i := 0; i < n; i++ {
-					req.Requests[i] = &gubernator.RateLimitReq{
+					req.Requests[i] = &guber.RateLimitReq{
 						Name:      "Foobar",
 						UniqueKey: fmt.Sprintf("%08x", i),
 						Hits:      0,
 						Limit:     1000 + int64(i),
 						Duration:  1000,
-						Algorithm: gubernator.Algorithm_TOKEN_BUCKET,
-						Behavior:  gubernator.Behavior_BATCHING,
+						Algorithm: guber.Algorithm_TOKEN_BUCKET,
+						Behavior:  guber.Behavior_BATCHING,
 					}
 				}
 

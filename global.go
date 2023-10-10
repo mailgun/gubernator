@@ -38,7 +38,7 @@ type globalManager struct {
 
 func newGlobalManager(conf BehaviorConfig, instance *V1Instance) *globalManager {
 	gm := globalManager{
-		log: instance.log,
+		log:            instance.log,
 		asyncQueue:     make(chan *RateLimitReq, conf.GlobalBatchLimit),
 		broadcastQueue: make(chan *RateLimitReq, conf.GlobalBatchLimit),
 		instance:       instance,

@@ -34,29 +34,11 @@ type globalManager struct {
 	conf           BehaviorConfig
 	log            FieldLogger
 	instance       *V1Instance
-
-	metricAsyncDuration     prometheus.Summary
-	metricBroadcastDuration prometheus.Summary
-	metricBroadcastCounter  *prometheus.CounterVec
 }
 
 func newGlobalManager(conf BehaviorConfig, instance *V1Instance) *globalManager {
 	gm := globalManager{
 		log: instance.log,
-		metricAsyncDuration: prometheus.NewSummary(prometheus.SummaryOpts{
-			Name:       "gubernator_async_durations",
-			Help:       "The duration of GLOBAL async sends in seconds.",
-			Objectives: map[float64]float64{0.5: 0.05, 0.99: 0.001},
-		}),
-		metricBroadcastDuration: prometheus.NewSummary(prometheus.SummaryOpts{
-			Name:       "gubernator_broadcast_durations",
-			Help:       "The duration of GLOBAL broadcasts to peers in seconds.",
-			Objectives: map[float64]float64{0.5: 0.05, 0.99: 0.001},
-		}),
-		metricBroadcastCounter: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "gubernator_broadcast_counter",
-			Help: "The count of broadcasts.",
-		}, []string{"condition"}),
 		asyncQueue:     make(chan *RateLimitReq, conf.GlobalBatchLimit),
 		broadcastQueue: make(chan *RateLimitReq, conf.GlobalBatchLimit),
 		instance:       instance,
@@ -126,7 +108,7 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 		client *PeerClient
 		req    GetPeerRateLimitsReq
 	}
-	defer prometheus.NewTimer(gm.metricAsyncDuration).ObserveDuration()
+	defer prometheus.NewTimer(metricGlobalSendDuration).ObserveDuration()
 	peerRequests := make(map[string]*pair)
 
 	// Assign each request to a peer
@@ -174,7 +156,7 @@ func (gm *globalManager) runBroadcasts() {
 
 			// Send the hits if we reached our batch limit
 			if len(updates) >= gm.conf.GlobalBatchLimit {
-				gm.metricBroadcastCounter.WithLabelValues("queue_full").Inc()
+				metricBroadcastCounter.WithLabelValues("queue_full").Inc()
 				gm.broadcastPeers(context.Background(), updates)
 				updates = make(map[string]*RateLimitReq)
 				return true
@@ -188,7 +170,7 @@ func (gm *globalManager) runBroadcasts() {
 
 		case <-interval.C:
 			if len(updates) != 0 {
-				gm.metricBroadcastCounter.WithLabelValues("timer").Inc()
+				metricBroadcastCounter.WithLabelValues("timer").Inc()
 				gm.broadcastPeers(context.Background(), updates)
 				updates = make(map[string]*RateLimitReq)
 			} else {
@@ -203,7 +185,7 @@ func (gm *globalManager) runBroadcasts() {
 
 // broadcastPeers broadcasts global rate limit statuses to all other peers
 func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]*RateLimitReq) {
-	defer prometheus.NewTimer(gm.metricBroadcastDuration).ObserveDuration()
+	defer prometheus.NewTimer(metricBroadcastDuration).ObserveDuration()
 	var req UpdatePeerGlobalsReq
 
 	metricGlobalQueueLength.Set(float64(len(updates)))

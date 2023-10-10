@@ -260,11 +260,10 @@ func (p *WorkerPool) dispatch(worker *Worker) {
 // GetRateLimit sends a GetRateLimit request to worker pool.
 func (p *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) (retval *RateLimitResp, reterr error) {
 	// Delegate request to assigned channel based on request key.
-	timer1 := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("WorkerPool.GetRateLimit_1"))
 	worker := p.getWorker(rlRequest.HashKey())
-	timer1.ObserveDuration()
-
-	timer2 := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("WorkerPool.GetRateLimit_2"))
+	queueGauge := metricWorkerQueue.WithLabelValues("GetRateLimit", worker.name)
+	queueGauge.Inc()
+	defer queueGauge.Dec()
 	handlerRequest := request{
 		ctx:     ctx,
 		resp:    make(chan *response, 1),
@@ -278,10 +277,8 @@ func (p *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) 
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	timer2.ObserveDuration()
 
 	// Wait for response.
-	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("WorkerPool.GetRateLimit_3")).ObserveDuration()
 	select {
 	case handlerResponse := <-handlerRequest.resp:
 		// Successfully read response.
@@ -329,6 +326,9 @@ func (worker *Worker) handleGetRateLimit(ctx context.Context, req *RateLimitReq,
 // Read from persistent storage.  Load into each appropriate worker's cache.
 // Workers are locked during this load operation to prevent race conditions.
 func (p *WorkerPool) Load(ctx context.Context) (err error) {
+	queueGauge := metricWorkerQueue.WithLabelValues("Load", "")
+	queueGauge.Inc()
+	defer queueGauge.Dec()
 	ch, err := p.conf.Loader.Load()
 	if err != nil {
 		return errors.Wrap(err, "Error in loader.Load")
@@ -448,6 +448,9 @@ MAIN:
 // Save all workers' caches to persistent storage.
 // Workers are locked during this store operation to prevent race conditions.
 func (p *WorkerPool) Store(ctx context.Context) (err error) {
+	queueGauge := metricWorkerQueue.WithLabelValues("Store", "")
+	queueGauge.Inc()
+	defer queueGauge.Dec()
 	var wg sync.WaitGroup
 	out := make(chan *CacheItem, 500)
 
@@ -531,8 +534,11 @@ func (worker *Worker) handleStore(request workerStoreRequest, cache Cache) {
 
 // AddCacheItem adds an item to the worker's cache.
 func (p *WorkerPool) AddCacheItem(ctx context.Context, key string, item *CacheItem) (err error) {
-	respChan := make(chan workerAddCacheItemResponse)
 	worker := p.getWorker(key)
+	queueGauge := metricWorkerQueue.WithLabelValues("AddCacheItem", worker.name)
+	queueGauge.Inc()
+	defer queueGauge.Dec()
+	respChan := make(chan workerAddCacheItemResponse)
 	req := workerAddCacheItemRequest{
 		ctx:      ctx,
 		response: respChan,
@@ -574,8 +580,11 @@ func (worker *Worker) handleAddCacheItem(request workerAddCacheItemRequest, cach
 
 // GetCacheItem gets item from worker's cache.
 func (p *WorkerPool) GetCacheItem(ctx context.Context, key string) (item *CacheItem, found bool, err error) {
-	respChan := make(chan workerGetCacheItemResponse)
 	worker := p.getWorker(key)
+	queueGauge := metricWorkerQueue.WithLabelValues("GetCacheItem", worker.name)
+	queueGauge.Inc()
+	defer queueGauge.Dec()
+	respChan := make(chan workerGetCacheItemResponse)
 	req := workerGetCacheItemRequest{
 		ctx:      ctx,
 		response: respChan,

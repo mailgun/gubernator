@@ -44,70 +44,86 @@ const (
 type V1Instance struct {
 	UnimplementedV1Server
 	UnimplementedPeersV1Server
-	global               *globalManager
-	peerMutex            sync.RWMutex
-	log                  FieldLogger
-	conf                 Config
-	isClosed             bool
-	workerPool           *WorkerPool
+	global     *globalManager
+	peerMutex  sync.RWMutex
+	log        FieldLogger
+	conf       Config
+	isClosed   bool
+	workerPool *WorkerPool
 }
 
-var metricGetRateLimitCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
-	Name: "gubernator_getratelimit_counter",
-	Help: "The count of getLocalRateLimit() calls.  Label \"calltype\" may be \"local\" for calls handled by the same peer, \"forward\" for calls forwarded to another peer, or \"global\" for global rate limits.",
-}, []string{"calltype"})
-var metricFuncTimeDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
-	Name: "gubernator_func_duration",
-	Help: "The timings of key functions in Gubernator in seconds.",
-	Objectives: map[float64]float64{
-		1:    0.001,
-		0.99: 0.001,
-		0.5:  0.01,
-	},
-}, []string{"name"})
-var metricAsyncRequestRetriesCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
-	Name: "gubernator_asyncrequest_retries",
-	Help: "The count of retries occurred in asyncRequest() forwarding a request to another peer.",
-}, []string{"name"})
-var metricQueueLength = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-	Name: "gubernator_queue_length",
-	Help: "The getRateLimitsBatch() queue length in PeerClient.  This represents rate checks queued by for batching to a remote peer.",
-}, []string{"peerAddr"})
-var metricCheckCounter = prometheus.NewCounter(prometheus.CounterOpts{
-	Name: "gubernator_check_counter",
-	Help: "The number of rate limits checked.",
-})
-var metricOverLimitCounter = prometheus.NewCounter(prometheus.CounterOpts{
-	Name: "gubernator_over_limit_counter",
-	Help: "The number of rate limit checks that are over the limit.",
-})
-var metricConcurrentChecks = prometheus.NewGauge(prometheus.GaugeOpts{
-	Name: "gubernator_concurrent_checks_counter",
-	Help: "The number of concurrent GetRateLimits API calls.",
-})
-var metricCheckErrorCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
-	Name: "gubernator_check_error_counter",
-	Help: "The number of errors while checking rate limits.",
-}, []string{"error"})
-var metricBatchSendDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
-	Name: "gubernator_batch_send_duration",
-	Help: "The timings of batch send operations to a remote peer.",
-	Objectives: map[float64]float64{
-		0.99: 0.001,
-	},
-}, []string{"peerAddr"})
-var metricCommandCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
-	Name: "gubernator_command_counter",
-	Help: "The count of commands processed by each worker in WorkerPool.",
-}, []string{"worker", "method"})
-var metricWorkerQueue = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-	Name: "gubernator_worker_queue",
-	Help: "The count of requests queued up in WorkerPool.",
-}, []string{"method"})
-var metricGlobalQueueLength = prometheus.NewGauge(prometheus.GaugeOpts{
-	Name: "gubernator_global_queue_length",
-	Help: "The count of requests queued up for global broadcast.  This is only used for GetRateLimit requests using global behavior.",
-})
+var (
+	metricGetRateLimitCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "gubernator_getratelimit_counter",
+		Help: "The count of getLocalRateLimit() calls.  Label \"calltype\" may be \"local\" for calls handled by the same peer, \"forward\" for calls forwarded to another peer, or \"global\" for global rate limits.",
+	}, []string{"calltype"})
+	metricFuncTimeDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+		Name: "gubernator_func_duration",
+		Help: "The timings of key functions in Gubernator in seconds.",
+		Objectives: map[float64]float64{
+			1:    0.001,
+			0.99: 0.001,
+			0.5:  0.01,
+		},
+	}, []string{"name"})
+	metricOverLimitCounter = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "gubernator_over_limit_counter",
+		Help: "The number of rate limit checks that are over the limit.",
+	})
+	metricConcurrentChecks = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "gubernator_concurrent_checks_counter",
+		Help: "The number of concurrent GetRateLimits API calls.",
+	})
+	metricCheckErrorCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "gubernator_check_error_counter",
+		Help: "The number of errors while checking rate limits.",
+	}, []string{"error"})
+	metricCommandCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "gubernator_command_counter",
+		Help: "The count of commands processed by each worker in WorkerPool.",
+	}, []string{"worker", "method"})
+	metricWorkerQueue = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "gubernator_worker_queue_length",
+		Help: "The count of requests queued up in WorkerPool.",
+	}, []string{"method", "worker"})
+
+	// Batch behavior.
+	metricBatchSendRetries = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "gubernator_batch_send_retries",
+		Help: "The count of retries occurred in asyncRequest() forwarding a request to another peer.",
+	}, []string{"name"})
+	metricBatchQueueLength = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "gubernator_batch_queue_length",
+		Help: "The getRateLimitsBatch() queue length in PeerClient.  This represents rate checks queued by for batching to a remote peer.",
+	}, []string{"peerAddr"})
+	metricBatchSendDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+		Name: "gubernator_batch_send_duration",
+		Help: "The timings of batch send operations to a remote peer.",
+		Objectives: map[float64]float64{
+			0.99: 0.001,
+		},
+	}, []string{"peerAddr"})
+
+	// Global behavior.
+	metricGlobalSendDuration = prometheus.NewSummary(prometheus.SummaryOpts{
+		Name:       "gubernator_global_send_duration",
+		Help:       "The duration of GLOBAL async sends in seconds.",
+		Objectives: map[float64]float64{0.5: 0.05, 0.99: 0.001},
+	})
+	metricBroadcastDuration = prometheus.NewSummary(prometheus.SummaryOpts{
+		Name:       "gubernator_broadcast_duration",
+		Help:       "The duration of GLOBAL broadcasts to peers in seconds.",
+		Objectives: map[float64]float64{0.5: 0.05, 0.99: 0.001},
+	})
+	metricBroadcastCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "gubernator_broadcast_counter",
+		Help: "The count of broadcasts.",
+	}, []string{"condition"})
+	metricGlobalQueueLength = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "gubernator_global_queue_length",
+		Help: "The count of requests queued up for global broadcast.  This is only used for GetRateLimit requests using global behavior.",
+	})
+)
 
 // NewV1Instance instantiate a single instance of a gubernator peer and register this
 // instance with the provided GRPCServer.
@@ -360,7 +376,7 @@ func (s *V1Instance) asyncRequest(ctx context.Context, req *AsyncReq) {
 		if err != nil {
 			if IsNotReady(err) {
 				attempts++
-				metricAsyncRequestRetriesCounter.WithLabelValues(req.Req.Name).Add(1)
+				metricBatchSendRetries.WithLabelValues(req.Req.Name).Add(1)
 				req.Peer, err = s.GetPeer(ctx, req.Key)
 				if err != nil {
 					errPart := fmt.Sprintf("Error finding peer that owns rate limit '%s'", req.Key)
@@ -575,16 +591,12 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (*R
 	))
 
 	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getLocalRateLimit")).ObserveDuration()
-	metricCheckCounter.Add(1)
 
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
 		s.global.QueueUpdate(r)
 	}
 
 	resp, err := s.workerPool.GetRateLimit(ctx, r)
-	if isDeadlineExceeded(err) {
-		metricCheckErrorCounter.WithLabelValues("Timeout").Add(1)
-	}
 
 	tracing.EndScope(ctx, err)
 	return resp, err
@@ -710,40 +722,38 @@ func (s *V1Instance) GetRegionPickers() map[string]PeerPicker {
 
 // Describe fetches prometheus metrics to be registered
 func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
-	ch <- s.global.metricAsyncDuration.Desc()
-	ch <- s.global.metricBroadcastDuration.Desc()
-	s.global.metricBroadcastCounter.Describe(ch)
-	metricGetRateLimitCounter.Describe(ch)
-	metricFuncTimeDuration.Describe(ch)
-	metricAsyncRequestRetriesCounter.Describe(ch)
-	metricQueueLength.Describe(ch)
-	metricConcurrentChecks.Describe(ch)
-	metricCheckErrorCounter.Describe(ch)
-	metricOverLimitCounter.Describe(ch)
-	metricCheckCounter.Describe(ch)
+	metricBatchQueueLength.Describe(ch)
 	metricBatchSendDuration.Describe(ch)
+	metricBatchSendRetries.Describe(ch)
+	metricBroadcastCounter.Describe(ch)
+	metricBroadcastDuration.Describe(ch)
+	metricCheckErrorCounter.Describe(ch)
 	metricCommandCounter.Describe(ch)
-	metricWorkerQueue.Describe(ch)
+	metricConcurrentChecks.Describe(ch)
+	metricFuncTimeDuration.Describe(ch)
+	metricGetRateLimitCounter.Describe(ch)
 	metricGlobalQueueLength.Describe(ch)
+	metricGlobalSendDuration.Describe(ch)
+	metricOverLimitCounter.Describe(ch)
+	metricWorkerQueue.Describe(ch)
 }
 
 // Collect fetches metrics from the server for use by prometheus
 func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
-	ch <- s.global.metricAsyncDuration
-	ch <- s.global.metricBroadcastDuration
-	s.global.metricBroadcastCounter.Collect(ch)
-	metricGetRateLimitCounter.Collect(ch)
-	metricFuncTimeDuration.Collect(ch)
-	metricAsyncRequestRetriesCounter.Collect(ch)
-	metricQueueLength.Collect(ch)
-	metricConcurrentChecks.Collect(ch)
-	metricCheckErrorCounter.Collect(ch)
-	metricOverLimitCounter.Collect(ch)
-	metricCheckCounter.Collect(ch)
+	metricBatchQueueLength.Collect(ch)
 	metricBatchSendDuration.Collect(ch)
+	metricBatchSendRetries.Collect(ch)
+	metricBroadcastCounter.Collect(ch)
+	metricBroadcastDuration.Collect(ch)
+	metricCheckErrorCounter.Collect(ch)
 	metricCommandCounter.Collect(ch)
-	metricWorkerQueue.Collect(ch)
+	metricConcurrentChecks.Collect(ch)
+	metricFuncTimeDuration.Collect(ch)
+	metricGetRateLimitCounter.Collect(ch)
 	metricGlobalQueueLength.Collect(ch)
+	metricGlobalSendDuration.Collect(ch)
+	metricOverLimitCounter.Collect(ch)
+	metricWorkerQueue.Collect(ch)
 }
 
 // HasBehavior returns true if the provided behavior is set

@@ -48,8 +48,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 	if ok {
 		if item.Value == nil {
 			msgPart := "tokenBucket: Invalid cache item; Value is nil"
-			span := trace.SpanFromContext(ctx)
-			span.AddEvent(msgPart, trace.WithAttributes(
+			trace.SpanFromContext(ctx).AddEvent(msgPart, trace.WithAttributes(
 				attribute.String("hashKey", hashKey),
 				attribute.String("key", r.UniqueKey),
 				attribute.String("name", r.Name),
@@ -58,8 +57,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			ok = false
 		} else if item.Key != hashKey {
 			msgPart := "tokenBucket: Invalid cache item; key mismatch"
-			span := trace.SpanFromContext(ctx)
-			span.AddEvent(msgPart, trace.WithAttributes(
+			trace.SpanFromContext(ctx).AddEvent(msgPart, trace.WithAttributes(
 				attribute.String("itemKey", item.Key),
 				attribute.String("hashKey", hashKey),
 				attribute.String("name", r.Name),
@@ -93,8 +91,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		t, ok := item.Value.(*TokenBucketItem)
 		if !ok {
 			// Client switched algorithms; perhaps due to a migration?
-			span := trace.SpanFromContext(ctx)
-			span.AddEvent("Client switched algorithms; perhaps due to a migration?")
+			trace.SpanFromContext(ctx).AddEvent("Client switched algorithms; perhaps due to a migration?")
 
 			c.Remove(hashKey)
 
@@ -163,8 +160,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 		// If we are already at the limit.
 		if rl.Remaining == 0 && r.Hits > 0 {
-			span := trace.SpanFromContext(ctx)
-			span.AddEvent("Already over the limit")
+			trace.SpanFromContext(ctx).AddEvent("Already over the limit")
 			metricOverLimitCounter.Add(1)
 			rl.Status = Status_OVER_LIMIT
 			t.Status = rl.Status
@@ -173,8 +169,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 		// If requested hits takes the remainder.
 		if t.Remaining == r.Hits {
-			span := trace.SpanFromContext(ctx)
-			span.AddEvent("At the limit")
+			trace.SpanFromContext(ctx).AddEvent("At the limit")
 			t.Remaining = 0
 			rl.Remaining = 0
 			return rl, nil
@@ -183,8 +178,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		// If requested is more than available, then return over the limit
 		// without updating the cache.
 		if r.Hits > t.Remaining {
-			span := trace.SpanFromContext(ctx)
-			span.AddEvent("Over the limit")
+			trace.SpanFromContext(ctx).AddEvent("Over the limit")
 			metricOverLimitCounter.Add(1)
 			rl.Status = Status_OVER_LIMIT
 			return rl, nil
@@ -235,8 +229,7 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 
 	// Client could be requesting that we always return OVER_LIMIT.
 	if r.Hits > r.Limit {
-		span := trace.SpanFromContext(ctx)
-		span.AddEvent("Over the limit")
+		trace.SpanFromContext(ctx).AddEvent("Over the limit")
 		metricOverLimitCounter.Add(1)
 		rl.Status = Status_OVER_LIMIT
 		rl.Remaining = r.Limit
@@ -279,8 +272,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 	if ok {
 		if item.Value == nil {
 			msgPart := "leakyBucket: Invalid cache item; Value is nil"
-			span := trace.SpanFromContext(ctx)
-			span.AddEvent(msgPart, trace.WithAttributes(
+			trace.SpanFromContext(ctx).AddEvent(msgPart, trace.WithAttributes(
 				attribute.String("hashKey", hashKey),
 				attribute.String("key", r.UniqueKey),
 				attribute.String("name", r.Name),
@@ -289,8 +281,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			ok = false
 		} else if item.Key != hashKey {
 			msgPart := "leakyBucket: Invalid cache item; key mismatch"
-			span := trace.SpanFromContext(ctx)
-			span.AddEvent(msgPart, trace.WithAttributes(
+			trace.SpanFromContext(ctx).AddEvent(msgPart, trace.WithAttributes(
 				attribute.String("itemKey", item.Key),
 				attribute.String("hashKey", hashKey),
 				attribute.String("name", r.Name),

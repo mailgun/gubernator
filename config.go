@@ -53,7 +53,7 @@ type BehaviorConfig struct {
 	BatchWait time.Duration
 	// The max number of requests we can batch into a single peer request
 	BatchLimit int
-	// DisableBatching disables batching behavior.
+	// DisableBatching disables batching behavior for all ratelimits.
 	DisableBatching bool
 
 	// How long a non-owning peer should wait before syncing hits to the owning peer

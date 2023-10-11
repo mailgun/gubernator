@@ -418,9 +418,8 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 		attribute.String("ratelimit.name", req.Name),
 	))
 	defer func() { tracing.EndScope(ctx, err) }()
-
-	funcTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getGlobalRateLimit"))
-	defer funcTimer.ObserveDuration()
+	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getGlobalRateLimit")).ObserveDuration()
+	metricGetRateLimitCounter.WithLabelValues("global").Inc()
 	// Queue the hit for async update after we have prepared our response.
 	// NOTE: The defer here avoids a race condition where we queue the req to
 	// be forwarded to the owning peer in a separate goroutine but simultaneously
@@ -446,7 +445,6 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 	cpy.Behavior = Behavior_NO_BATCHING
 
 	// Process the rate limit like we own it
-	metricGetRateLimitCounter.WithLabelValues("global").Inc()
 	resp, err = s.getLocalRateLimit(ctx, cpy)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error in getLocalRateLimit")

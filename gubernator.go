@@ -32,6 +32,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -239,20 +240,6 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 			continue
 		}
 
-		if HasBehavior(req.Behavior, Behavior_GLOBAL) {
-			resp.Responses[i], err = s.getGlobalRateLimit(ctx, req)
-			if err != nil {
-				err = errors.Wrap(err, "Error in getGlobalRateLimit")
-				span := trace.SpanFromContext(ctx)
-				span.RecordError(err)
-				resp.Responses[i] = &RateLimitResp{Error: err.Error()}
-			}
-
-			// Inform the client of the owner key of the key
-			resp.Responses[i].Metadata = map[string]string{"owner": peer.Info().GRPCAddress}
-			continue
-		}
-
 		// If our server instance is the owner of this rate limit
 		if peer.Info().IsOwner {
 			// Apply our rate limit algorithm to the request
@@ -267,6 +254,20 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 				resp.Responses[i] = &RateLimitResp{Error: err.Error()}
 			}
 		} else {
+			if HasBehavior(req.Behavior, Behavior_GLOBAL) {
+				resp.Responses[i], err = s.getGlobalRateLimit(ctx, req)
+				if err != nil {
+					err = errors.Wrap(err, "Error in getGlobalRateLimit")
+					span := trace.SpanFromContext(ctx)
+					span.RecordError(err)
+					resp.Responses[i] = &RateLimitResp{Error: err.Error()}
+				}
+
+				// Inform the client of the owner key of the key
+				resp.Responses[i].Metadata = map[string]string{"owner": peer.Info().GRPCAddress}
+				continue
+			}
+
 			// Request must be forwarded to peer that owns the key.
 			// Launch remote peer request in goroutine.
 			wg.Add(1)
@@ -415,22 +416,16 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 		// our cache still holds the rate limit we created on the first hit.
 	}
 
+	cpy := proto.Clone(req).(*RateLimitReq)
+	cpy.Behavior = Behavior_NO_BATCHING
+
 	// Process the rate limit like we own it
-	resp, err = s.getLocalRateLimit(ctx, req)
+	resp, err = s.getLocalRateLimit(ctx, cpy)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error in getLocalRateLimit")
 	}
 
-	// If this peer owns the ratelimit, enqueue an update.
-	if isOwner, err := s.isOwnerOfRateLimit(ctx, req); err == nil {
-		if isOwner {
-			s.global.QueueUpdate(req)
-		} else {
-			// Otherwise, async send to owner.
-			s.global.QueueHit(req)
-		}
-	}
-
+	s.global.QueueHit(req)
 	return resp, nil
 }
 
@@ -576,11 +571,9 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (*R
 	resp, err := s.workerPool.GetRateLimit(ctx, r)
 
 	// If global behavior and owning peer, broadcast update to all peers.
+	// Assuming that this peer does not own the ratelimit.
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
-		isOwner, err := s.isOwnerOfRateLimit(ctx, r)
-		if err == nil && isOwner {
-			s.global.QueueUpdate(r)
-		}
+		s.global.QueueUpdate(r)
 	}
 
 	tracing.EndScope(ctx, err)

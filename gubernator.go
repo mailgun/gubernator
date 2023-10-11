@@ -244,9 +244,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 		if peer.Info().IsOwner {
 			// Apply our rate limit algorithm to the request
 			metricGetRateLimitCounter.WithLabelValues("local").Inc()
-			funcTimer1 := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getLocalRateLimit (local)"))
 			resp.Responses[i], err = s.getLocalRateLimit(ctx, req)
-			funcTimer1.ObserveDuration()
 			if err != nil {
 				err = errors.Wrapf(err, "Error while apply rate limit for '%s'", key)
 				span := trace.SpanFromContext(ctx)
@@ -578,15 +576,6 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (*R
 
 	tracing.EndScope(ctx, err)
 	return resp, err
-}
-
-func (s *V1Instance) isOwnerOfRateLimit(ctx context.Context, req *RateLimitReq) (bool, error) {
-	key := req.Name + "_" + req.UniqueKey
-	peer, err := s.GetPeer(ctx, key)
-	if err != nil {
-		return false, err
-	}
-	return peer.Info().IsOwner, nil
 }
 
 // SetPeers is called by the implementor to indicate the pool of peers has changed

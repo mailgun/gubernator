@@ -329,15 +329,15 @@ func TestHTTPSClientAuth(t *testing.T) {
 	assert.Equal(t, `{"status":"healthy","message":"","peer_count":1}`, strings.ReplaceAll(string(b), " ", ""))
 
 	// Verify we get an error when we try to access existing HTTPListenAddress without cert
-	resp2, err := clientWithoutCert.Do(reqCertRequired)
-	assert.Error(t, err)
-	defer resp2.Body.Close()
+	//nolint:bodyclose // Expect error, no body to close.
+	_, err = clientWithoutCert.Do(reqCertRequired)
+	require.Error(t, err)
 
 	// Check that with a valid client cert we can access /v1/HealthCheck at existing HTTPListenAddress
-	resp3, err := clientWithCert.Do(reqCertRequired)
+	resp2, err := clientWithCert.Do(reqCertRequired)
 	require.NoError(t, err)
-	defer resp3.Body.Close()
-	b, err = io.ReadAll(resp3.Body)
+	defer resp2.Body.Close()
+	b, err = io.ReadAll(resp2.Body)
 	require.NoError(t, err)
 	assert.Equal(t, `{"status":"healthy","message":"","peer_count":1}`, strings.ReplaceAll(string(b), " ", ""))
 }

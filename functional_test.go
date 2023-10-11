@@ -849,7 +849,7 @@ func TestGlobalRateLimits(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		m := getMetric(t, resp.Body, "gubernator_async_durations_count")
+		m := getMetric(t, resp.Body, "gubernator_global_send_duration_count")
 		assert.NotEqual(t, 0, int(m.Value))
 
 		// V1Instance 2 should be the owner of our global rate limit
@@ -861,7 +861,7 @@ func TestGlobalRateLimits(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		m = getMetric(t, resp.Body, "gubernator_broadcast_durations_count")
+		m = getMetric(t, resp.Body, "gubernator_broadcast_duration_count")
 		assert.NotEqual(t, 0, int(m.Value))
 	})
 }

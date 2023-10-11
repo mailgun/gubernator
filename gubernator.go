@@ -55,7 +55,7 @@ type V1Instance struct {
 var (
 	metricGetRateLimitCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "gubernator_getratelimit_counter",
-		Help: "The count of getLocalRateLimit() calls.  Label \"calltype\" may be \"local\" for calls handled by the same peer, \"forward\" for calls forwarded to another peer, or \"global\" for global rate limits.",
+		Help: "The count of getLocalRateLimit() calls.  Label \"calltype\" may be \"local\" for calls handled by the same peer, or \"global\" for global rate limits.",
 	}, []string{"calltype"})
 	metricFuncTimeDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 		Name: "gubernator_func_duration",
@@ -243,7 +243,6 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 		// If our server instance is the owner of this rate limit
 		if peer.Info().IsOwner {
 			// Apply our rate limit algorithm to the request
-			metricGetRateLimitCounter.WithLabelValues("local").Inc()
 			resp.Responses[i], err = s.getLocalRateLimit(ctx, req)
 			if err != nil {
 				err = errors.Wrapf(err, "Error while apply rate limit for '%s'", key)
@@ -334,7 +333,6 @@ func (s *V1Instance) asyncRequest(ctx context.Context, req *AsyncReq) {
 		// If we are attempting again, the owner of this rate limit might have changed to us!
 		if attempts != 0 {
 			if req.Peer.Info().IsOwner {
-				metricGetRateLimitCounter.WithLabelValues("local").Inc()
 				resp.Resp, err = s.getLocalRateLimit(ctx, req.Req)
 				if err != nil {
 					s.log.WithContext(ctx).
@@ -349,7 +347,6 @@ func (s *V1Instance) asyncRequest(ctx context.Context, req *AsyncReq) {
 		}
 
 		// Make an RPC call to the peer that owns this rate limit
-		metricGetRateLimitCounter.WithLabelValues("forward").Inc()
 		r, err := req.Peer.GetPeerRateLimit(ctx, req.Req)
 		if err != nil {
 			if IsNotReady(err) {
@@ -397,7 +394,6 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 	))
 	defer func() { tracing.EndScope(ctx, err) }()
 	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getGlobalRateLimit")).ObserveDuration()
-	metricGetRateLimitCounter.WithLabelValues("global").Inc()
 
 	item, ok, err := s.workerPool.GetCacheItem(ctx, req.HashKey())
 	if err != nil {
@@ -423,6 +419,7 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 		return nil, errors.Wrap(err, "Error in getLocalRateLimit")
 	}
 
+	metricGetRateLimitCounter.WithLabelValues("global").Inc()
 	s.global.QueueHit(req)
 	return resp, nil
 }
@@ -556,17 +553,22 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (health
 	return health, nil
 }
 
-func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (*RateLimitResp, error) {
+func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (_ *RateLimitResp, err error) {
 	ctx = tracing.StartNamedScope(ctx, "V1Instance.getLocalRateLimit", trace.WithAttributes(
 		attribute.String("ratelimit.key", r.UniqueKey),
 		attribute.String("ratelimit.name", r.Name),
 		attribute.Int64("ratelimit.limit", r.Limit),
 		attribute.Int64("ratelimit.hits", r.Hits),
 	))
-
+	defer func() { tracing.EndScope(ctx, err) }()
 	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getLocalRateLimit")).ObserveDuration()
 
 	resp, err := s.workerPool.GetRateLimit(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+
+	metricGetRateLimitCounter.WithLabelValues("local").Inc()
 
 	// If global behavior and owning peer, broadcast update to all peers.
 	// Assuming that this peer does not own the ratelimit.
@@ -574,8 +576,7 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (*R
 		s.global.QueueUpdate(r)
 	}
 
-	tracing.EndScope(ctx, err)
-	return resp, err
+	return resp, nil
 }
 
 // SetPeers is called by the implementor to indicate the pool of peers has changed

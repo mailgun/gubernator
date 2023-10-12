@@ -388,8 +388,13 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 		attribute.String("ratelimit.key", req.UniqueKey),
 		attribute.String("ratelimit.name", req.Name),
 	))
-	defer func() { tracing.EndScope(ctx, err) }()
 	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getGlobalRateLimit")).ObserveDuration()
+	defer func() {
+		if err == nil {
+			s.global.QueueHit(req)
+		}
+		tracing.EndScope(ctx, err)
+	}()
 
 	item, ok, err := s.workerPool.GetCacheItem(ctx, req.HashKey())
 	if err != nil {
@@ -416,7 +421,6 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 	}
 
 	metricGetRateLimitCounter.WithLabelValues("global").Inc()
-	s.global.QueueHit(req)
 	return resp, nil
 }
 

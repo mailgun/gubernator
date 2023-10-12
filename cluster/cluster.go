@@ -23,7 +23,6 @@ import (
 
 	gubernator "github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/holster/v4/clock"
-	"github.com/mailgun/holster/v4/ctxutil"
 	"github.com/mailgun/holster/v4/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -110,7 +109,7 @@ func Restart(ctx context.Context) error {
 // StartWith a local cluster with specific addresses
 func StartWith(localPeers []gubernator.PeerInfo) error {
 	for _, peer := range localPeers {
-		ctx, cancel := ctxutil.WithTimeout(context.Background(), clock.Second*10)
+		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
 		d, err := gubernator.SpawnDaemon(ctx, gubernator.DaemonConfig{
 			Logger:            logrus.WithField("instance", peer.GRPCAddress),
 			GRPCListenAddress: peer.GRPCAddress,

@@ -27,7 +27,6 @@ import (
 
 	gubernator "github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/holster/v4/clock"
-	"github.com/mailgun/holster/v4/ctxutil"
 	"github.com/mailgun/holster/v4/tracing"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -78,7 +77,7 @@ func main() {
 	conf, err := gubernator.SetupDaemonConfig(logrus.StandardLogger(), configFile)
 	checkErr(err, "while getting config")
 
-	ctx, cancel := ctxutil.WithTimeout(ctx, clock.Second*10)
+	ctx, cancel := context.WithTimeout(ctx, clock.Second*10)
 
 	// Start the daemon
 	daemon, err := gubernator.SpawnDaemon(ctx, conf)

@@ -23,7 +23,6 @@ import (
 	"sync"
 
 	"github.com/mailgun/errors"
-	"github.com/mailgun/holster/v4/ctxutil"
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/mailgun/holster/v4/tracing"
 	"github.com/prometheus/client_golang/prometheus"
@@ -178,10 +177,8 @@ func (s *V1Instance) Close() (err error) {
 // rate limit `Name` and `UniqueKey` is not owned by this instance, then we forward the request to the
 // peer that does.
 func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*GetRateLimitsResp, error) {
-
 	funcTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.GetRateLimits"))
 	defer funcTimer.ObserveDuration()
-
 	metricConcurrentChecks.Inc()
 	defer metricConcurrentChecks.Dec()
 
@@ -194,7 +191,6 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 	resp := GetRateLimitsResp{
 		Responses: make([]*RateLimitResp, len(r.Requests)),
 	}
-
 	var wg sync.WaitGroup
 	asyncCh := make(chan AsyncResp, len(r.Requests))
 
@@ -398,7 +394,7 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 	item, ok, err := s.workerPool.GetCacheItem(ctx, req.HashKey())
 	if err != nil {
 		countError(err, "Error in workerPool.GetCacheItem")
-		return nil, errors.Wrap(err, "Error in workerPool.GetCacheItem")
+		return nil, errors.Wrap(err, "during in workerPool.GetCacheItem")
 	}
 	if ok {
 		// Global rate limits are always stored as RateLimitResp regardless of algorithm
@@ -416,7 +412,7 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 	// Process the rate limit like we own it
 	resp, err = s.getLocalRateLimit(ctx, cpy)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error in getLocalRateLimit")
+		return nil, errors.Wrap(err, "during in getLocalRateLimit")
 	}
 
 	metricGetRateLimitCounter.WithLabelValues("global").Inc()
@@ -565,7 +561,7 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (_ 
 
 	resp, err := s.workerPool.GetRateLimit(ctx, r)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "during workerPool.GetRateLimit")
 	}
 
 	metricGetRateLimitCounter.WithLabelValues("local").Inc()
@@ -627,7 +623,7 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 	s.log.WithField("peers", peerInfo).Debug("peers updated")
 
 	// Shutdown any old peers we no longer need
-	ctx, cancel := ctxutil.WithTimeout(context.Background(), s.conf.Behaviors.BatchTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), s.conf.Behaviors.BatchTimeout)
 	defer cancel()
 
 	var shutdownPeers []*PeerClient

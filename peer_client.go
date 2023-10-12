@@ -24,7 +24,6 @@ import (
 
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/collections"
-	"github.com/mailgun/holster/v4/ctxutil"
 	"github.com/mailgun/holster/v4/errors"
 	"github.com/mailgun/holster/v4/tracing"
 	"github.com/prometheus/client_golang/prometheus"
@@ -430,7 +429,7 @@ func (c *PeerClient) sendBatch(ctx context.Context, queue []*request) {
 
 	}
 
-	timeoutCtx, timeoutCancel := ctxutil.WithTimeout(ctx, c.conf.Behavior.BatchTimeout)
+	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, c.conf.Behavior.BatchTimeout)
 	resp, err := c.client.GetPeerRateLimits(timeoutCtx, &req)
 	timeoutCancel()
 

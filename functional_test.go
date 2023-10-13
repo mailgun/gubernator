@@ -842,28 +842,28 @@ func TestGlobalRateLimits(t *testing.T) {
 	testutil.UntilPass(t, 20, clock.Millisecond*200, func(t testutil.TestingT) {
 		// Inspect our metrics, ensure they collected the counts we expected during this test
 		d := cluster.DaemonAt(0)
-		config := d.Config()
-		resp, err := http.Get(fmt.Sprintf("http://%s/metrics", config.HTTPListenAddress))
-		if !assert.NoError(t, err) {
-			return
+		metricsURL := fmt.Sprintf("http://%s/metrics", d.Config().HTTPListenAddress)
+		m := getMetricRequest(t, metricsURL, "gubernator_global_send_duration_count")
+		assert.Equal(t, 1, int(m.Value))
+
+		// Expect one peer (the owning peer) to indicate a broadcast.
+		var broadcastCount int
+		for i := 0; i < cluster.NumOfDaemons(); i++ {
+			d := cluster.DaemonAt(i)
+			metricsURL := fmt.Sprintf("http://%s/metrics", d.Config().HTTPListenAddress)
+			m := getMetricRequest(t, metricsURL, "gubernator_broadcast_duration_count")
+			broadcastCount += int(m.Value)
 		}
-		defer resp.Body.Close()
 
-		m := getMetric(t, resp.Body, "gubernator_async_durations_count")
-		assert.NotEqual(t, 0, int(m.Value))
-
-		// V1Instance 2 should be the owner of our global rate limit
-		d = cluster.DaemonAt(2)
-		config = d.Config()
-		resp, err = http.Get(fmt.Sprintf("http://%s/metrics", config.HTTPListenAddress))
-		if !assert.NoError(t, err) {
-			return
-		}
-		defer resp.Body.Close()
-
-		m = getMetric(t, resp.Body, "gubernator_broadcast_durations_count")
-		assert.NotEqual(t, 0, int(m.Value))
+		assert.Equal(t, 1, broadcastCount)
 	})
+}
+
+func getMetricRequest(t testutil.TestingT, url string, name string) *model.Sample {
+	resp, err := http.Get(url)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	return getMetric(t, resp.Body, name)
 }
 
 func TestChangeLimit(t *testing.T) {

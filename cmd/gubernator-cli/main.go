@@ -28,7 +28,6 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	guber "github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/holster/v4/clock"
-	"github.com/mailgun/holster/v4/ctxutil"
 	"github.com/mailgun/holster/v4/errors"
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/mailgun/holster/v4/syncutil"
@@ -179,7 +178,7 @@ func sendRequest(ctx context.Context, client guber.V1Client, req *guber.GetRateL
 	ctx = tracing.StartScope(ctx)
 	defer tracing.EndScope(ctx, nil)
 
-	ctx, cancel := ctxutil.WithTimeout(ctx, timeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 
 	// Now hit our cluster with the rate limits
 	resp, err := client.GetRateLimits(ctx, req)

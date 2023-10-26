@@ -151,18 +151,21 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 		}
 	}
 
+	var wg syncutil.WaitGroup
 	// Send the rate limit requests to their respective owning peers.
 	for _, p := range peerRequests {
-		ctx, cancel := context.WithTimeout(context.Background(), gm.conf.GlobalTimeout)
-		_, err := p.client.GetPeerRateLimits(ctx, &p.req)
-		cancel()
+		wg.Go(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), gm.conf.GlobalTimeout)
+			_, err := p.client.GetPeerRateLimits(ctx, &p.req)
+			cancel()
 
-		if err != nil {
-			gm.log.WithError(err).
-				Errorf("error sending global hits to '%s'", p.client.Info().GRPCAddress)
-			continue
-		}
+			if err != nil {
+				gm.log.WithError(err).
+					Errorf("error sending global hits to '%s'", p.client.Info().GRPCAddress)
+			}
+		})
 	}
+	wg.Wait()
 }
 
 // runBroadcasts collects status changes for global rate limits and broadcasts the changes to each peer in the cluster.
@@ -232,24 +235,27 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 		})
 	}
 
+	var wg syncutil.WaitGroup
 	for _, peer := range gm.instance.GetPeerList() {
 		// Exclude ourselves from the update
 		if peer.Info().IsOwner {
 			continue
 		}
 
-		ctx, cancel := context.WithTimeout(ctx, gm.conf.GlobalTimeout)
-		_, err := peer.UpdatePeerGlobals(ctx, &req)
-		cancel()
+		wg.Go(func() {
+			ctx, cancel := context.WithTimeout(ctx, gm.conf.GlobalTimeout)
+			_, err := peer.UpdatePeerGlobals(ctx, &req)
+			cancel()
 
-		if err != nil {
-			// Skip peers that are not in a ready state
-			if !IsNotReady(err) {
-				gm.log.WithError(err).Errorf("while broadcasting global updates to '%s'", peer.Info().GRPCAddress)
+			if err != nil {
+				// Skip peers that are not in a ready state
+				if !IsNotReady(err) {
+					gm.log.WithError(err).Errorf("while broadcasting global updates to '%s'", peer.Info().GRPCAddress)
+				}
 			}
-			continue
-		}
+		})
 	}
+	wg.Wait()
 }
 
 func (gm *globalManager) Close() {

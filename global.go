@@ -154,6 +154,7 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 	var wg syncutil.WaitGroup
 	// Send the rate limit requests to their respective owning peers.
 	for _, p := range peerRequests {
+		p := p
 		wg.Go(func() {
 			ctx, cancel := context.WithTimeout(context.Background(), gm.conf.GlobalTimeout)
 			_, err := p.client.GetPeerRateLimits(ctx, &p.req)
@@ -242,6 +243,7 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 			continue
 		}
 
+		peer := peer
 		wg.Go(func() {
 			ctx, cancel := context.WithTimeout(ctx, gm.conf.GlobalTimeout)
 			_, err := peer.UpdatePeerGlobals(ctx, &req)

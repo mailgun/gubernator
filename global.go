@@ -151,7 +151,7 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 		}
 	}
 
-	fan := syncutil.NewFanOut(gm.conf.PeerRequestsConcurrency)
+	fan := syncutil.NewFanOut(gm.conf.GlobalPeerRequestsConcurrency)
 	// Send the rate limit requests to their respective owning peers.
 	for _, p := range peerRequests {
 		fan.Run(func(in interface{}) error {
@@ -237,7 +237,7 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 		})
 	}
 
-	fan := syncutil.NewFanOut(gm.conf.PeerRequestsConcurrency)
+	fan := syncutil.NewFanOut(gm.conf.GlobalPeerRequestsConcurrency)
 	for _, peer := range gm.instance.GetPeerList() {
 		// Exclude ourselves from the update
 		if peer.Info().IsOwner {

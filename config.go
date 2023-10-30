@@ -66,7 +66,7 @@ type BehaviorConfig struct {
 	ForceGlobal bool
 
 	// Number of concurrent requests that will be made to peers. Defaults to 100
-	PeerRequestsConcurrency int
+	GlobalPeerRequestsConcurrency int
 }
 
 // Config for a gubernator instance
@@ -129,7 +129,7 @@ func (c *Config) SetDefaults() error {
 	setter.SetDefault(&c.Behaviors.GlobalBatchLimit, maxBatchSize)
 	setter.SetDefault(&c.Behaviors.GlobalSyncWait, time.Millisecond*100)
 
-	setter.SetDefault(&c.Behaviors.PeerRequestsConcurrency, 100)
+	setter.SetDefault(&c.Behaviors.GlobalPeerRequestsConcurrency, 100)
 
 	setter.SetDefault(&c.LocalPicker, NewReplicatedConsistentHash(nil, defaultReplicas))
 	setter.SetDefault(&c.RegionPicker, NewRegionPicker(nil))

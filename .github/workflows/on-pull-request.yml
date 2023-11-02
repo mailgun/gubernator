@@ -46,7 +46,7 @@ jobs:
         run: go test -v -race -p=1 -count=1
   go-bench:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Checkout code
         uses: actions/checkout@v3

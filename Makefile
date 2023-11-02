@@ -20,7 +20,7 @@ test:
 
 .PHONY: bench
 bench:
-	go test ./... -bench . -benchtime 10s -timeout 0 -run=XXX -cpu 1 -benchmem
+	go test ./... -bench . -benchtime 5s -timeout 0 -run=XXX -cpu 1 -benchmem
 
 .PHONY: docker
 docker:

@@ -44,4 +44,5 @@ jobs:
         with:
           path: ./cache/benchmark-data.json
           # Save with commit hash to avoid "cache already exists"
-          key: ${{ github.sha }}-go-benchmark
+          # Save with OS to prevent comparing against results from different CPUs
+          key: ${{ github.sha }}-${{ runner.os }}-go-benchmark

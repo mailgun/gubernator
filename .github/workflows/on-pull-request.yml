@@ -75,11 +75,12 @@ jobs:
         uses: actions/cache/restore@v3
         with:
           path: ./cache/benchmark-data.json
-          key: ${{ steps.get-main-branch-sha.outputs.sha }}-go-benchmark
+          key: ${{ steps.get-main-branch-sha.outputs.sha }}-${{ runner.os }}-go-benchmark
           fail-on-cache-miss: true
 
       - name: Compare benchmarks
         uses: benchmark-action/github-action-benchmark@v1
+        if: success()
         with:
           # What benchmark tool the output.txt came from
           tool: 'go'

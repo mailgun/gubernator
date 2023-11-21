@@ -8,7 +8,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.18.0
 	github.com/hashicorp/memberlist v0.5.0
 	github.com/mailgun/errors v0.1.5
-	github.com/mailgun/holster/v4 v4.16.2-0.20231121151219-6a14c59be49f
+	github.com/mailgun/holster/v4 v4.16.2-0.20231121154636-69040cb71a3b
 	github.com/miekg/dns v1.1.50
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.13.0

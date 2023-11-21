@@ -100,18 +100,22 @@ func (s *Daemon) Start(ctx context.Context) error {
 	_ = s.promRegister.Register(s.statsHandler)
 
 	var filters []otelgrpc.Option
-	if s.conf.TraceLevel != tracing.DebugLevel {
-		filters = []otelgrpc.Option{
-			otelgrpc.WithInterceptorFilter(TraceLevelInfoFilter),
-		}
-	}
+	// otelgrpc deprecated use of interceptors in v0.45.0 in favor of stats
+	// handlers to propagate trace context.
+	// However, stats handlers do not have a filter feature.
+	// See: https://github.com/open-telemetry/opentelemetry-go-contrib/issues/4575
+	// if s.conf.TraceLevel != tracing.DebugLevel {
+	// 	filters = []otelgrpc.Option{
+	// 		otelgrpc.WithInterceptorFilter(TraceLevelInfoFilter),
+	// 	}
+	// }
 
 	opts := []grpc.ServerOption{
 		grpc.StatsHandler(s.statsHandler),
 		grpc.MaxRecvMsgSize(1024 * 1024),
 
 		// OpenTelemetry instrumentation on gRPC endpoints.
-		grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor(filters...)),
+		grpc.StatsHandler(otelgrpc.NewServerHandler(filters...)),
 	}
 
 	if s.conf.GRPCMaxConnectionAgeSeconds > 0 {

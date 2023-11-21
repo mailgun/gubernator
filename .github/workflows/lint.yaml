@@ -1,13 +1,8 @@
-# Optional workflow for Go Static Code Analysis check,
-# copy this file to yours <repo>/.github/workflows folder only if you need this.
-# See https://mailgun.atlassian.net/wiki/spaces/ENG/pages/4278943767/Go+Static+Code+Analysis+Linters
-
 name: Lint
 
 on:
   push:
-    branches:
-      - master
+    branches: [ master ]
   pull_request:
 
 env:
@@ -24,8 +19,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Install Go
-        uses: actions/setup-go@v3
+      - name: Set up Go
+        uses: actions/setup-go@v4
         with:
           go-version-file: ./go.mod
           cache: true # caching and restoring go modules and build outputs

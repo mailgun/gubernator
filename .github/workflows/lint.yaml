@@ -7,12 +7,10 @@ name: Lint
 on:
   push:
     branches:
-      - main
       - master
   pull_request:
 
 env:
-  SSH_AUTH_SOCK: /tmp/ssh_agent.sock
   GOLANGCI_LINT_VERSION: v1.54.2
 
 jobs:
@@ -31,18 +29,6 @@ jobs:
         with:
           go-version-file: ./go.mod
           cache: true # caching and restoring go modules and build outputs
-
-      - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          ssh-agent -a $SSH_AUTH_SOCK > /dev/null
-          ssh-add - <<< "${{ secrets.CI_SSH_KEY }}"
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
-
-      - name: Configure git for private modules
-        run: |
-          git config --global url.ssh://git@github.com/.insteadOf https://github.com/
-          go env -w GOPRIVATE=github.com/mailgun
 
       - name: Check that 'go mod tidy' was called before commit
         run: go mod tidy && git diff --exit-code

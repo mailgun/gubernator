@@ -47,6 +47,7 @@ func BenchmarkCache(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					key := strconv.Itoa(i)
 					_, _ = cache.GetItem(key)
+					time.Sleep(1 * time.Second)
 				}
 			})
 

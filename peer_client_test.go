@@ -64,7 +64,7 @@ func TestPeerClientShutdown(t *testing.T) {
 			wg := sync.WaitGroup{}
 			wg.Add(threads)
 			// Spawn a whole bunch of concurrent requests to test shutdown in various states
-			for i := 0; i < threads; i++ {
+			for j := 0; j < threads; j++ {
 				go func() {
 					defer wg.Done()
 					ctx := context.Background()

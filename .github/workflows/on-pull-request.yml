@@ -2,7 +2,7 @@ name: On Pull Request
 
 on:
   pull_request:
-    branches: [ master, main ]
+    branches: [ master ]
 
 jobs:
   test:
@@ -16,7 +16,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@master
+        uses: actions/checkout@v4
 
       - name: Fetch git tags
         run: git fetch --tags
@@ -25,14 +25,12 @@ jobs:
         run: ./contrib/check-version.sh
 
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ matrix.go-version }}
 
-      - run: go env
-
       - name: Cache deps
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}

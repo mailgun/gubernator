@@ -1,0 +1,36 @@
+name: Lint
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+
+env:
+  GOLANGCI_LINT_VERSION: v1.54.2
+
+jobs:
+  lint:
+    name: lint
+    strategy:
+      matrix:
+        os: [ ubuntu-latest ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: ./go.mod
+          cache: true # caching and restoring go modules and build outputs
+
+      - name: Check that 'go mod tidy' was called before commit
+        run: go mod tidy && git diff --exit-code
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          skip-cache: true # cache/restore is done by actions/setup-go@v3 step
+          args: -v

@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mailgun/gubernator/v2"
+	gubernator "github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"

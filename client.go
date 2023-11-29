@@ -48,8 +48,7 @@ func DialV1Server(server string, tls *tls.Config) (V1Client, error) {
 
 	// Setup OpenTelemetry interceptor to propagate spans.
 	opts := []grpc.DialOption{
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	}
 	if tls != nil {
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tls)))

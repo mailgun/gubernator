@@ -133,7 +133,7 @@ func (c *PeerClient) connect(ctx context.Context) (err error) {
 
 		if c.conf.TraceGRPC {
 			opts = []grpc.DialOption{
-				grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
+				grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 			}
 		}
 

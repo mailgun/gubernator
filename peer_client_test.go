@@ -22,7 +22,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/mailgun/gubernator/v2"
+	gubernator "github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/gubernator/v2/cluster"
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/stretchr/testify/assert"
@@ -64,7 +64,7 @@ func TestPeerClientShutdown(t *testing.T) {
 			wg := sync.WaitGroup{}
 			wg.Add(threads)
 			// Spawn a whole bunch of concurrent requests to test shutdown in various states
-			for i := 0; i < threads; i++ {
+			for j := 0; j < threads; j++ {
 				go func() {
 					defer wg.Done()
 					ctx := context.Background()

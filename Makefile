@@ -18,6 +18,10 @@ test:
 		go tool cover -html coverage.out -o coverage.html; \
 		exit $$ret)
 
+.PHONY: bench
+bench:
+	go test ./... -bench . -benchtime 5s -timeout 0 -run=XXX -benchmem
+
 .PHONY: docker
 docker:
 	docker build --build-arg VERSION=$(VERSION) -t ghcr.io/mailgun/gubernator:$(VERSION) .

@@ -18,40 +18,16 @@ syntax = "proto3";
 
 option go_package = "github.com/mailgun/gubernator";
 
-option cc_generic_services = true;
+package gubernator.v3;
 
-package pb.gubernator;
-
-import "google/api/annotations.proto";
-
-service V1 {
-
-  // Given a list of rate limit requests, return the rate limits of each.
-  rpc GetRateLimits (GetRateLimitsReq) returns (GetRateLimitsResp) {
-    option (google.api.http) = {
-      post: "/v1/GetRateLimits"
-      body: "*"
-    };
-  }
-
-
-  // This method is for round trip benchmarking and can be used by
-  // the client to determine connectivity to the server
-  rpc HealthCheck (HealthCheckReq) returns (HealthCheckResp) {
-    option (google.api.http) = {
-      get: "/v1/HealthCheck"
-    };
-  }
+// Must specify at least one RateLimitRequest
+message CheckRateLimitsRequest {
+  repeated RateLimitRequest requests = 1;
 }
 
-// Must specify at least one Request
-message GetRateLimitsReq {
-  repeated RateLimitReq requests = 1;
-}
-
-// RateLimits returned are in the same order as the Requests
-message GetRateLimitsResp {
-  repeated RateLimitResp responses = 1;
+// RateLimits returned are in the same order provided in CheckRateLimitsRequest
+message CheckRateLimitsResponse {
+  repeated RateLimitResponse responses = 1;
 }
 
 enum Algorithm {
@@ -122,15 +98,10 @@ enum Behavior {
   // cache value. For `LEAKY_BUCKET` it sets the `Remaining` to `Limit`.
   RESET_REMAINING = 8;
 
-  // Enables rate limits to be pushed to other regions. Currently this is only implemented when using
-  // 'member-list' peer discovery. Also requires GUBER_DATA_CENTER to be set to different values on at
-  // least 2 instances of Gubernator.
-  MULTI_REGION = 16;
-
   // TODO: Add support for LOCAL. Which would force the rate limit to be handled by the local instance
 }
 
-message RateLimitReq {
+message RateLimitRequest {
   // The name of the rate limit IE: 'requests_per_second', 'gets_per_minute`
   string name = 1;
 
@@ -171,7 +142,7 @@ enum Status {
   OVER_LIMIT = 1;
 }
 
-message RateLimitResp {
+message RateLimitResponse {
   // The status of the rate limit.
   Status status = 1;
   // The currently configured request limit (Identical to RateLimitRequest.rate_limit_config.limit).
@@ -182,12 +153,12 @@ message RateLimitResp {
   int64 reset_time = 4;
   // Contains the error; If set all other values should be ignored
   string error = 5;
-  // This is additional metadata that a client might find useful. (IE: Additional headers, corrdinator ownership, etc..)
+  // This is additional metadata that a client might find useful. (IE: Additional headers, coordinator ownership, etc..)
   map<string, string> metadata = 6;
 }
 
-message HealthCheckReq {}
-message HealthCheckResp {
+message HealthCheckRequest {}
+message HealthCheckResponse {
   // Valid entries are 'healthy' or 'unhealthy'
   string status = 1;
   // If 'unhealthy', message indicates the problem

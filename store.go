@@ -47,16 +47,16 @@ type TokenBucketItem struct {
 // to maximize performance of gubernator.
 // Implementations MUST be threadsafe.
 type Store interface {
-	// Called by gubernator *after* a rate limit item is updated. It's up to the store to
+	// OnChange is called by gubernator *after* a rate limit item is updated. It's up to the store to
 	// decide if this rate limit item should be persisted in the store. It's up to the
 	// store to expire old rate limit items. The CacheItem represents the current state of
-	// the rate limit item *after* the RateLimitReq has been applied.
-	OnChange(ctx context.Context, r *RateLimitReq, item *CacheItem)
+	// the rate limit item *after* the RateLimitRequest has been applied.
+	OnChange(ctx context.Context, r *RateLimitRequest, item *CacheItem)
 
 	// Called by gubernator when a rate limit is missing from the cache. It's up to the store
 	// to decide if this request is fulfilled. Should return true if the request is fulfilled
 	// and false if the request is not fulfilled or doesn't exist in the store.
-	Get(ctx context.Context, r *RateLimitReq) (*CacheItem, bool)
+	Get(ctx context.Context, r *RateLimitRequest) (*CacheItem, bool)
 
 	// Called by gubernator when an existing rate limit should be removed from the store.
 	// NOTE: This is NOT called when an rate limit expires from the cache, store implementors
@@ -95,12 +95,12 @@ type MockStore struct {
 
 var _ Store = &MockStore{}
 
-func (ms *MockStore) OnChange(ctx context.Context, r *RateLimitReq, item *CacheItem) {
+func (ms *MockStore) OnChange(ctx context.Context, r *RateLimitRequest, item *CacheItem) {
 	ms.Called["OnChange()"] += 1
 	ms.CacheItems[item.Key] = item
 }
 
-func (ms *MockStore) Get(ctx context.Context, r *RateLimitReq) (*CacheItem, bool) {
+func (ms *MockStore) Get(ctx context.Context, r *RateLimitRequest) (*CacheItem, bool) {
 	ms.Called["Get()"] += 1
 	item, ok := ms.CacheItems[r.HashKey()]
 	return item, ok

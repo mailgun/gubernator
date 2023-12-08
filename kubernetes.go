@@ -195,7 +195,7 @@ main:
 			e.log.Errorf("expected type v1.Endpoints got '%s' instead", reflect.TypeOf(obj).String())
 		}
 
-		peer := PeerInfo{GRPCAddress: fmt.Sprintf("%s:%s", pod.Status.PodIP, e.conf.PodPort)}
+		peer := PeerInfo{HTTPAddress: fmt.Sprintf("%s:%s", pod.Status.PodIP, e.conf.PodPort)}
 
 		// if containers are not ready or not running then skip this peer
 		for _, status := range pod.Status.ContainerStatuses {
@@ -228,7 +228,7 @@ func (e *K8sPool) updatePeersFromEndpoints() {
 				// TODO(thrawn01): Might consider using the `namespace` as the `DataCenter`. We should
 				//  do what ever k8s convention is for identifying a k8s cluster within a federated multi-data
 				//  center setup.
-				peer := PeerInfo{GRPCAddress: fmt.Sprintf("%s:%s", addr.IP, e.conf.PodPort)}
+				peer := PeerInfo{HTTPAddress: fmt.Sprintf("%s:%s", addr.IP, e.conf.PodPort)}
 
 				if addr.IP == e.conf.PodIP {
 					peer.IsOwner = true

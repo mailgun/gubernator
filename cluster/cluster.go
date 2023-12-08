@@ -21,9 +21,8 @@ import (
 	"fmt"
 	"math/rand"
 
-	gubernator "github.com/mailgun/gubernator/v2"
+	"github.com/mailgun/gubernator/v3"
 	"github.com/mailgun/holster/v4/clock"
-	"github.com/mailgun/holster/v4/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -36,8 +35,14 @@ const (
 var daemons []*gubernator.Daemon
 var peers []gubernator.PeerInfo
 
-// GetRandomPeer returns a random peer from the cluster
-func GetRandomPeer(dc string) gubernator.PeerInfo {
+// GetRandomClientOptions returns gubernator.ClientOptions for a random peer in the cluster
+func GetRandomClientOptions(dc string) gubernator.ClientOptions {
+	info := GetRandomPeerInfo(dc)
+	return gubernator.WithNoTLS(info.HTTPAddress)
+}
+
+// GetRandomPeerInfo returns a random peer from the cluster
+func GetRandomPeerInfo(dc string) gubernator.PeerInfo {
 	var local []gubernator.PeerInfo
 
 	for _, p := range peers {
@@ -80,14 +85,13 @@ func NumOfDaemons() int {
 
 // Start a local cluster of gubernator servers
 func Start(numInstances int) error {
-	// Ideally we should let the socket choose the port, but then
+	// Ideally, we should let the socket choose the port, but then
 	// some things like the logger will not be set correctly.
 	var peers []gubernator.PeerInfo
 	port := 1111
 	for i := 0; i < numInstances; i++ {
 		peers = append(peers, gubernator.PeerInfo{
 			HTTPAddress: fmt.Sprintf("localhost:%d", port),
-			GRPCAddress: fmt.Sprintf("localhost:%d", port+1),
 		})
 		port += 2
 	}
@@ -97,7 +101,7 @@ func Start(numInstances int) error {
 // Restart the cluster
 func Restart(ctx context.Context) error {
 	for i := 0; i < len(daemons); i++ {
-		daemons[i].Close()
+		daemons[i].Close(context.Background())
 		if err := daemons[i].Start(ctx); err != nil {
 			return err
 		}
@@ -111,8 +115,7 @@ func StartWith(localPeers []gubernator.PeerInfo) error {
 	for _, peer := range localPeers {
 		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
 		d, err := gubernator.SpawnDaemon(ctx, gubernator.DaemonConfig{
-			Logger:            logrus.WithField("instance", peer.GRPCAddress),
-			GRPCListenAddress: peer.GRPCAddress,
+			Logger:            logrus.WithField("instance", peer.HTTPAddress),
 			HTTPListenAddress: peer.HTTPAddress,
 			DataCenter:        peer.DataCenter,
 			Behaviors: gubernator.BehaviorConfig{
@@ -124,13 +127,12 @@ func StartWith(localPeers []gubernator.PeerInfo) error {
 		})
 		cancel()
 		if err != nil {
-			return errors.Wrapf(err, "while starting server for addr '%s'", peer.GRPCAddress)
+			return fmt.Errorf("while starting server for addr '%s': %w", peer.HTTPAddress, err)
 		}
 
 		// Add the peers and daemons to the package level variables
 		peers = append(peers, gubernator.PeerInfo{
-			GRPCAddress: d.GRPCListeners[0].Addr().String(),
-			HTTPAddress: d.HTTPListener.Addr().String(),
+			HTTPAddress: d.Listener.Addr().String(),
 			DataCenter:  peer.DataCenter,
 		})
 		daemons = append(daemons, d)
@@ -146,7 +148,7 @@ func StartWith(localPeers []gubernator.PeerInfo) error {
 // Stop all daemons in the cluster
 func Stop() {
 	for _, d := range daemons {
-		d.Close()
+		d.Close(context.Background())
 	}
 	peers = nil
 	daemons = nil

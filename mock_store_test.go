@@ -21,7 +21,7 @@ package gubernator_test
 import (
 	"context"
 
-	guber "github.com/mailgun/gubernator/v2"
+	guber "github.com/mailgun/gubernator/v3"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -31,11 +31,11 @@ type MockStore2 struct {
 
 var _ guber.Store = &MockStore2{}
 
-func (m *MockStore2) OnChange(ctx context.Context, r *guber.RateLimitReq, item *guber.CacheItem) {
+func (m *MockStore2) OnChange(ctx context.Context, r *guber.RateLimitRequest, item *guber.CacheItem) {
 	m.Called(ctx, r, item)
 }
 
-func (m *MockStore2) Get(ctx context.Context, r *guber.RateLimitReq) (*guber.CacheItem, bool) {
+func (m *MockStore2) Get(ctx context.Context, r *guber.RateLimitRequest) (*guber.CacheItem, bool) {
 	args := m.Called(ctx, r)
 	retval, _ := args.Get(0).(*guber.CacheItem)
 	return retval, args.Bool(1)

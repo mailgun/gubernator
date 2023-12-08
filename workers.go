@@ -44,13 +44,14 @@ import (
 	"sync/atomic"
 
 	"github.com/OneOfOne/xxhash"
-	"github.com/mailgun/holster/v4/errors"
+	"github.com/mailgun/errors"
 	"github.com/mailgun/holster/v4/setter"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/trace"
 )
 
+// TODO: Make this Private
 type WorkerPool struct {
 	hasher          workerHasher
 	workers         []*Worker
@@ -60,6 +61,7 @@ type WorkerPool struct {
 	done            chan struct{}
 }
 
+// TODO: Make this Private
 type Worker struct {
 	name                string
 	conf                *Config
@@ -258,7 +260,7 @@ func (p *WorkerPool) dispatch(worker *Worker) {
 }
 
 // GetRateLimit sends a GetRateLimit request to worker pool.
-func (p *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) (retval *RateLimitResp, reterr error) {
+func (p *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitRequest) (retval *RateLimitResponse, reterr error) {
 	// Delegate request to assigned channel based on request key.
 	worker := p.getWorker(rlRequest.HashKey())
 	queueGauge := metricWorkerQueue.WithLabelValues("GetRateLimit", worker.name)
@@ -289,9 +291,9 @@ func (p *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) 
 }
 
 // Handle request received by worker.
-func (worker *Worker) handleGetRateLimit(ctx context.Context, req *RateLimitReq, cache Cache) (*RateLimitResp, error) {
+func (worker *Worker) handleGetRateLimit(ctx context.Context, req *RateLimitRequest, cache Cache) (*RateLimitResponse, error) {
 	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("Worker.handleGetRateLimit")).ObserveDuration()
-	var rlResponse *RateLimitResp
+	var rlResponse *RateLimitResponse
 	var err error
 
 	switch req.Algorithm {

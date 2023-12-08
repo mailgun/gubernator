@@ -17,17 +17,24 @@ limitations under the License.
 package gubernator
 
 import (
+	"bytes"
+	"context"
 	crand "crypto/rand"
 	"crypto/tls"
+	"fmt"
 	"math/rand"
+	"net"
+	"net/http"
 	"time"
 
+	"github.com/duh-rpc/duh-go"
+	v1 "github.com/duh-rpc/duh-go/proto/v1"
 	"github.com/mailgun/holster/v4/clock"
+	"github.com/mailgun/holster/v4/setter"
 	"github.com/pkg/errors"
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
+	"go.opentelemetry.io/otel/propagation"
+	"golang.org/x/net/http2"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -36,32 +43,158 @@ const (
 	Minute      = 60 * Second
 )
 
-func (m *RateLimitReq) HashKey() string {
+type Client interface {
+	CheckRateLimits(context.Context, *CheckRateLimitsRequest, *CheckRateLimitsResponse) error
+	HealthCheck(context.Context, *HealthCheckResponse) error
+}
+
+func (m *RateLimitRequest) HashKey() string {
 	return m.Name + "_" + m.UniqueKey
 }
 
-// DialV1Server is a convenience function for dialing gubernator instances
-func DialV1Server(server string, tls *tls.Config) (V1Client, error) {
-	if len(server) == 0 {
-		return nil, errors.New("server is empty; must provide a server")
+type ClientOptions struct {
+	// Users can provide their own http client with TLS config if needed
+	Client *http.Client
+	// The address of endpoint in the format `<scheme>://<host>:<port>`
+	Endpoint string
+}
+
+type client struct {
+	*duh.Client
+	prop propagation.TraceContext
+	opts ClientOptions
+}
+
+// NewClient creates a new instance of the Gubernator user client
+func NewClient(opts ClientOptions) (Client, error) {
+	setter.SetDefault(&opts.Client, DefaultHTTPClient)
+
+	if len(opts.Endpoint) == 0 {
+		return nil, errors.New("opts.Endpoint is empty; must provide an address")
 	}
 
-	// Setup OpenTelemetry interceptor to propagate spans.
-	opts := []grpc.DialOption{
-		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
-	}
-	if tls != nil {
-		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tls)))
-	} else {
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	}
+	return &client{
+		Client: &duh.Client{
+			Client: opts.Client,
+		},
+		opts: opts,
+	}, nil
+}
 
-	conn, err := grpc.Dial(server, opts...)
+func NewPeerClient(opts ClientOptions) PeerClient {
+	return &client{
+		Client: &duh.Client{
+			Client: opts.Client,
+		},
+		opts: opts,
+	}
+}
+
+func (c *client) CheckRateLimits(ctx context.Context, req *CheckRateLimitsRequest, resp *CheckRateLimitsResponse) error {
+	payload, err := proto.Marshal(req)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to dial server %s", server)
+		return duh.NewClientError(fmt.Errorf("while marshaling request payload: %w", err), nil)
 	}
 
-	return NewV1Client(conn), nil
+	r, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		fmt.Sprintf("%s%s", c.opts.Endpoint, RPCRateLimitCheck), bytes.NewReader(payload))
+	if err != nil {
+		return duh.NewClientError(err, nil)
+	}
+
+	r.Header.Set("Content-Type", duh.ContentTypeProtoBuf)
+	return c.Do(r, resp)
+}
+
+func (c *client) HealthCheck(ctx context.Context, resp *HealthCheckResponse) error {
+	payload, err := proto.Marshal(&HealthCheckRequest{})
+	if err != nil {
+		return duh.NewClientError(fmt.Errorf("while marshaling request payload: %w", err), nil)
+	}
+
+	r, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		fmt.Sprintf("%s%s", c.opts.Endpoint, RPCHealthCheck), bytes.NewReader(payload))
+	if err != nil {
+		return duh.NewClientError(err, nil)
+	}
+
+	r.Header.Set("Content-Type", duh.ContentTypeProtoBuf)
+	return c.Do(r, resp)
+}
+
+func (c *client) Forward(ctx context.Context, req *ForwardRequest, resp *ForwardResponse) error {
+	payload, err := proto.Marshal(req)
+	if err != nil {
+		return duh.NewClientError(fmt.Errorf("while marshaling request payload: %w", err), nil)
+	}
+
+	r, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		fmt.Sprintf("%s%s", c.opts.Endpoint, RPCPeerForward), bytes.NewReader(payload))
+	if err != nil {
+		return duh.NewClientError(err, nil)
+	}
+
+	c.prop.Inject(ctx, propagation.HeaderCarrier(r.Header))
+	r.Header.Set("Content-Type", duh.ContentTypeProtoBuf)
+	return c.Do(r, resp)
+}
+
+func (c *client) Update(ctx context.Context, req *UpdateRequest) error {
+	payload, err := proto.Marshal(req)
+	if err != nil {
+		return duh.NewClientError(fmt.Errorf("while marshaling request payload: %w", err), nil)
+	}
+	r, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		fmt.Sprintf("%s%s", c.opts.Endpoint, RPCPeerUpdate), bytes.NewReader(payload))
+	if err != nil {
+		return duh.NewClientError(err, nil)
+	}
+
+	r.Header.Set("Content-Type", duh.ContentTypeProtoBuf)
+	return c.Do(r, &v1.Reply{})
+}
+
+var (
+	// DefaultHTTPClient enables H2C (HTTP/2 over Cleartext)
+	DefaultHTTPClient = &http.Client{
+		Transport: &http2.Transport{
+			// So http2.Transport doesn't complain the URL scheme isn't 'https'
+			AllowHTTP: true,
+			// Pretend we are dialing a TLS endpoint. (Note, we ignore the passed tls.Config)
+			DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, network, addr)
+			},
+		},
+	}
+)
+
+// WithNoTLS returns ClientOptions suitable for use with NON-TLS clients with H2C enabled.
+func WithNoTLS(address string) ClientOptions {
+	return ClientOptions{
+		Endpoint: fmt.Sprintf("http://%s", address),
+		Client:   DefaultHTTPClient,
+	}
+}
+
+// WithTLS returns ClientOptions suitable for use with NON-TLS clients with H2C enabled.
+func WithTLS(tls *tls.Config, address string) ClientOptions {
+	return ClientOptions{
+		Endpoint: fmt.Sprintf("https://%s", address),
+		Client: &http.Client{
+			Transport: &http2.Transport{
+				TLSClientConfig: tls,
+			},
+		},
+	}
+}
+
+// WithDaemonConfig returns ClientOptions suitable for use by the Daemon
+func WithDaemonConfig(conf DaemonConfig, address string) ClientOptions {
+	if conf.ClientTLS() == nil {
+		return WithNoTLS(address)
+	}
+	return WithTLS(conf.ClientTLS(), address)
 }
 
 // ToTimeStamp is a convenience function to convert a time.Duration

@@ -19,6 +19,8 @@ package gubernator
 import (
 	"context"
 
+	"github.com/mailgun/holster/v4/ctxutil"
+
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/protobuf/proto"
@@ -27,23 +29,24 @@ import (
 // globalManager manages async hit queue and updates peers in
 // the cluster periodically when a global rate limit we own updates.
 type globalManager struct {
-	asyncQueue               chan *RateLimitReq
-	broadcastQueue           chan *RateLimitReq
-	wg                       syncutil.WaitGroup
-	conf                     BehaviorConfig
-	log                      FieldLogger
-	instance                 *V1Instance
+	asyncQueue     chan *RateLimitRequest
+	broadcastQueue chan *RateLimitRequest
+	wg             syncutil.WaitGroup
+	conf           BehaviorConfig
+	log            FieldLogger
+	instance       *Service
+
 	metricGlobalSendDuration prometheus.Summary
 	metricBroadcastDuration  prometheus.Summary
 	metricBroadcastCounter   *prometheus.CounterVec
 	metricGlobalQueueLength  prometheus.Gauge
 }
 
-func newGlobalManager(conf BehaviorConfig, instance *V1Instance) *globalManager {
+func newGlobalManager(conf BehaviorConfig, instance *Service) *globalManager {
 	gm := globalManager{
 		log:            instance.log,
-		asyncQueue:     make(chan *RateLimitReq, conf.GlobalBatchLimit),
-		broadcastQueue: make(chan *RateLimitReq, conf.GlobalBatchLimit),
+		asyncQueue:     make(chan *RateLimitRequest, conf.GlobalBatchLimit),
+		broadcastQueue: make(chan *RateLimitRequest, conf.GlobalBatchLimit),
 		instance:       instance,
 		conf:           conf,
 		metricGlobalSendDuration: prometheus.NewSummary(prometheus.SummaryOpts{
@@ -70,11 +73,11 @@ func newGlobalManager(conf BehaviorConfig, instance *V1Instance) *globalManager 
 	return &gm
 }
 
-func (gm *globalManager) QueueHit(r *RateLimitReq) {
+func (gm *globalManager) QueueHit(r *RateLimitRequest) {
 	gm.asyncQueue <- r
 }
 
-func (gm *globalManager) QueueUpdate(r *RateLimitReq) {
+func (gm *globalManager) QueueUpdate(r *RateLimitRequest) {
 	gm.broadcastQueue <- r
 }
 
@@ -82,7 +85,7 @@ func (gm *globalManager) QueueUpdate(r *RateLimitReq) {
 // be sent to their owning peers.
 func (gm *globalManager) runAsyncHits() {
 	var interval = NewInterval(gm.conf.GlobalSyncWait)
-	hits := make(map[string]*RateLimitReq)
+	hits := make(map[string]*RateLimitRequest)
 
 	gm.wg.Until(func(done chan struct{}) bool {
 
@@ -100,7 +103,7 @@ func (gm *globalManager) runAsyncHits() {
 			// Send the hits if we reached our batch limit
 			if len(hits) == gm.conf.GlobalBatchLimit {
 				gm.sendHits(hits)
-				hits = make(map[string]*RateLimitReq)
+				hits = make(map[string]*RateLimitRequest)
 				return true
 			}
 
@@ -113,7 +116,7 @@ func (gm *globalManager) runAsyncHits() {
 		case <-interval.C:
 			if len(hits) != 0 {
 				gm.sendHits(hits)
-				hits = make(map[string]*RateLimitReq)
+				hits = make(map[string]*RateLimitRequest)
 			}
 		case <-done:
 			return false
@@ -124,10 +127,10 @@ func (gm *globalManager) runAsyncHits() {
 
 // sendHits takes the hits collected by runAsyncHits and sends them to their
 // owning peers
-func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
+func (gm *globalManager) sendHits(hits map[string]*RateLimitRequest) {
 	type pair struct {
-		client *PeerClient
-		req    GetPeerRateLimitsReq
+		client *Peer
+		req    ForwardRequest
 	}
 	defer prometheus.NewTimer(gm.metricGlobalSendDuration).ObserveDuration()
 	peerRequests := make(map[string]*pair)
@@ -140,13 +143,13 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 			continue
 		}
 
-		p, ok := peerRequests[peer.Info().GRPCAddress]
+		p, ok := peerRequests[peer.Info().HTTPAddress]
 		if ok {
 			p.req.Requests = append(p.req.Requests, r)
 		} else {
-			peerRequests[peer.Info().GRPCAddress] = &pair{
+			peerRequests[peer.Info().HTTPAddress] = &pair{
 				client: peer,
-				req:    GetPeerRateLimitsReq{Requests: []*RateLimitReq{r}},
+				req:    ForwardRequest{Requests: []*RateLimitRequest{r}},
 			}
 		}
 	}
@@ -154,18 +157,16 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 	fan := syncutil.NewFanOut(gm.conf.GlobalPeerRequestsConcurrency)
 	// Send the rate limit requests to their respective owning peers.
 	for _, p := range peerRequests {
-		fan.Run(func(in interface{}) error {
-			p := in.(*pair)
-			ctx, cancel := context.WithTimeout(context.Background(), gm.conf.GlobalTimeout)
-			_, err := p.client.GetPeerRateLimits(ctx, &p.req)
-			cancel()
+		ctx, cancel := ctxutil.WithTimeout(context.Background(), gm.conf.GlobalTimeout)
+		var resp ForwardResponse
+		err := p.client.ForwardBatch(ctx, &p.req, &resp)
+		cancel()
 
-			if err != nil {
-				gm.log.WithError(err).
-					Errorf("error sending global hits to '%s'", p.client.Info().GRPCAddress)
-			}
-			return nil
-		}, p)
+		if err != nil {
+			gm.log.WithError(err).
+				Errorf("error sending global hits to '%s'", p.client.Info().HTTPAddress)
+			continue
+		}
 	}
 	fan.Wait()
 }
@@ -173,7 +174,7 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 // runBroadcasts collects status changes for global rate limits and broadcasts the changes to each peer in the cluster.
 func (gm *globalManager) runBroadcasts() {
 	var interval = NewInterval(gm.conf.GlobalSyncWait)
-	updates := make(map[string]*RateLimitReq)
+	updates := make(map[string]*RateLimitRequest)
 
 	gm.wg.Until(func(done chan struct{}) bool {
 		select {
@@ -184,7 +185,7 @@ func (gm *globalManager) runBroadcasts() {
 			if len(updates) >= gm.conf.GlobalBatchLimit {
 				gm.metricBroadcastCounter.WithLabelValues("queue_full").Inc()
 				gm.broadcastPeers(context.Background(), updates)
-				updates = make(map[string]*RateLimitReq)
+				updates = make(map[string]*RateLimitRequest)
 				return true
 			}
 
@@ -198,7 +199,7 @@ func (gm *globalManager) runBroadcasts() {
 			if len(updates) != 0 {
 				gm.metricBroadcastCounter.WithLabelValues("timer").Inc()
 				gm.broadcastPeers(context.Background(), updates)
-				updates = make(map[string]*RateLimitReq)
+				updates = make(map[string]*RateLimitRequest)
 			} else {
 				gm.metricGlobalQueueLength.Set(0)
 			}
@@ -210,30 +211,30 @@ func (gm *globalManager) runBroadcasts() {
 }
 
 // broadcastPeers broadcasts global rate limit statuses to all other peers
-func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]*RateLimitReq) {
+func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]*RateLimitRequest) {
 	defer prometheus.NewTimer(gm.metricBroadcastDuration).ObserveDuration()
-	var req UpdatePeerGlobalsReq
+	var req UpdateRequest
 
 	gm.metricGlobalQueueLength.Set(float64(len(updates)))
 
 	for _, r := range updates {
 		// Copy the original since we are removing the GLOBAL behavior
-		rl := proto.Clone(r).(*RateLimitReq)
+		rl := proto.Clone(r).(*RateLimitRequest)
 		// We are only sending the status of the rate limit so, we
 		// clear the behavior flag, so we don't get queued for update again.
 		SetBehavior(&rl.Behavior, Behavior_GLOBAL, false)
 		rl.Hits = 0
 
-		status, err := gm.instance.getLocalRateLimit(ctx, rl)
+		status, err := gm.instance.checkLocalRateLimit(ctx, rl)
 		if err != nil {
 			gm.log.WithError(err).Errorf("while broadcasting update to peers for: '%s'", rl.HashKey())
 			continue
 		}
-		// Build an UpdatePeerGlobalsReq
-		req.Globals = append(req.Globals, &UpdatePeerGlobal{
+		// Build an UpdateRateLimitsRequest
+		req.Globals = append(req.Globals, &UpdateRateLimit{
 			Algorithm: rl.Algorithm,
 			Key:       rl.HashKey(),
-			Status:    status,
+			Update:    status,
 		})
 	}
 
@@ -244,20 +245,17 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 			continue
 		}
 
-		fan.Run(func(in interface{}) error {
-			peer := in.(*PeerClient)
-			ctx, cancel := context.WithTimeout(ctx, gm.conf.GlobalTimeout)
-			_, err := peer.UpdatePeerGlobals(ctx, &req)
-			cancel()
+		ctx, cancel := ctxutil.WithTimeout(ctx, gm.conf.GlobalTimeout)
+		err := peer.Update(ctx, &req)
+		cancel()
 
-			if err != nil {
-				// Skip peers that are not in a ready state
-				if !IsNotReady(err) {
-					gm.log.WithError(err).Errorf("while broadcasting global updates to '%s'", peer.Info().GRPCAddress)
-				}
+		if err != nil {
+			// Skip peers that are not in a ready state
+			if !IsNotReady(err) {
+				gm.log.WithError(err).Errorf("while broadcasting global updates to '%s'",
+					peer.Info().HTTPAddress)
 			}
-			return nil
-		}, peer)
+		}
 	}
 	fan.Wait()
 }

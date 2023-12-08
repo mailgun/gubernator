@@ -22,21 +22,21 @@ import (
 	"sync"
 	"testing"
 
-	gubernator "github.com/mailgun/gubernator/v2"
-	"github.com/mailgun/gubernator/v2/cluster"
+	"github.com/stretchr/testify/require"
+
+	"github.com/mailgun/gubernator/v3"
+	"github.com/mailgun/gubernator/v3/cluster"
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestPeerClientShutdown(t *testing.T) {
-	type test struct {
-		Name     string
-		Behavior gubernator.Behavior
-	}
-
 	const threads = 10
 
-	cases := []test{
+	cases := []struct {
+		Name     string
+		Behavior gubernator.Behavior
+	}{
 		{"No batching", gubernator.Behavior_NO_BATCHING},
 		{"Batching", gubernator.Behavior_BATCHING},
 		{"Global", gubernator.Behavior_GLOBAL},
@@ -56,28 +56,29 @@ func TestPeerClientShutdown(t *testing.T) {
 		c := cases[i]
 
 		t.Run(c.Name, func(t *testing.T) {
-			client := gubernator.NewPeerClient(gubernator.PeerConfig{
-				Info:     cluster.GetRandomPeer(cluster.DataCenterNone),
+			client, err := gubernator.NewPeer(gubernator.PeerConfig{
+				Info:     cluster.GetRandomPeerInfo(cluster.DataCenterNone),
 				Behavior: config,
 			})
+			require.NoError(t, err)
 
 			wg := sync.WaitGroup{}
 			wg.Add(threads)
-			// Spawn a whole bunch of concurrent requests to test shutdown in various states
-			for j := 0; j < threads; j++ {
-				go func() {
+			// Spawn a bunch of concurrent requests to test shutdown in various states
+			for i := 0; i < threads; i++ {
+				go func(client *gubernator.Peer, behavior gubernator.Behavior) {
 					defer wg.Done()
 					ctx := context.Background()
-					_, err := client.GetPeerRateLimit(ctx, &gubernator.RateLimitReq{
+					_, err := client.Forward(ctx, &gubernator.RateLimitRequest{
 						Hits:     1,
 						Limit:    100,
-						Behavior: c.Behavior,
+						Behavior: behavior,
 					})
 
 					isExpectedErr := false
 
 					switch err.(type) {
-					case *gubernator.PeerErr:
+					case *gubernator.ErrNotReady:
 						isExpectedErr = true
 					case nil:
 						isExpectedErr = true
@@ -85,13 +86,13 @@ func TestPeerClientShutdown(t *testing.T) {
 
 					assert.True(t, true, isExpectedErr)
 
-				}()
+				}(client, c.Behavior)
 			}
 
 			// yield the processor that way we allow other goroutines to start their request
 			runtime.Gosched()
 
-			err := client.Shutdown(context.Background())
+			err = client.Close(context.Background())
 			assert.NoError(t, err)
 
 			wg.Wait()

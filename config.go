@@ -41,8 +41,6 @@ import (
 	"github.com/segmentio/fasthash/fnv1a"
 	"github.com/sirupsen/logrus"
 	etcd "go.etcd.io/etcd/client/v3"
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"google.golang.org/grpc"
 )
 
 // BehaviorConfig controls the handling of rate limits in the cluster
@@ -71,18 +69,18 @@ type BehaviorConfig struct {
 
 // Config for a gubernator instance
 type Config struct {
-	// (Required) A list of GRPC servers to register our instance with
-	GRPCServers []*grpc.Server
-
 	// (Optional) Adjust how gubernator behaviors are configured
 	Behaviors BehaviorConfig
+
+	// (Optional) The PeerClient gubernator should use when making requests to other peers in the cluster.
+	PeerClientFactory func(PeerInfo) PeerClient
 
 	// (Optional) The cache implementation
 	CacheFactory func(maxSize int) Cache
 
 	// (Optional) A persistent store implementation. Allows the implementor the ability to store the rate limits this
 	// instance of gubernator owns. It's up to the implementor to decide what rate limits to persist.
-	// For instance an implementor might only persist rate limits that have an expiration of
+	// For instance, an implementor might only persist rate limits that have an expiration of
 	// longer than 1 hour.
 	Store Store
 
@@ -107,10 +105,7 @@ type Config struct {
 	Logger FieldLogger
 
 	// (Optional) The TLS config used when connecting to gubernator peers
-	PeerTLS *tls.Config
-
-	// (Optional) If true, will emit traces for GRPC client requests to other peers
-	PeerTraceGRPC bool
+	//PeerTLS *tls.Config
 
 	// (Optional) The number of go routine workers used to process concurrent rate limit requests
 	// Default is set to number of CPUs.
@@ -144,13 +139,13 @@ func (c *Config) SetDefaults() error {
 		}
 	}
 
+	if c.PeerClientFactory == nil {
+		c.PeerClientFactory = func(info PeerInfo) PeerClient {
+			return NewPeerClient(WithNoTLS(info.HTTPAddress))
+		}
+	}
 	if c.Behaviors.BatchLimit > maxBatchSize {
 		return fmt.Errorf("Behaviors.BatchLimit cannot exceed '%d'", maxBatchSize)
-	}
-
-	// Make a copy of the TLS config in case our caller decides to make changes
-	if c.PeerTLS != nil {
-		c.PeerTLS = c.PeerTLS.Clone()
 	}
 
 	return nil
@@ -161,15 +156,13 @@ type PeerInfo struct {
 	DataCenter string `json:"data-center"`
 	// (Optional) The http address:port of the peer
 	HTTPAddress string `json:"http-address"`
-	// (Required) The grpc address:port of the peer
-	GRPCAddress string `json:"grpc-address"`
 	// (Optional) Is true if PeerInfo is for this instance of gubernator
 	IsOwner bool `json:"is-owner,omitempty"`
 }
 
 // HashKey returns the hash key used to identify this peer in the Picker.
 func (p PeerInfo) HashKey() string {
-	return p.GRPCAddress
+	return p.HTTPAddress
 }
 
 type UpdateFunc func([]PeerInfo)
@@ -177,9 +170,6 @@ type UpdateFunc func([]PeerInfo)
 var DebugEnabled = false
 
 type DaemonConfig struct {
-	// (Required) The `address:port` that will accept GRPC requests
-	GRPCListenAddress string
-
 	// (Required) The `address:port` that will accept HTTP requests
 	HTTPListenAddress string
 
@@ -190,12 +180,8 @@ type DaemonConfig struct {
 	// provide client certificate but you want to enforce mTLS in other RPCs (like in K8s)
 	HTTPStatusListenAddress string
 
-	// (Optional) Defines the max age connection from client in seconds.
-	// Default is infinity
-	GRPCMaxConnectionAgeSeconds int
-
 	// (Optional) The `address:port` that is advertised to other Gubernator peers.
-	// Defaults to `GRPCListenAddress`
+	// Defaults to `HTTPListenAddress`
 	AdvertiseAddress string
 
 	// (Optional) The number of items in the cache. Defaults to 50,000
@@ -234,6 +220,16 @@ type DaemonConfig struct {
 	// (Optional) A Logger which implements the declared logger interface (typically *logrus.Entry)
 	Logger FieldLogger
 
+	// (Optional) A loader from a persistent store. Allows the implementor the ability to load and save
+	// the contents of the cache when the gubernator instance is started and stopped
+	Loader Loader
+
+	// (Optional) A persistent store implementation. Allows the implementor the ability to store the rate limits this
+	// instance of gubernator owns. It's up to the implementor to decide what rate limits to persist.
+	// For instance, an implementor might only persist rate limits that have an expiration of
+	// longer than 1 hour.
+	Store Store
+
 	// (Optional) TLS Configuration; SpawnDaemon() will modify the passed TLS config in an
 	// attempt to build a complete TLS config if one is not provided.
 	TLS *TLSConfig
@@ -241,7 +237,7 @@ type DaemonConfig struct {
 	// (Optional) Metrics Flags which enable or disable a collection of some metric types
 	MetricFlags MetricFlags
 
-	// (Optional) Instance ID which is a unique id that identifies this instance of gubernator
+	// (Optional) Service ID which is a unique id that identifies this instance of gubernator
 	InstanceID string
 
 	// (Optional) TraceLevel sets the tracing level, this controls the number of spans included in a single trace.
@@ -308,16 +304,23 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 	}
 
 	// Main config
-	setter.SetDefault(&conf.GRPCListenAddress, os.Getenv("GUBER_GRPC_ADDRESS"),
-		fmt.Sprintf("%s:81", LocalHost()))
 	setter.SetDefault(&conf.HTTPListenAddress, os.Getenv("GUBER_HTTP_ADDRESS"),
 		fmt.Sprintf("%s:80", LocalHost()))
 	setter.SetDefault(&conf.InstanceID, GetInstanceID())
 	setter.SetDefault(&conf.HTTPStatusListenAddress, os.Getenv("GUBER_STATUS_HTTP_ADDRESS"), "")
-	setter.SetDefault(&conf.GRPCMaxConnectionAgeSeconds, getEnvInteger(log, "GUBER_GRPC_MAX_CONN_AGE_SEC"), 0)
 	setter.SetDefault(&conf.CacheSize, getEnvInteger(log, "GUBER_CACHE_SIZE"), 50_000)
 	setter.SetDefault(&conf.Workers, getEnvInteger(log, "GUBER_WORKER_COUNT"), 0)
-	setter.SetDefault(&conf.AdvertiseAddress, os.Getenv("GUBER_ADVERTISE_ADDRESS"), conf.GRPCListenAddress)
+
+	conf.HTTPListenAddress, err = ResolveHostIP(conf.HTTPListenAddress)
+	if err != nil {
+		return conf, errors.Wrap(err, "while identifying the actual GUBER_HTTP_ADDRESS address")
+	}
+	conf.HTTPStatusListenAddress, err = ResolveHostIP(conf.HTTPStatusListenAddress)
+	if err != nil {
+		return conf, errors.Wrap(err, "while identifying the actual GUBER_STATUS_HTTP_ADDRESS address")
+	}
+
+	setter.SetDefault(&conf.AdvertiseAddress, os.Getenv("GUBER_ADVERTISE_ADDRESS"), conf.HTTPListenAddress)
 	setter.SetDefault(&conf.DataCenter, os.Getenv("GUBER_DATA_CENTER"), "")
 	setter.SetDefault(&conf.MetricFlags, getEnvMetricFlags(log, "GUBER_METRIC_FLAGS"))
 
@@ -390,10 +393,10 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 	setter.SetDefault(&conf.EtcdPoolConf.EtcdConfig.DialTimeout, getEnvDuration(log, "GUBER_ETCD_DIAL_TIMEOUT"), clock.Second*5)
 	setter.SetDefault(&conf.EtcdPoolConf.EtcdConfig.Username, os.Getenv("GUBER_ETCD_USER"))
 	setter.SetDefault(&conf.EtcdPoolConf.EtcdConfig.Password, os.Getenv("GUBER_ETCD_PASSWORD"))
-	setter.SetDefault(&conf.EtcdPoolConf.Advertise.GRPCAddress, os.Getenv("GUBER_ETCD_ADVERTISE_ADDRESS"), conf.AdvertiseAddress)
+	setter.SetDefault(&conf.EtcdPoolConf.Advertise.HTTPAddress, os.Getenv("GUBER_ETCD_ADVERTISE_ADDRESS"), conf.AdvertiseAddress)
 	setter.SetDefault(&conf.EtcdPoolConf.Advertise.DataCenter, os.Getenv("GUBER_ETCD_DATA_CENTER"), conf.DataCenter)
 
-	setter.SetDefault(&conf.MemberListPoolConf.Advertise.GRPCAddress, os.Getenv("GUBER_MEMBERLIST_ADVERTISE_ADDRESS"), conf.AdvertiseAddress)
+	setter.SetDefault(&conf.MemberListPoolConf.Advertise.HTTPAddress, os.Getenv("GUBER_MEMBERLIST_ADVERTISE_ADDRESS"), conf.AdvertiseAddress)
 	setter.SetDefault(&conf.MemberListPoolConf.MemberListAddress, os.Getenv("GUBER_MEMBERLIST_ADDRESS"), fmt.Sprintf("%s:7946", advAddr))
 	setter.SetDefault(&conf.MemberListPoolConf.KnownNodes, getEnvSlice("GUBER_MEMBERLIST_KNOWN_NODES"), []string{})
 	setter.SetDefault(&conf.MemberListPoolConf.Advertise.DataCenter, conf.DataCenter)
@@ -729,27 +732,3 @@ func GetTracingLevel() tracing.Level {
 	}
 	return tracing.InfoLevel
 }
-
-// TraceLevelInfoFilter is used with otelgrpc.WithInterceptorFilter() to
-// reduce noise by filtering trace propagation on some gRPC methods.
-// otelgrpc deprecated use of interceptors in v0.45.0 in favor of stats
-// handlers to propagate trace context.
-// However, stats handlers do not have a filter feature.
-// See: https://github.com/open-telemetry/opentelemetry-go-contrib/issues/4575
-var TraceLevelInfoFilter = otelgrpc.Filter(func(info *otelgrpc.InterceptorInfo) bool {
-	if info.UnaryServerInfo != nil {
-		if info.UnaryServerInfo.FullMethod == "/pb.gubernator.PeersV1/GetPeerRateLimits" {
-			return false
-		}
-		if info.UnaryServerInfo.FullMethod == "/pb.gubernator.V1/HealthCheck" {
-			return false
-		}
-	}
-	if info.Method == "/pb.gubernator.PeersV1/GetPeerRateLimits" {
-		return false
-	}
-	if info.Method == "/pb.gubernator.V1/HealthCheck" {
-		return false
-	}
-	return true
-})

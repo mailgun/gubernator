@@ -25,7 +25,7 @@ import (
 	"strings"
 	"testing"
 
-	gubernator "github.com/mailgun/gubernator/v2"
+	"github.com/mailgun/gubernator/v3"
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,18 +39,19 @@ func spawnDaemon(t *testing.T, conf gubernator.DaemonConfig) *gubernator.Daemon 
 	d, err := gubernator.SpawnDaemon(ctx, conf)
 	cancel()
 	require.NoError(t, err)
-	d.SetPeers([]gubernator.PeerInfo{{GRPCAddress: conf.GRPCListenAddress, IsOwner: true}})
+	d.SetPeers([]gubernator.PeerInfo{{HTTPAddress: conf.HTTPListenAddress, IsOwner: true}})
 	return d
 }
 
 func makeRequest(t *testing.T, conf gubernator.DaemonConfig) error {
 	t.Helper()
 
-	client, err := gubernator.DialV1Server(conf.GRPCListenAddress, conf.TLS.ClientTLS)
+	client, err := gubernator.NewClient(gubernator.WithTLS(conf.ClientTLS(), conf.HTTPListenAddress))
 	require.NoError(t, err)
 
-	resp, err := client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
-		Requests: []*gubernator.RateLimitReq{
+	var resp gubernator.CheckRateLimitsResponse
+	err = client.CheckRateLimits(context.Background(), &gubernator.CheckRateLimitsRequest{
+		Requests: []*gubernator.RateLimitRequest{
 			{
 				Name:      "test_tls",
 				UniqueKey: "account:995",
@@ -60,7 +61,7 @@ func makeRequest(t *testing.T, conf gubernator.DaemonConfig) error {
 				Hits:      1,
 			},
 		},
-	})
+	}, &resp)
 
 	if err != nil {
 		return err
@@ -120,18 +121,18 @@ func TestSetupTLS(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			conf := gubernator.DaemonConfig{
-				GRPCListenAddress: "127.0.0.1:9695",
 				HTTPListenAddress: "127.0.0.1:9685",
 				TLS:               tt.tls,
 			}
 
 			d := spawnDaemon(t, conf)
 
-			client, err := gubernator.DialV1Server(conf.GRPCListenAddress, tt.tls.ClientTLS)
+			client, err := gubernator.NewClient(gubernator.WithTLS(conf.ClientTLS(), conf.HTTPListenAddress))
 			require.NoError(t, err)
 
-			resp, err := client.GetRateLimits(context.Background(), &gubernator.GetRateLimitsReq{
-				Requests: []*gubernator.RateLimitReq{
+			var resp gubernator.CheckRateLimitsResponse
+			err = client.CheckRateLimits(context.Background(), &gubernator.CheckRateLimitsRequest{
+				Requests: []*gubernator.RateLimitRequest{
 					{
 						Name:      "test_tls",
 						UniqueKey: "account:995",
@@ -141,21 +142,20 @@ func TestSetupTLS(t *testing.T) {
 						Hits:      1,
 					},
 				},
-			})
+			}, &resp)
 			require.NoError(t, err)
 
 			rl := resp.Responses[0]
 			assert.Equal(t, "", rl.Error)
 			assert.Equal(t, gubernator.Status_UNDER_LIMIT, rl.Status)
 			assert.Equal(t, int64(99), rl.Remaining)
-			d.Close()
+			d.Close(context.Background())
 		})
 	}
 }
 
 func TestSetupTLSSkipVerify(t *testing.T) {
 	conf := gubernator.DaemonConfig{
-		GRPCListenAddress: "127.0.0.1:9695",
 		HTTPListenAddress: "127.0.0.1:9685",
 		TLS: &gubernator.TLSConfig{
 			CaFile:   "contrib/certs/ca.cert",
@@ -165,7 +165,7 @@ func TestSetupTLSSkipVerify(t *testing.T) {
 	}
 
 	d := spawnDaemon(t, conf)
-	defer d.Close()
+	defer d.Close(context.Background())
 
 	tls := &gubernator.TLSConfig{
 		AutoTLS:            true,
@@ -190,13 +190,12 @@ func TestSetupTLSClientAuth(t *testing.T) {
 	}
 
 	conf := gubernator.DaemonConfig{
-		GRPCListenAddress: "127.0.0.1:9695",
 		HTTPListenAddress: "127.0.0.1:9685",
 		TLS:               &serverTLS,
 	}
 
 	d := spawnDaemon(t, conf)
-	defer d.Close()
+	defer d.Close(context.Background())
 
 	// Given generated client certs
 	tls := &gubernator.TLSConfig{
@@ -211,7 +210,7 @@ func TestSetupTLSClientAuth(t *testing.T) {
 	// Should not be allowed without a cert signed by the client CA
 	err = makeRequest(t, conf)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "code = Unavailable desc")
+	assert.Contains(t, err.Error(), "tls: certificate required")
 
 	// Given the client auth certs
 	tls = &gubernator.TLSConfig{
@@ -238,27 +237,23 @@ func TestTLSClusterWithClientAuthentication(t *testing.T) {
 	}
 
 	d1 := spawnDaemon(t, gubernator.DaemonConfig{
-		GRPCListenAddress: "127.0.0.1:9695",
 		HTTPListenAddress: "127.0.0.1:9685",
 		TLS:               &serverTLS,
 	})
-	defer d1.Close()
+	defer d1.Close(context.Background())
 
 	d2 := spawnDaemon(t, gubernator.DaemonConfig{
-		GRPCListenAddress: "127.0.0.1:9696",
 		HTTPListenAddress: "127.0.0.1:9686",
 		TLS:               &serverTLS,
 	})
-	defer d2.Close()
+	defer d2.Close(context.Background())
 
 	peers := []gubernator.PeerInfo{
 		{
-			GRPCAddress: d1.GRPCListeners[0].Addr().String(),
-			HTTPAddress: d1.HTTPListener.Addr().String(),
+			HTTPAddress: d1.Listener.Addr().String(),
 		},
 		{
-			GRPCAddress: d2.GRPCListeners[0].Addr().String(),
-			HTTPAddress: d2.HTTPListener.Addr().String(),
+			HTTPAddress: d2.Listener.Addr().String(),
 		},
 	}
 	d1.SetPeers(peers)
@@ -281,13 +276,12 @@ func TestTLSClusterWithClientAuthentication(t *testing.T) {
 
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
-	// Should have called GetPeerRateLimits on d2
-	assert.Contains(t, string(b), `{method="/pb.gubernator.PeersV1/GetPeerRateLimits"} 1`)
+	// Should have called /v1/peer.forward on d2
+	assert.Contains(t, string(b), `{path="`+gubernator.RPCPeerForward+`"} 1`)
 }
 
 func TestHTTPSClientAuth(t *testing.T) {
 	conf := gubernator.DaemonConfig{
-		GRPCListenAddress:       "127.0.0.1:9695",
 		HTTPListenAddress:       "127.0.0.1:9685",
 		HTTPStatusListenAddress: "127.0.0.1:9686",
 		TLS: &gubernator.TLSConfig{
@@ -299,7 +293,7 @@ func TestHTTPSClientAuth(t *testing.T) {
 	}
 
 	d := spawnDaemon(t, conf)
-	defer d.Close()
+	defer d.Close(context.Background())
 
 	clientWithCert := &http.Client{
 		Transport: &http.Transport{
@@ -315,9 +309,9 @@ func TestHTTPSClientAuth(t *testing.T) {
 		},
 	}
 
-	reqCertRequired, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://%s/v1/HealthCheck", conf.HTTPListenAddress), nil)
+	reqCertRequired, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://%s/healthz", conf.HTTPListenAddress), nil)
 	require.NoError(t, err)
-	reqNoClientCertRequired, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://%s/v1/HealthCheck", conf.HTTPStatusListenAddress), nil)
+	reqNoClientCertRequired, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://%s/healthz", conf.HTTPStatusListenAddress), nil)
 	require.NoError(t, err)
 
 	// Test that a client without a cert can access /v1/HealthCheck at status address
@@ -326,18 +320,19 @@ func TestHTTPSClientAuth(t *testing.T) {
 	defer resp.Body.Close()
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
-	assert.Equal(t, `{"status":"healthy","message":"","peer_count":1}`, strings.ReplaceAll(string(b), " ", ""))
+	assert.Equal(t, `{"status":"healthy","peerCount":1}`, strings.ReplaceAll(string(b), " ", ""))
 
 	// Verify we get an error when we try to access existing HTTPListenAddress without cert
-	//nolint:bodyclose // Expect error, no body to close.
-	_, err = clientWithoutCert.Do(reqCertRequired)
+	_, err = clientWithoutCert.Do(reqCertRequired) //nolint:all
 	require.Error(t, err)
+	// The error message is different depending on what version of golang is being used
+	//assert.Contains(t, err.Error(), "remote error: tls: certificate required")
 
-	// Check that with a valid client cert we can access /v1/HealthCheck at existing HTTPListenAddress
-	resp2, err := clientWithCert.Do(reqCertRequired)
+	// Check that with a valid client cert we can access /v1/healthz at existing HTTPListenAddress
+	resp3, err := clientWithCert.Do(reqCertRequired)
 	require.NoError(t, err)
-	defer resp2.Body.Close()
-	b, err = io.ReadAll(resp2.Body)
+	defer resp3.Body.Close()
+	b, err = io.ReadAll(resp3.Body)
 	require.NoError(t, err)
-	assert.Equal(t, `{"status":"healthy","message":"","peer_count":1}`, strings.ReplaceAll(string(b), " ", ""))
+	assert.Equal(t, `{"status":"healthy","peerCount":1}`, strings.ReplaceAll(string(b), " ", ""))
 }

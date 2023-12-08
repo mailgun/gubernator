@@ -17,11 +17,11 @@ limitations under the License.
 package gubernator
 
 type RegionPeerPicker interface {
-	GetClients(string) ([]*PeerClient, error)
-	GetByPeerInfo(PeerInfo) *PeerClient
+	GetClients(string) ([]*Peer, error)
+	GetByPeerInfo(PeerInfo) *Peer
 	Pickers() map[string]PeerPicker
-	Peers() []*PeerClient
-	Add(*PeerClient)
+	Peers() []*Peer
+	Add(*Peer)
 	New() RegionPeerPicker
 }
 
@@ -32,13 +32,13 @@ type RegionPicker struct {
 	// A map of all the pickers by region
 	regions map[string]PeerPicker
 	// The implementation of picker we will use for each region
-	reqQueue chan *RateLimitReq
+	reqQueue chan *RateLimitRequest
 }
 
 func NewRegionPicker(fn HashString64) *RegionPicker {
 	rp := &RegionPicker{
 		regions:                  make(map[string]PeerPicker),
-		reqQueue:                 make(chan *RateLimitReq),
+		reqQueue:                 make(chan *RateLimitRequest),
 		ReplicatedConsistentHash: NewReplicatedConsistentHash(fn, defaultReplicas),
 	}
 	return rp
@@ -48,14 +48,14 @@ func (rp *RegionPicker) New() RegionPeerPicker {
 	hash := rp.ReplicatedConsistentHash.New().(*ReplicatedConsistentHash)
 	return &RegionPicker{
 		regions:                  make(map[string]PeerPicker),
-		reqQueue:                 make(chan *RateLimitReq),
+		reqQueue:                 make(chan *RateLimitRequest),
 		ReplicatedConsistentHash: hash,
 	}
 }
 
 // GetClients returns all the PeerClients that match this key in all regions
-func (rp *RegionPicker) GetClients(key string) ([]*PeerClient, error) {
-	result := make([]*PeerClient, len(rp.regions))
+func (rp *RegionPicker) GetClients(key string) ([]*Peer, error) {
+	result := make([]*Peer, len(rp.regions))
 	var i int
 	for _, picker := range rp.regions {
 		peer, err := picker.Get(key)
@@ -68,8 +68,8 @@ func (rp *RegionPicker) GetClients(key string) ([]*PeerClient, error) {
 	return result, nil
 }
 
-// GetByPeerInfo returns the first PeerClient the PeerInfo.HasKey() matches
-func (rp *RegionPicker) GetByPeerInfo(info PeerInfo) *PeerClient {
+// GetByPeerInfo returns the first Peer the PeerInfo.HasKey() matches
+func (rp *RegionPicker) GetByPeerInfo(info PeerInfo) *Peer {
 	for _, picker := range rp.regions {
 		if client := picker.GetByPeerInfo(info); client != nil {
 			return client
@@ -83,8 +83,8 @@ func (rp *RegionPicker) Pickers() map[string]PeerPicker {
 	return rp.regions
 }
 
-func (rp *RegionPicker) Peers() []*PeerClient {
-	var peers []*PeerClient
+func (rp *RegionPicker) Peers() []*Peer {
+	var peers []*Peer
 
 	for _, picker := range rp.regions {
 		peers = append(peers, picker.Peers()...)
@@ -93,7 +93,7 @@ func (rp *RegionPicker) Peers() []*PeerClient {
 	return peers
 }
 
-func (rp *RegionPicker) Add(peer *PeerClient) {
+func (rp *RegionPicker) Add(peer *Peer) {
 	picker, ok := rp.regions[peer.Info().DataCenter]
 	if !ok {
 		picker = rp.ReplicatedConsistentHash.New()

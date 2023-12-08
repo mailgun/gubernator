@@ -32,11 +32,6 @@ gubernator:
   server:
     http:
       port: "80"
-    grpc:
-      port: "81"
-      # Defines the max age of a client connection
-      # default is infinity
-      # maxConnAgeSeconds: 30
 
   annotations: { }
 

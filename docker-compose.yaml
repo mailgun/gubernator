@@ -4,51 +4,42 @@ services:
     image: ghcr.io/mailgun/gubernator:latest
     entrypoint: "/gubernator"
     environment:
-      # The address GRPC requests will listen on
-      - GUBER_GRPC_ADDRESS=0.0.0.0:81
       # The address HTTP requests will listen on
       - GUBER_HTTP_ADDRESS=0.0.0.0:80
       # The address that is advertised to other peers
-      - GUBER_ADVERTISE_ADDRESS=gubernator-1:81
+      - GUBER_ADVERTISE_ADDRESS=gubernator-1:80
       # A comma separated list of known gubernator nodes
       - GUBER_MEMBERLIST_KNOWN_NODES=gubernator-1
       #- GUBER_DATA_CENTER=us-east-1
     ports:
-      - "9081:81"
       - "9080:80"
 
   gubernator-2:
     image: ghcr.io/mailgun/gubernator:latest
     entrypoint: "/gubernator"
     environment:
-      # The address GRPC requests will listen on
-      - GUBER_GRPC_ADDRESS=0.0.0.0:81
       # The address HTTP requests will listen on
       - GUBER_HTTP_ADDRESS=0.0.0.0:80
       # The address that is advertised to other peers
-      - GUBER_ADVERTISE_ADDRESS=gubernator-2:81
+      - GUBER_ADVERTISE_ADDRESS=gubernator-2:80
       # A comma separated list of known gubernator nodes
       - GUBER_MEMBERLIST_KNOWN_NODES=gubernator-1
       #- GUBER_DATA_CENTER=us-east-1
     ports:
-      - "9181:81"
       - "9180:80"
 
   gubernator-3:
     image: ghcr.io/mailgun/gubernator:latest
     entrypoint: "/gubernator"
     environment:
-      # The address GRPC requests will listen on
-      - GUBER_GRPC_ADDRESS=0.0.0.0:81
       # The address HTTP requests will listen on
       - GUBER_HTTP_ADDRESS=0.0.0.0:80
       # The address that is advertised to other peers
-      - GUBER_ADVERTISE_ADDRESS=gubernator-3:81
+      - GUBER_ADVERTISE_ADDRESS=gubernator-3:80
       # A comma separated list of known gubernator nodes
       - GUBER_MEMBERLIST_KNOWN_NODES=gubernator-1
       #- GUBER_DATA_CENTER=us-west-2
     ports:
-      - "9281:81"
       - "9280:80"
 
   gubernator-4:
@@ -56,16 +47,13 @@ services:
     entrypoint: "/gubernator"
     environment:
       - GUBER_DEBUG=true
-      # The address GRPC requests will listen on
-      - GUBER_GRPC_ADDRESS=0.0.0.0:81
       # The address HTTP requests will listen on
       - GUBER_HTTP_ADDRESS=0.0.0.0:80
       # The address that is advertised to other peers
-      - GUBER_ADVERTISE_ADDRESS=gubernator-4:81
+      - GUBER_ADVERTISE_ADDRESS=gubernator-4:80
       # A Comma separated list of known gubernator nodes
       - GUBER_MEMBERLIST_KNOWN_NODES=gubernator-1,gubernator-2
       #- GUBER_DATA_CENTER=us-west-2
       #- GUBER_METRIC_FLAGS=golang,os
     ports:
-      - "9381:81"
       - "9380:80"

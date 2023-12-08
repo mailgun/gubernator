@@ -59,44 +59,15 @@ services.  That service will link the client span with the server span.  When
 the client and server both send traces to the same Jaeger server, the trace
 will appear with the two spans linked in the same view.
 
-When sending gRPC requests to Gubernator, be sure to use the [`otelgrpc`
-interceptor](https://github.com/open-telemetry/opentelemetry-go-contrib) to
-propagate the client's trace context to the server so it can add spans.
-
-See [gRPC](#gRPC) section and `cmd/gubernator-cli/main.go` for usage examples.
-
-
-
-## gRPC
-If using Gubernator's Golang gRPC client, the client must be created like so:
-
-```go
-    import (
-        "go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-        "google.golang.org/grpc"
-    )
-
-    // ...
-
-    opts := []grpc.DialOption{
-        grpc.WithBlock(),
-        grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-        grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
-    }
-
-    endpoint := "<your-endpoint-url>"
-    conn, err := grpc.DialContext(ctx, endpoint, opts...)
-```
-
 ## HTTP
-If using HTTP, the tracing ids must be propagated in HTTP headers.  This is
+When making HTTP requests, the tracing ids must be propagated in HTTP headers.  This is
 typically done using OpenTelemetry instrumentation, such as [`otelhttp`](https://pkg.go.dev/go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp).
 
 See [OpenTelemetry registry](https://opentelemetry.io/registry/?language=go)
 for instrumentation using many other HTTP frameworks.
 
 ## Gubernator Standlone
-When deployed as a standalone daemon, Gubernator's gRPC service will receive
+When deployed as a standalone daemon, the Gubernator service will receive
 embedded trace ids in requests from the client's `context` object.
 
 For this to work, the client must be configured to embed tracing ids.

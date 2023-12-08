@@ -269,8 +269,7 @@ func SetupTLS(conf *TLSConfig) error {
 		}
 
 		// error if neither was provided
-		//nolint:staticcheck // ignoring tlsCert.RootCAs.Subjects is deprecated because cert does not come from SystemCertPool.
-		if len(clientPool.Subjects()) == 0 {
+		if len(clientPool.Subjects()) == 0 { //nolint:all
 			return errors.New("client auth enabled, but no CA's provided")
 		}
 

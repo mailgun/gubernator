@@ -64,8 +64,6 @@ type BehaviorConfig struct {
 	GlobalBatchLimit int
 	// ForceGlobal forces global behavior on all rate limit checks.
 	ForceGlobal bool
-	// ForceDrainOverLimit forces "drain over limit" behavior on all rate limit checks.
-	ForceDrainOverLimit bool
 
 	// Number of concurrent requests that will be made to peers. Defaults to 100
 	GlobalPeerRequestsConcurrency int

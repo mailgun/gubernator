@@ -225,9 +225,6 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 		if s.conf.Behaviors.ForceGlobal {
 			SetBehavior(&req.Behavior, Behavior_GLOBAL, true)
 		}
-		if s.conf.Behaviors.ForceDrainOverLimit {
-			SetBehavior(&req.Behavior, Behavior_DRAIN_OVER_LIMIT, true)
-		}
 
 		peer, err = s.GetPeer(ctx, key)
 		if err != nil {

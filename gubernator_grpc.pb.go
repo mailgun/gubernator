@@ -34,9 +34,8 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	V1_GetRateLimits_FullMethodName   = "/pb.gubernator.V1/GetRateLimits"
-	V1_ClearRateLimits_FullMethodName = "/pb.gubernator.V1/ClearRateLimits"
-	V1_HealthCheck_FullMethodName     = "/pb.gubernator.V1/HealthCheck"
+	V1_GetRateLimits_FullMethodName = "/pb.gubernator.V1/GetRateLimits"
+	V1_HealthCheck_FullMethodName   = "/pb.gubernator.V1/HealthCheck"
 )
 
 // V1Client is the client API for V1 service.
@@ -45,7 +44,6 @@ const (
 type V1Client interface {
 	// Given a list of rate limit requests, return the rate limits of each.
 	GetRateLimits(ctx context.Context, in *GetRateLimitsReq, opts ...grpc.CallOption) (*GetRateLimitsResp, error)
-	ClearRateLimits(ctx context.Context, in *ClearRateLimitsReq, opts ...grpc.CallOption) (*ClearRateLimitsResp, error)
 	// This method is for round trip benchmarking and can be used by
 	// the client to determine connectivity to the server
 	HealthCheck(ctx context.Context, in *HealthCheckReq, opts ...grpc.CallOption) (*HealthCheckResp, error)
@@ -68,15 +66,6 @@ func (c *v1Client) GetRateLimits(ctx context.Context, in *GetRateLimitsReq, opts
 	return out, nil
 }
 
-func (c *v1Client) ClearRateLimits(ctx context.Context, in *ClearRateLimitsReq, opts ...grpc.CallOption) (*ClearRateLimitsResp, error) {
-	out := new(ClearRateLimitsResp)
-	err := c.cc.Invoke(ctx, V1_ClearRateLimits_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *v1Client) HealthCheck(ctx context.Context, in *HealthCheckReq, opts ...grpc.CallOption) (*HealthCheckResp, error) {
 	out := new(HealthCheckResp)
 	err := c.cc.Invoke(ctx, V1_HealthCheck_FullMethodName, in, out, opts...)
@@ -92,7 +81,6 @@ func (c *v1Client) HealthCheck(ctx context.Context, in *HealthCheckReq, opts ...
 type V1Server interface {
 	// Given a list of rate limit requests, return the rate limits of each.
 	GetRateLimits(context.Context, *GetRateLimitsReq) (*GetRateLimitsResp, error)
-	ClearRateLimits(context.Context, *ClearRateLimitsReq) (*ClearRateLimitsResp, error)
 	// This method is for round trip benchmarking and can be used by
 	// the client to determine connectivity to the server
 	HealthCheck(context.Context, *HealthCheckReq) (*HealthCheckResp, error)
@@ -104,9 +92,6 @@ type UnimplementedV1Server struct {
 
 func (UnimplementedV1Server) GetRateLimits(context.Context, *GetRateLimitsReq) (*GetRateLimitsResp, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetRateLimits not implemented")
-}
-func (UnimplementedV1Server) ClearRateLimits(context.Context, *ClearRateLimitsReq) (*ClearRateLimitsResp, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ClearRateLimits not implemented")
 }
 func (UnimplementedV1Server) HealthCheck(context.Context, *HealthCheckReq) (*HealthCheckResp, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method HealthCheck not implemented")
@@ -141,24 +126,6 @@ func _V1_GetRateLimits_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
-func _V1_ClearRateLimits_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ClearRateLimitsReq)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(V1Server).ClearRateLimits(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: V1_ClearRateLimits_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(V1Server).ClearRateLimits(ctx, req.(*ClearRateLimitsReq))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _V1_HealthCheck_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(HealthCheckReq)
 	if err := dec(in); err != nil {
@@ -187,10 +154,6 @@ var V1_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetRateLimits",
 			Handler:    _V1_GetRateLimits_Handler,
-		},
-		{
-			MethodName: "ClearRateLimits",
-			Handler:    _V1_ClearRateLimits_Handler,
 		},
 		{
 			MethodName: "HealthCheck",

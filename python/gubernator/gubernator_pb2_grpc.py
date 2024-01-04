@@ -19,11 +19,6 @@ class V1Stub(object):
                 request_serializer=gubernator__pb2.GetRateLimitsReq.SerializeToString,
                 response_deserializer=gubernator__pb2.GetRateLimitsResp.FromString,
                 )
-        self.ClearRateLimits = channel.unary_unary(
-                '/pb.gubernator.V1/ClearRateLimits',
-                request_serializer=gubernator__pb2.ClearRateLimitsReq.SerializeToString,
-                response_deserializer=gubernator__pb2.ClearRateLimitsResp.FromString,
-                )
         self.HealthCheck = channel.unary_unary(
                 '/pb.gubernator.V1/HealthCheck',
                 request_serializer=gubernator__pb2.HealthCheckReq.SerializeToString,
@@ -37,12 +32,6 @@ class V1Servicer(object):
     def GetRateLimits(self, request, context):
         """Given a list of rate limit requests, return the rate limits of each.
         """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def ClearRateLimits(self, request, context):
-        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -62,11 +51,6 @@ def add_V1Servicer_to_server(servicer, server):
                     servicer.GetRateLimits,
                     request_deserializer=gubernator__pb2.GetRateLimitsReq.FromString,
                     response_serializer=gubernator__pb2.GetRateLimitsResp.SerializeToString,
-            ),
-            'ClearRateLimits': grpc.unary_unary_rpc_method_handler(
-                    servicer.ClearRateLimits,
-                    request_deserializer=gubernator__pb2.ClearRateLimitsReq.FromString,
-                    response_serializer=gubernator__pb2.ClearRateLimitsResp.SerializeToString,
             ),
             'HealthCheck': grpc.unary_unary_rpc_method_handler(
                     servicer.HealthCheck,
@@ -97,23 +81,6 @@ class V1(object):
         return grpc.experimental.unary_unary(request, target, '/pb.gubernator.V1/GetRateLimits',
             gubernator__pb2.GetRateLimitsReq.SerializeToString,
             gubernator__pb2.GetRateLimitsResp.FromString,
-            options, channel_credentials,
-            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
-
-    @staticmethod
-    def ClearRateLimits(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/pb.gubernator.V1/ClearRateLimits',
-            gubernator__pb2.ClearRateLimitsReq.SerializeToString,
-            gubernator__pb2.ClearRateLimitsResp.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 

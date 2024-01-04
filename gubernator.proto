@@ -34,13 +34,6 @@ service V1 {
     };
   }
 
-  rpc ClearRateLimits (ClearRateLimitsReq) returns (ClearRateLimitsResp) {
-    option (google.api.http) = {
-      post: "/v1/ClearRateLimits"
-      body: "*"
-    };
-  }
-
   // This method is for round trip benchmarking and can be used by
   // the client to determine connectivity to the server
   rpc HealthCheck (HealthCheckReq) returns (HealthCheckResp) {
@@ -58,14 +51,6 @@ message GetRateLimitsReq {
 // RateLimits returned are in the same order as the Requests
 message GetRateLimitsResp {
   repeated RateLimitResp responses = 1;
-}
-
-message ClearRateLimitsReq {
-  repeated ClearRateLimitReq requests = 1;
-}
-
-message ClearRateLimitsResp {
-  repeated ClearRateLimitResp responses = 1;
 }
 
 enum Algorithm {
@@ -203,23 +188,6 @@ message RateLimitResp {
   string error = 5;
   // This is additional metadata that a client might find useful. (IE: Additional headers, corrdinator ownership, etc..)
   map<string, string> metadata = 6;
-}
-
-message ClearRateLimitReq {
-  // The name of the rate limit IE: 'requests_per_second', 'gets_per_minute`
-  string name = 1;
-
-  // Uniquely identifies this rate limit IE: 'ip:10.2.10.7' or 'account:123445'
-  string unique_key = 2;
-}
-
-message ClearRateLimitResp {
-  // The currently configured request limit (Identical to RateLimitRequest.rate_limit_config.limit).
-  int64 limit = 1;
-  // This is the time when the rate limit span will be reset, provided as a unix timestamp in milliseconds.
-  int64 reset_time = 2;
-  // Contains the error; If set all other values should be ignored
-  string error = 3;
 }
 
 message HealthCheckReq {}

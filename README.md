@@ -178,13 +178,13 @@ This will reset the rate limit as if created new on first use.
 
 When using Reset Remaining, the `Hits` field should be 0.
 
-## Drain Overlimit Behavior
-Users may add behavior `Behavior_DRAIN_OVERLIMIT` to the rate check request.  A
-`GetRateLimits` call drains the remaining counter on first overlimit event. Then,
-successive `GetRateLimits` calls will return zero remaining counter and not any
-residual value.
+## Drain Over Limit Behavior
+Users may add behavior `Behavior_DRAIN_OVER_LIMIT` to the rate check request.
+A `GetRateLimits` call drains the remaining counter on first over limit event.
+Then, successive `GetRateLimits` calls will return zero remaining counter and
+not any residual value.
 
-This facilitates scenarios that require an overlimit event to stay overlimit
+This facilitates scenarios that require an over limit event to stay over limit
 until the rate limit resets.  This approach is necessary if a process must make
 two rate checks, before and after a process, and the `Hit` amount is not known
 until after the process.
@@ -193,12 +193,12 @@ until after the process.
   `Remaining` counter.  If `Remaining` is zero, it's known
   that the rate limit is depleted and the process can be aborted.
 - After process: Call `GetRateLimits` with a user specified `Hits` value.  If
-  the call returns overlimit, the process cannot be aborted because it had
-  already completed.  Using `DRAIN_OVERLIMIT` behavior, the `Remaining` count
+  the call returns over limit, the process cannot be aborted because it had
+  already completed.  Using `DRAIN_OVER_LIMIT` behavior, the `Remaining` count
   will be drained to zero.
 
-Once an overlimit occurs in the "After" step, successive processes will detect
-the overlimit state in the "Before" step.
+Once an over limit occurs in the "After" step, successive processes will detect
+the over limit state in the "Before" step.
 
 ## Gubernator as a library
 If you are using golang, you can use Gubernator as a library. This is useful if

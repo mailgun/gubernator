@@ -141,10 +141,10 @@ enum Behavior {
   // least 2 instances of Gubernator.
   MULTI_REGION = 16;
 
-  // A GetRateLimits call drains the remaining counter on first overlimit
+  // A GetRateLimits call drains the remaining counter on first over limit
   // event. Then, successive GetRateLimits calls will return zero remaining
   // counter and not any residual value.
-  DRAIN_OVERLIMIT = 32;
+  DRAIN_OVER_LIMIT = 32;
 
   // TODO: Add support for LOCAL. Which would force the rate limit to be handled by the local instance
 }

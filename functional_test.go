@@ -371,7 +371,7 @@ func TestTokenBucketNegativeHits(t *testing.T) {
 	}
 }
 
-func TestDrainOverlimit(t *testing.T) {
+func TestDrainOverLimit(t *testing.T) {
 	defer clock.Freeze(clock.Now()).Unfreeze()
 	client, errs := guber.DialV1Server(cluster.PeerAt(0).GRPCAddress, nil)
 	require.Nil(t, errs)
@@ -393,7 +393,7 @@ func TestDrainOverlimit(t *testing.T) {
 			Remaining: 9,
 			Status:    guber.Status_UNDER_LIMIT,
 		}, {
-			Name:      "overlimit hit",
+			Name:      "over limit hit",
 			Hits:      100,
 			Remaining: 0,
 			Status:    guber.Status_OVER_LIMIT,
@@ -413,10 +413,10 @@ func TestDrainOverlimit(t *testing.T) {
 					resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
 						Requests: []*guber.RateLimitReq{
 							{
-								Name:      "test_drain_overlimit",
+								Name:      "test_drain_over_limit",
 								UniqueKey: fmt.Sprintf("account:1234:%d", idx),
 								Algorithm: algoCase.Algorithm,
-								Behavior:  guber.Behavior_DRAIN_OVERLIMIT,
+								Behavior:  guber.Behavior_DRAIN_OVER_LIMIT,
 								Duration:  guber.Second * 30,
 								Hits:      test.Hits,
 								Limit:     10,

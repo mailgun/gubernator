@@ -37,7 +37,8 @@ clean:
 
 .PHONY: proto
 proto:
-	contrib/proto.sh
+	# Install buf: https://buf.build/docs/installation
+	buf generate
 
 .PHONY: certs
 certs:

@@ -14,7 +14,7 @@ _sym_db = _symbol_database.Default()
 from google.api import annotations_pb2 as google_dot_api_dot_annotations__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10gubernator.proto\x12\rpb.gubernator\x1a\x1cgoogle/api/annotations.proto\"A\n\x10GetRateLimitsReq\x12-\n\x08requests\x18\x01 \x03(\x0b\x32\x1b.pb.gubernator.RateLimitReq\"D\n\x11GetRateLimitsResp\x12/\n\tresponses\x18\x01 \x03(\x0b\x32\x1c.pb.gubernator.RateLimitResp\"\xb4\x02\n\x0cRateLimitReq\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x12\n\nunique_key\x18\x02 \x01(\t\x12\x0c\n\x04hits\x18\x03 \x01(\x03\x12\r\n\x05limit\x18\x04 \x01(\x03\x12\x10\n\x08\x64uration\x18\x05 \x01(\x03\x12+\n\talgorithm\x18\x06 \x01(\x0e\x32\x18.pb.gubernator.Algorithm\x12)\n\x08\x62\x65havior\x18\x07 \x01(\x0e\x32\x17.pb.gubernator.Behavior\x12\r\n\x05\x62urst\x18\x08 \x01(\x03\x12;\n\x08metadata\x18\t \x03(\x0b\x32).pb.gubernator.RateLimitReq.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\xea\x01\n\rRateLimitResp\x12%\n\x06status\x18\x01 \x01(\x0e\x32\x15.pb.gubernator.Status\x12\r\n\x05limit\x18\x02 \x01(\x03\x12\x11\n\tremaining\x18\x03 \x01(\x03\x12\x12\n\nreset_time\x18\x04 \x01(\x03\x12\r\n\x05\x65rror\x18\x05 \x01(\t\x12<\n\x08metadata\x18\x06 \x03(\x0b\x32*.pb.gubernator.RateLimitResp.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x10\n\x0eHealthCheckReq\"F\n\x0fHealthCheckResp\x12\x0e\n\x06status\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x12\n\npeer_count\x18\x03 \x01(\x05*/\n\tAlgorithm\x12\x10\n\x0cTOKEN_BUCKET\x10\x00\x12\x10\n\x0cLEAKY_BUCKET\x10\x01*w\n\x08\x42\x65havior\x12\x0c\n\x08\x42\x41TCHING\x10\x00\x12\x0f\n\x0bNO_BATCHING\x10\x01\x12\n\n\x06GLOBAL\x10\x02\x12\x19\n\x15\x44URATION_IS_GREGORIAN\x10\x04\x12\x13\n\x0fRESET_REMAINING\x10\x08\x12\x10\n\x0cMULTI_REGION\x10\x10*)\n\x06Status\x12\x0f\n\x0bUNDER_LIMIT\x10\x00\x12\x0e\n\nOVER_LIMIT\x10\x01\x32\xdd\x01\n\x02V1\x12p\n\rGetRateLimits\x12\x1f.pb.gubernator.GetRateLimitsReq\x1a .pb.gubernator.GetRateLimitsResp\"\x1c\x82\xd3\xe4\x93\x02\x16\"\x11/v1/GetRateLimits:\x01*\x12\x65\n\x0bHealthCheck\x12\x1d.pb.gubernator.HealthCheckReq\x1a\x1e.pb.gubernator.HealthCheckResp\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/HealthCheckB\"Z\x1dgithub.com/mailgun/gubernator\x80\x01\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10gubernator.proto\x12\rpb.gubernator\x1a\x1cgoogle/api/annotations.proto\"A\n\x10GetRateLimitsReq\x12-\n\x08requests\x18\x01 \x03(\x0b\x32\x1b.pb.gubernator.RateLimitReq\"D\n\x11GetRateLimitsResp\x12/\n\tresponses\x18\x01 \x03(\x0b\x32\x1c.pb.gubernator.RateLimitResp\"H\n\x12\x43learRateLimitsReq\x12\x32\n\x08requests\x18\x01 \x03(\x0b\x32 .pb.gubernator.ClearRateLimitReq\"K\n\x13\x43learRateLimitsResp\x12\x34\n\tresponses\x18\x01 \x03(\x0b\x32!.pb.gubernator.ClearRateLimitResp\"\xb4\x02\n\x0cRateLimitReq\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x12\n\nunique_key\x18\x02 \x01(\t\x12\x0c\n\x04hits\x18\x03 \x01(\x03\x12\r\n\x05limit\x18\x04 \x01(\x03\x12\x10\n\x08\x64uration\x18\x05 \x01(\x03\x12+\n\talgorithm\x18\x06 \x01(\x0e\x32\x18.pb.gubernator.Algorithm\x12)\n\x08\x62\x65havior\x18\x07 \x01(\x0e\x32\x17.pb.gubernator.Behavior\x12\r\n\x05\x62urst\x18\x08 \x01(\x03\x12;\n\x08metadata\x18\t \x03(\x0b\x32).pb.gubernator.RateLimitReq.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\xea\x01\n\rRateLimitResp\x12%\n\x06status\x18\x01 \x01(\x0e\x32\x15.pb.gubernator.Status\x12\r\n\x05limit\x18\x02 \x01(\x03\x12\x11\n\tremaining\x18\x03 \x01(\x03\x12\x12\n\nreset_time\x18\x04 \x01(\x03\x12\r\n\x05\x65rror\x18\x05 \x01(\t\x12<\n\x08metadata\x18\x06 \x03(\x0b\x32*.pb.gubernator.RateLimitResp.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"5\n\x11\x43learRateLimitReq\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x12\n\nunique_key\x18\x02 \x01(\t\"F\n\x12\x43learRateLimitResp\x12\r\n\x05limit\x18\x01 \x01(\x03\x12\x12\n\nreset_time\x18\x02 \x01(\x03\x12\r\n\x05\x65rror\x18\x03 \x01(\t\"\x10\n\x0eHealthCheckReq\"F\n\x0fHealthCheckResp\x12\x0e\n\x06status\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x12\n\npeer_count\x18\x03 \x01(\x05*/\n\tAlgorithm\x12\x10\n\x0cTOKEN_BUCKET\x10\x00\x12\x10\n\x0cLEAKY_BUCKET\x10\x01*\x8c\x01\n\x08\x42\x65havior\x12\x0c\n\x08\x42\x41TCHING\x10\x00\x12\x0f\n\x0bNO_BATCHING\x10\x01\x12\n\n\x06GLOBAL\x10\x02\x12\x19\n\x15\x44URATION_IS_GREGORIAN\x10\x04\x12\x13\n\x0fRESET_REMAINING\x10\x08\x12\x10\n\x0cMULTI_REGION\x10\x10\x12\x13\n\x0f\x44RAIN_OVERLIMIT\x10 *)\n\x06Status\x12\x0f\n\x0bUNDER_LIMIT\x10\x00\x12\x0e\n\nOVER_LIMIT\x10\x01\x32\xd7\x02\n\x02V1\x12p\n\rGetRateLimits\x12\x1f.pb.gubernator.GetRateLimitsReq\x1a .pb.gubernator.GetRateLimitsResp\"\x1c\x82\xd3\xe4\x93\x02\x16\"\x11/v1/GetRateLimits:\x01*\x12x\n\x0f\x43learRateLimits\x12!.pb.gubernator.ClearRateLimitsReq\x1a\".pb.gubernator.ClearRateLimitsResp\"\x1e\x82\xd3\xe4\x93\x02\x18\"\x13/v1/ClearRateLimits:\x01*\x12\x65\n\x0bHealthCheck\x12\x1d.pb.gubernator.HealthCheckReq\x1a\x1e.pb.gubernator.HealthCheckResp\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/HealthCheckB\"Z\x1dgithub.com/mailgun/gubernator\x80\x01\x01\x62\x06proto3')
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'gubernator_pb2', globals())
@@ -28,30 +28,40 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   _RATELIMITRESP_METADATAENTRY._serialized_options = b'8\001'
   _V1.methods_by_name['GetRateLimits']._options = None
   _V1.methods_by_name['GetRateLimits']._serialized_options = b'\202\323\344\223\002\026\"\021/v1/GetRateLimits:\001*'
+  _V1.methods_by_name['ClearRateLimits']._options = None
+  _V1.methods_by_name['ClearRateLimits']._serialized_options = b'\202\323\344\223\002\030\"\023/v1/ClearRateLimits:\001*'
   _V1.methods_by_name['HealthCheck']._options = None
   _V1.methods_by_name['HealthCheck']._serialized_options = b'\202\323\344\223\002\021\022\017/v1/HealthCheck'
-  _ALGORITHM._serialized_start=840
-  _ALGORITHM._serialized_end=887
-  _BEHAVIOR._serialized_start=889
-  _BEHAVIOR._serialized_end=1008
-  _STATUS._serialized_start=1010
-  _STATUS._serialized_end=1051
+  _ALGORITHM._serialized_start=1118
+  _ALGORITHM._serialized_end=1165
+  _BEHAVIOR._serialized_start=1168
+  _BEHAVIOR._serialized_end=1308
+  _STATUS._serialized_start=1310
+  _STATUS._serialized_end=1351
   _GETRATELIMITSREQ._serialized_start=65
   _GETRATELIMITSREQ._serialized_end=130
   _GETRATELIMITSRESP._serialized_start=132
   _GETRATELIMITSRESP._serialized_end=200
-  _RATELIMITREQ._serialized_start=203
-  _RATELIMITREQ._serialized_end=511
-  _RATELIMITREQ_METADATAENTRY._serialized_start=464
-  _RATELIMITREQ_METADATAENTRY._serialized_end=511
-  _RATELIMITRESP._serialized_start=514
-  _RATELIMITRESP._serialized_end=748
-  _RATELIMITRESP_METADATAENTRY._serialized_start=464
-  _RATELIMITRESP_METADATAENTRY._serialized_end=511
-  _HEALTHCHECKREQ._serialized_start=750
-  _HEALTHCHECKREQ._serialized_end=766
-  _HEALTHCHECKRESP._serialized_start=768
-  _HEALTHCHECKRESP._serialized_end=838
-  _V1._serialized_start=1054
-  _V1._serialized_end=1275
+  _CLEARRATELIMITSREQ._serialized_start=202
+  _CLEARRATELIMITSREQ._serialized_end=274
+  _CLEARRATELIMITSRESP._serialized_start=276
+  _CLEARRATELIMITSRESP._serialized_end=351
+  _RATELIMITREQ._serialized_start=354
+  _RATELIMITREQ._serialized_end=662
+  _RATELIMITREQ_METADATAENTRY._serialized_start=615
+  _RATELIMITREQ_METADATAENTRY._serialized_end=662
+  _RATELIMITRESP._serialized_start=665
+  _RATELIMITRESP._serialized_end=899
+  _RATELIMITRESP_METADATAENTRY._serialized_start=615
+  _RATELIMITRESP_METADATAENTRY._serialized_end=662
+  _CLEARRATELIMITREQ._serialized_start=901
+  _CLEARRATELIMITREQ._serialized_end=954
+  _CLEARRATELIMITRESP._serialized_start=956
+  _CLEARRATELIMITRESP._serialized_end=1026
+  _HEALTHCHECKREQ._serialized_start=1028
+  _HEALTHCHECKREQ._serialized_end=1044
+  _HEALTHCHECKRESP._serialized_start=1046
+  _HEALTHCHECKRESP._serialized_end=1116
+  _V1._serialized_start=1354
+  _V1._serialized_end=1697
 # @@protoc_insertion_point(module_scope)

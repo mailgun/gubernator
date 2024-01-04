@@ -72,7 +72,7 @@ rate_limits:
     limit: 100
     # The duration of the rate limit in milliseconds
     duration: 1000
-    # The algorithm used to calculate the rate limit  
+    # The algorithm used to calculate the rate limit
     # 0 = Token Bucket
     # 1 = Leaky Bucket
     algorithm: 0
@@ -166,7 +166,7 @@ Given the following `Duration` values
 *  3 = Weeks
 *  4 = Months
 *  5 = Years
- 
+
 Examples when using `Behavior = DURATION_IS_GREGORIAN`
 * If  `Duration = 2` (Days) then the rate limit will reset to `Current = 0` at the end of the current day the rate limit was created.
 * If `Duration = 0` (Minutes) then the rate limit will reset to `Current = 0` at the end of the minute the rate limit was created.
@@ -177,6 +177,28 @@ Users may add behavior `Behavior_RESET_REMAINING` to the rate check request.
 This will reset the rate limit as if created new on first use.
 
 When using Reset Remaining, the `Hits` field should be 0.
+
+## Drain Overlimit Behavior
+Users may add behavior `Behavior_DRAIN_OVERLIMIT` to the rate check request.  A
+`GetRateLimits` call drains the remaining counter on first overlimit event. Then,
+successive `GetRateLimits` calls will return zero remaining counter and not any
+residual value.
+
+This facilitates scenarios that require an overlimit event to stay overlimit
+until the rate limit resets.  This approach is necessary if a process must make
+two rate checks, before and after a process, and the `Hit` amount is not known
+until after the process.
+
+- Before process: Call `GetRateLimits` with `Hits=0` to check the value of
+  `Remaining` counter.  If `Remaining` is zero, it's known
+  that the rate limit is depleted and the process can be aborted.
+- After process: Call `GetRateLimits` with a user specified `Hits` value.  If
+  the call returns overlimit, the process cannot be aborted because it had
+  already completed.  Using `DRAIN_OVERLIMIT` behavior, the `Remaining` count
+  will be drained to zero.
+
+Once an overlimit occurs in the "After" step, successive processes will detect
+the overlimit state in the "Before" step.
 
 ## Gubernator as a library
 If you are using golang, you can use Gubernator as a library. This is useful if

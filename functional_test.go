@@ -37,8 +37,8 @@ import (
 	json "google.golang.org/protobuf/encoding/protojson"
 )
 
-var algos = []struct{
-	Name string
+var algos = []struct {
+	Name      string
 	Algorithm guber.Algorithm
 }{
 	{Name: "Token bucket", Algorithm: guber.Algorithm_TOKEN_BUCKET},

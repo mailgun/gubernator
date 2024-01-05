@@ -182,7 +182,10 @@ When using Reset Remaining, the `Hits` field should be 0.
 Users may add behavior `Behavior_DRAIN_OVER_LIMIT` to the rate check request.
 A `GetRateLimits` call drains the remaining counter on first over limit event.
 Then, successive `GetRateLimits` calls will return zero remaining counter and
-not any residual value.
+not any residual value.  This behavior works best with token bucket algorithm
+because the `Remaining` counter will stay zero after an over limit until reset
+time, whereas leaky bucket algorithm will immediately update `Remaining` to a
+non-zero value.
 
 This facilitates scenarios that require an over limit event to stay over limit
 until the rate limit resets.  This approach is necessary if a process must make

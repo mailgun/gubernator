@@ -86,7 +86,7 @@ enum Behavior {
   // distributed to each peer and cached locally. A rate limit request received from any peer in the
   // cluster will first check the local cache for a rate limit answer, if it exists the peer will
   // immediately return the answer to the client and asynchronously forward the aggregate hits to
-  // the peer coordinator. Because of GLOBALS async nature we lose some accuracy in rate limit
+  // the owner peer. Because of GLOBALS async nature we lose some accuracy in rate limit
   // reporting, which may result in allowing some requests beyond the chosen rate limit. However we
   // gain massive performance as every request coming into the system does not have to wait for a
   // single peer to decide if the rate limit has been reached.
@@ -174,15 +174,15 @@ enum Status {
 message RateLimitResp {
   // The status of the rate limit.
   Status status = 1;
-  // The currently configured request limit (Identical to RateLimitRequest.rate_limit_config.limit).
+  // The currently configured request limit (Identical to [[RateLimitReq.limit]]).
   int64 limit = 2;
-  // This is the number of requests remaining before the limit is hit.
+  // This is the number of requests remaining before the rate limit is hit but after subtracting the hits from the current request
   int64 remaining = 3;
   // This is the time when the rate limit span will be reset, provided as a unix timestamp in milliseconds.
   int64 reset_time = 4;
   // Contains the error; If set all other values should be ignored
   string error = 5;
-  // This is additional metadata that a client might find useful. (IE: Additional headers, corrdinator ownership, etc..)
+  // This is additional metadata that a client might find useful. (IE: Additional headers, coordinator ownership, etc..)
   map<string, string> metadata = 6;
 }
 

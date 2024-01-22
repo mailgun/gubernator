@@ -1,6 +1,8 @@
+#!/usr/bin/env -S buf generate --template
+---
 version: v1
 plugins:
-  - name: go
+  - plugin: buf.build/protocolbuffers/go:v1.28.1
     out: ./
     opt: paths=source_relative
   - plugin: buf.build/grpc/go:v1.3.0

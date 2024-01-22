@@ -224,10 +224,14 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 		SetBehavior(&rl.Behavior, Behavior_GLOBAL, false)
 		rl.Hits = 0
 
-		status, err := gm.instance.getLocalRateLimit(ctx, rl)
+		misleadingStatus, err := gm.instance.getLocalRateLimit(ctx, rl)
 		if err != nil {
 			gm.log.WithError(err).Errorf("while broadcasting update to peers for: '%s'", rl.HashKey())
 			continue
+		}
+		status := misleadingStatus
+		if misleadingStatus.Remaining == 0 {
+			status.Status = Status_OVER_LIMIT
 		}
 		// Build an UpdatePeerGlobalsReq
 		req.Globals = append(req.Globals, &UpdatePeerGlobal{

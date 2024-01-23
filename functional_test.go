@@ -938,7 +938,7 @@ func TestGlobalRateLimits(t *testing.T) {
 	})
 }
 
-func TestGlobalRateLimitsWithLoadBalancing(t *testing.T) {
+func TestGlobalRateLimitsPeerOverLimit(t *testing.T) {
 	owner := cluster.PeerAt(2).GRPCAddress
 	peer := cluster.PeerAt(0).GRPCAddress
 	assert.NotEqual(t, owner, peer)
@@ -946,22 +946,75 @@ func TestGlobalRateLimitsWithLoadBalancing(t *testing.T) {
 	dialOpts := []grpc.DialOption{
 		grpc.WithResolvers(newStaticBuilder()),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"round_robin":{}}]}`),
 	}
 
-	address := fmt.Sprintf("static:///%s,%s", owner, peer)
+	address := fmt.Sprintf("static:///%s", peer)
 	conn, err := grpc.DialContext(context.Background(), address, dialOpts...)
 	require.NoError(t, err)
 
 	client := guber.NewV1Client(conn)
 
-	sendHit := func(status guber.Status, assertion func(resp *guber.RateLimitResp), i int) string {
+	sendHit := func(status guber.Status, i int) string {
 		ctx, cancel := context.WithTimeout(context.Background(), clock.Hour*5)
 		defer cancel()
 		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
 			Requests: []*guber.RateLimitReq{
 				{
-					Name:      "test_global",
+					Name:      "test_global_token_limit",
+					UniqueKey: "account:12345",
+					Algorithm: guber.Algorithm_TOKEN_BUCKET,
+					Behavior:  guber.Behavior_GLOBAL,
+					Duration:  guber.Minute * 5,
+					Hits:      1,
+					Limit:     2,
+				},
+			},
+		})
+		require.NoError(t, err, i)
+		gotResp := resp.Responses[0]
+		assert.Equal(t, "", gotResp.GetError(), i)
+		assert.Equal(t, status, gotResp.GetStatus(), i)
+
+		return gotResp.GetMetadata()["owner"]
+	}
+
+	// Send two hits that should be processed by the owner and the peer and deplete the remaining
+	sendHit(guber.Status_UNDER_LIMIT, 1)
+	sendHit(guber.Status_UNDER_LIMIT, 1)
+	// Wait for the broadcast from the owner to the peer
+	time.Sleep(time.Second * 3)
+	// Since the remainder is 0, the peer should set OVER_LIMIT instead of waiting for the owner
+	// to respond with OVER_LIMIT.
+	sendHit(guber.Status_OVER_LIMIT, 1)
+	// Wait for the broadcast from the owner to the peer
+	time.Sleep(time.Second * 3)
+	// The status should still be OVER_LIMIT
+	sendHit(guber.Status_OVER_LIMIT, 0)
+}
+
+func TestGlobalRateLimitsPeerOverLimitLeaky(t *testing.T) {
+	owner := cluster.PeerAt(2).GRPCAddress
+	peer := cluster.PeerAt(0).GRPCAddress
+	assert.NotEqual(t, owner, peer)
+
+	dialOpts := []grpc.DialOption{
+		grpc.WithResolvers(newStaticBuilder()),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	}
+
+	address := fmt.Sprintf("static:///%s", peer)
+	conn, err := grpc.DialContext(context.Background(), address, dialOpts...)
+	require.NoError(t, err)
+
+	client := guber.NewV1Client(conn)
+
+	sendHit := func(status guber.Status, i int) string {
+		ctx, cancel := context.WithTimeout(context.Background(), clock.Hour*5)
+		defer cancel()
+		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
+			Requests: []*guber.RateLimitReq{
+				{
+					Name:      "test_global_leaky_limit",
 					UniqueKey: "account:12345",
 					Algorithm: guber.Algorithm_LEAKY_BUCKET,
 					Behavior:  guber.Behavior_GLOBAL,
@@ -976,22 +1029,20 @@ func TestGlobalRateLimitsWithLoadBalancing(t *testing.T) {
 		assert.Equal(t, "", gotResp.GetError(), i)
 		assert.Equal(t, status, gotResp.GetStatus(), i)
 
-		if assertion != nil {
-			assertion(gotResp)
-		}
-
 		return gotResp.GetMetadata()["owner"]
 	}
 
-	// Send two hits that should be processed by the owner and the peer and deplete the limit
-	sendHit(guber.Status_UNDER_LIMIT, nil, 1)
-	sendHit(guber.Status_UNDER_LIMIT, nil, 2)
-	// sleep to ensure the async forward has occurred and state should be shared
-	time.Sleep(time.Second * 5)
-
-	for i := 0; i < 10; i++ {
-		sendHit(guber.Status_OVER_LIMIT, nil, i+2)
-	}
+	// Send two hits that should be processed by the owner and the peer and deplete the remaining
+	sendHit(guber.Status_UNDER_LIMIT, 1)
+	sendHit(guber.Status_UNDER_LIMIT, 1)
+	// Wait for the broadcast from the owner to the peer
+	time.Sleep(time.Second * 3)
+	// Since the peer must wait for the owner to say it's over the limit, this will return under the limit.
+	sendHit(guber.Status_UNDER_LIMIT, 1)
+	// Wait for the broadcast from the owner to the peer
+	time.Sleep(time.Second * 3)
+	// The status should now be OVER_LIMIT
+	sendHit(guber.Status_OVER_LIMIT, 0)
 }
 
 func getMetricRequest(t testutil.TestingT, url string, name string) *model.Sample {

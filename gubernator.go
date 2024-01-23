@@ -405,9 +405,23 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 		// Global rate limits are always stored as RateLimitResp regardless of algorithm
 		rl, ok := item.Value.(*RateLimitResp)
 		if ok {
+			// In the case we are not the owner, global behavior dictates that we respond with
+			// what ever the owner has broadcast to use as the response. However, in the case
+			// of TOKEN_BUCKET it makes little sense to wait for the owner to respond with OVER_LIMIT
+			// if we already know the remainder is 0. So we check for a remainder of 0 here and set
+			// OVER_LIMIT only if there are actual hits and this is not a RESET_REMAINING request and
+			// it's a TOKEN_BUCKET.
+			//
+			// We cannot preform this for LEAKY_BUCKET as we don't know how much time or what other requests
+			// might have influenced the leak rate at the owning peer.
+			// (Maybe we should preform the leak calculation here?????)
+			if rl.Remaining == 0 && req.Hits > 0 && !HasBehavior(req.Behavior, Behavior_RESET_REMAINING) &&
+				req.Algorithm == Algorithm_TOKEN_BUCKET {
+				rl.Status = Status_OVER_LIMIT
+			}
 			return rl, nil
 		}
-		// We get here if the owning node hasn't asynchronously forwarded it's updates to us yet and
+		// We get here if the owning node hasn't asynchronously forwarded its updates to us yet and
 		// our cache still holds the rate limit we created on the first hit.
 	}
 
@@ -569,11 +583,9 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (_ 
 	}
 
 	metricGetRateLimitCounter.WithLabelValues("local").Inc()
-
-	// If global behavior and owning peer, broadcast update to all peers.
-	// Assuming that this peer does not own the ratelimit.
+	// If global behavior, then broadcast update to all peers.
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
-		s.global.QueueUpdate(r)
+		s.global.QueueUpdate(r, resp)
 	}
 
 	return resp, nil

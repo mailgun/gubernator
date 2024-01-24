@@ -939,29 +939,23 @@ func TestGlobalRateLimits(t *testing.T) {
 }
 
 func TestGlobalRateLimitsPeerOverLimit(t *testing.T) {
-	owner := cluster.PeerAt(2).GRPCAddress
-	peer := cluster.PeerAt(0).GRPCAddress
-	assert.NotEqual(t, owner, peer)
+	const (
+		name = "test_global_token_limit"
+		key  = "account:12345"
+	)
 
-	dialOpts := []grpc.DialOption{
-		grpc.WithResolvers(newStaticBuilder()),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	}
-
-	address := fmt.Sprintf("static:///%s", peer)
-	conn, err := grpc.DialContext(context.Background(), address, dialOpts...)
+	// Make a connection to a peer in the cluster which does not own this rate limit
+	client, err := getClientToNonOwningPeer(name, key)
 	require.NoError(t, err)
 
-	client := guber.NewV1Client(conn)
-
-	sendHit := func(status guber.Status, i int) string {
+	sendHit := func(expectedStatus guber.Status, hits int) {
 		ctx, cancel := context.WithTimeout(context.Background(), clock.Hour*5)
 		defer cancel()
 		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
 			Requests: []*guber.RateLimitReq{
 				{
-					Name:      "test_global_token_limit",
-					UniqueKey: "account:12345",
+					Name:      name,
+					UniqueKey: key,
 					Algorithm: guber.Algorithm_TOKEN_BUCKET,
 					Behavior:  guber.Behavior_GLOBAL,
 					Duration:  guber.Minute * 5,
@@ -970,15 +964,12 @@ func TestGlobalRateLimitsPeerOverLimit(t *testing.T) {
 				},
 			},
 		})
-		require.NoError(t, err, i)
-		gotResp := resp.Responses[0]
-		assert.Equal(t, "", gotResp.GetError(), i)
-		assert.Equal(t, status, gotResp.GetStatus(), i)
-
-		return gotResp.GetMetadata()["owner"]
+		assert.NoError(t, err)
+		assert.Equal(t, "", resp.Responses[0].GetError())
+		assert.Equal(t, expectedStatus, resp.Responses[0].GetStatus())
 	}
 
-	// Send two hits that should be processed by the owner and the peer and deplete the remaining
+	// Send two hits that should be processed by the owner and the broadcast to peer, depleting the remaining
 	sendHit(guber.Status_UNDER_LIMIT, 1)
 	sendHit(guber.Status_UNDER_LIMIT, 1)
 	// Wait for the broadcast from the owner to the peer
@@ -993,29 +984,23 @@ func TestGlobalRateLimitsPeerOverLimit(t *testing.T) {
 }
 
 func TestGlobalRateLimitsPeerOverLimitLeaky(t *testing.T) {
-	owner := cluster.PeerAt(2).GRPCAddress
-	peer := cluster.PeerAt(0).GRPCAddress
-	assert.NotEqual(t, owner, peer)
+	const (
+		name = "test_global_token_limit_leaky"
+		key  = "account:12345"
+	)
 
-	dialOpts := []grpc.DialOption{
-		grpc.WithResolvers(newStaticBuilder()),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	}
-
-	address := fmt.Sprintf("static:///%s", peer)
-	conn, err := grpc.DialContext(context.Background(), address, dialOpts...)
+	// Make a connection to a peer in the cluster which does not own this rate limit
+	client, err := getClientToNonOwningPeer(name, key)
 	require.NoError(t, err)
 
-	client := guber.NewV1Client(conn)
-
-	sendHit := func(status guber.Status, i int) string {
+	sendHit := func(expectedStatus guber.Status, hits int) {
 		ctx, cancel := context.WithTimeout(context.Background(), clock.Hour*5)
 		defer cancel()
 		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
 			Requests: []*guber.RateLimitReq{
 				{
-					Name:      "test_global_leaky_limit",
-					UniqueKey: "account:12345",
+					Name:      name,
+					UniqueKey: key,
 					Algorithm: guber.Algorithm_LEAKY_BUCKET,
 					Behavior:  guber.Behavior_GLOBAL,
 					Duration:  guber.Minute * 5,
@@ -1024,15 +1009,12 @@ func TestGlobalRateLimitsPeerOverLimitLeaky(t *testing.T) {
 				},
 			},
 		})
-		require.NoError(t, err, i)
-		gotResp := resp.Responses[0]
-		assert.Equal(t, "", gotResp.GetError(), i)
-		assert.Equal(t, status, gotResp.GetStatus(), i)
-
-		return gotResp.GetMetadata()["owner"]
+		assert.NoError(t, err)
+		assert.Equal(t, "", resp.Responses[0].GetError())
+		assert.Equal(t, expectedStatus, resp.Responses[0].GetStatus())
 	}
 
-	// Send two hits that should be processed by the owner and the peer and deplete the remaining
+	// Send two hits that should be processed by the owner and the broadcast to peer, depleting the remaining
 	sendHit(guber.Status_UNDER_LIMIT, 1)
 	sendHit(guber.Status_UNDER_LIMIT, 1)
 	// Wait for the broadcast from the owner to the peer
@@ -1460,11 +1442,12 @@ func getMetric(t testutil.TestingT, in io.Reader, name string) *model.Sample {
 	return nil
 }
 
-// staticBuilder implements the `resolver.Builder` interface.
 type staticBuilder struct{}
 
-func newStaticBuilder() resolver.Builder {
-	return &staticBuilder{}
+var _ resolver.Builder = (*staticBuilder)(nil)
+
+func (sb *staticBuilder) Scheme() string {
+	return "static"
 }
 
 func (sb *staticBuilder) Build(target resolver.Target, cc resolver.ClientConn, _ resolver.BuildOptions) (resolver.Resolver, error) {
@@ -1474,31 +1457,60 @@ func (sb *staticBuilder) Build(target resolver.Target, cc resolver.ClientConn, _
 			Addr:       address,
 			ServerName: address,
 		})
-
 	}
-	r, err := newStaticResolver(cc, resolverAddrs)
-	if err != nil {
+	if err := cc.UpdateState(resolver.State{Addresses: resolverAddrs}); err != nil {
 		return nil, err
 	}
-	return r, nil
+	return &staticResolver{cc: cc}, nil
 }
 
-func (sb *staticBuilder) Scheme() string {
-	return "static"
+// newStaticBuilder returns a builder which returns a staticResolver that tells GRPC
+// to connect a specific peer in the cluster.
+func newStaticBuilder() resolver.Builder {
+	return &staticBuilder{}
 }
 
 type staticResolver struct {
 	cc resolver.ClientConn
 }
 
-func newStaticResolver(cc resolver.ClientConn, addresses []resolver.Address) (resolver.Resolver, error) {
-	err := cc.UpdateState(resolver.State{Addresses: addresses})
-	if err != nil {
-		return nil, err
-	}
-	return &staticResolver{cc: cc}, nil
-}
-
 func (sr *staticResolver) ResolveNow(_ resolver.ResolveNowOptions) {}
 
 func (sr *staticResolver) Close() {}
+
+var _ resolver.Resolver = (*staticResolver)(nil)
+
+// findNonOwningPeer returns peer info for a peer in the cluster which does not
+// own the rate limit for the name and key provided.
+func findNonOwningPeer(name, key string) (guber.PeerInfo, error) {
+	owner, err := cluster.FindOwningPeer(name, key)
+	if err != nil {
+		return guber.PeerInfo{}, err
+	}
+
+	for _, p := range cluster.GetPeers() {
+		if p.HashKey() != owner.HashKey() {
+			return p, nil
+		}
+	}
+	return guber.PeerInfo{}, fmt.Errorf("unable to find non-owning peer in '%d' node cluster",
+		len(cluster.GetPeers()))
+}
+
+// getClientToNonOwningPeer returns a connection to a peer in the cluster which does not own
+// the rate limit for the name and key provided.
+func getClientToNonOwningPeer(name, key string) (guber.V1Client, error) {
+	p, err := findNonOwningPeer(name, key)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := grpc.DialContext(context.Background(),
+		fmt.Sprintf("static:///%s", p.GRPCAddress),
+		grpc.WithResolvers(newStaticBuilder()),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, err
+	}
+	return guber.NewV1Client(conn), nil
+
+}

@@ -68,6 +68,15 @@ func PeerAt(idx int) gubernator.PeerInfo {
 	return peers[idx]
 }
 
+// FindOwningPeer finds the peer which owns the rate limit with the provided name and unique key
+func FindOwningPeer(name, key string) (gubernator.PeerInfo, error) {
+	p, err := daemons[0].V1Server.GetPeer(context.Background(), name+"_"+key)
+	if err != nil {
+		return gubernator.PeerInfo{}, err
+	}
+	return p.Info(), nil
+}
+
 // DaemonAt returns a specific daemon
 func DaemonAt(idx int) *gubernator.Daemon {
 	return daemons[idx]

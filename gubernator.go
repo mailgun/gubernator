@@ -396,35 +396,23 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 		tracing.EndScope(ctx, err)
 	}()
 
-	item, ok, err := s.workerPool.GetCacheItem(ctx, req.HashKey())
-	if err != nil {
-		countError(err, "Error in workerPool.GetCacheItem")
-		return nil, errors.Wrap(err, "during in workerPool.GetCacheItem")
-	}
-	if ok {
-		// Global rate limits are always stored as RateLimitResp regardless of algorithm
-		rl, ok := item.Value.(*RateLimitResp)
-		if ok {
-			// In the case we are not the owner, global behavior dictates that we respond with
-			// what ever the owner has broadcast to use as the response. However, in the case
-			// of TOKEN_BUCKET it makes little sense to wait for the owner to respond with OVER_LIMIT
-			// if we already know the remainder is 0. So we check for a remainder of 0 here and set
-			// OVER_LIMIT only if there are actual hits and this is not a RESET_REMAINING request and
-			// it's a TOKEN_BUCKET.
-			//
-			// We cannot preform this for LEAKY_BUCKET as we don't know how much time or what other requests
-			// might have influenced the leak rate at the owning peer.
-			// (Maybe we should preform the leak calculation here?????)
-			if rl.Remaining == 0 && req.Hits > 0 && !HasBehavior(req.Behavior, Behavior_RESET_REMAINING) &&
-				req.Algorithm == Algorithm_TOKEN_BUCKET {
-				rl.Status = Status_OVER_LIMIT
-			}
-			return rl, nil
+	/*
+		item, ok, err := s.workerPool.GetCacheItem(ctx, req.HashKey())
+		if err != nil {
+			countError(err, "Error in workerPool.GetCacheItem")
+			return nil, errors.Wrap(err, "during in workerPool.GetCacheItem")
 		}
-		// We get here if the owning node hasn't asynchronously forwarded its updates to us yet and
-		// our cache still holds the rate limit we created on the first hit.
-	}
 
+		if ok {
+			// Global rate limits are always stored as RateLimitResp regardless of algorithm
+			rl, ok := item.Value.(*RateLimitResp)
+			if ok {
+				return rl, nil
+			}
+			// We get here if the owning node hasn't asynchronously forwarded it's updates to us yet and
+			// our cache still holds the rate limit we created on the first hit.
+		}
+	*/
 	cpy := proto.Clone(req).(*RateLimitReq)
 	cpy.Behavior = Behavior_NO_BATCHING
 
@@ -441,12 +429,28 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 // UpdatePeerGlobals updates the local cache with a list of global rate limits. This method should only
 // be called by a peer who is the owner of a global rate limit.
 func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
+	now := MillisecondNow()
 	for _, g := range r.Globals {
 		item := &CacheItem{
-			ExpireAt:  g.Status.ResetTime,
+			ExpireAt:  g.Status.ResetTime + 100000,
 			Algorithm: g.Algorithm,
-			Value:     g.Status,
 			Key:       g.Key,
+		}
+		switch g.Algorithm {
+		case Algorithm_LEAKY_BUCKET:
+			item.Value = &LeakyBucketItem{
+				Remaining: float64(g.Status.Remaining),
+				Limit:     g.Status.Limit,
+				Burst:     g.Status.Limit,
+				UpdatedAt: now,
+			}
+		case Algorithm_TOKEN_BUCKET:
+			item.Value = &TokenBucketItem{
+				Status:    g.Status.Status,
+				Limit:     g.Status.Limit,
+				Remaining: g.Status.Remaining,
+				CreatedAt: now,
+			}
 		}
 		err := s.workerPool.AddCacheItem(ctx, g.Key, item)
 		if err != nil {

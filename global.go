@@ -160,6 +160,7 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 		fan.Run(func(in interface{}) error {
 			p := in.(*pair)
 			ctx, cancel := context.WithTimeout(context.Background(), gm.conf.GlobalTimeout)
+			gm.log.Infof("calling owner of key: %s with hits: %d", p.req.Requests[0].UniqueKey, p.req.Requests[0].Hits)
 			_, err := p.client.GetPeerRateLimits(ctx, &p.req)
 			cancel()
 
@@ -233,6 +234,7 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 		fan.Run(func(in interface{}) error {
 			peer := in.(*PeerClient)
 			ctx, cancel := context.WithTimeout(ctx, gm.conf.GlobalTimeout)
+			gm.log.Infof("calling peer of key: %s with hits: %d", req.Globals[0].Key, req.Globals[0].Status.Remaining)
 			_, err := peer.UpdatePeerGlobals(ctx, &req)
 			cancel()
 

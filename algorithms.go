@@ -383,16 +383,17 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 		// If requested hits takes the remainder
 		if int64(b.Remaining) == r.Hits {
-			b.Remaining -= float64(r.Hits)
-			rl.Remaining = 0
+			b.Remaining = 0
+			rl.Remaining = int64(b.Remaining)
 			rl.ResetTime = now + (rl.Limit-rl.Remaining)*int64(rate)
 			return rl, nil
 		}
 
-		// If requested is more than available, then return over the limit
-		// without updating the bucket.
+		// If requested is more than available, drain bucket in order to converge as everything is returning OVER_LIMIT.
 		if r.Hits > int64(b.Remaining) {
 			metricOverLimitCounter.Add(1)
+			b.Remaining = 0
+			rl.Remaining = int64(b.Remaining)
 			rl.Status = Status_OVER_LIMIT
 			return rl, nil
 		}

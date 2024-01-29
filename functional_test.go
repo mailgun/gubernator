@@ -940,17 +940,10 @@ func TestGlobalRateLimitsPeerOverLimitLeaky(t *testing.T) {
 		assert.Equal(t, expectedStatus, resp.Responses[0].GetStatus())
 	}
 
-	// Send two hits that should be processed by the owner and the broadcast to peer, depleting the remaining
 	sendHit(guber.Status_UNDER_LIMIT, 1)
 	sendHit(guber.Status_UNDER_LIMIT, 1)
-	// Wait for the broadcast from the owner to the peer
 	time.Sleep(time.Second * 3)
-	// Since the peer must wait for the owner to say it's over the limit, this will return under the limit.
-	sendHit(guber.Status_UNDER_LIMIT, 1)
-	// Wait for the broadcast from the owner to the peer
-	time.Sleep(time.Second * 3)
-	// The status should now be OVER_LIMIT
-	sendHit(guber.Status_OVER_LIMIT, 0)
+	sendHit(guber.Status_OVER_LIMIT, 1)
 }
 
 func getMetricRequest(t testutil.TestingT, url string, name string) *model.Sample {

@@ -432,7 +432,7 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 	now := MillisecondNow()
 	for _, g := range r.Globals {
 		item := &CacheItem{
-			ExpireAt:  g.Status.ResetTime + 100000,
+			ExpireAt:  g.Status.ResetTime + 1000, // account for clock drift from owner where `ResetTime` might already be less than current time of the local machine. 
 			Algorithm: g.Algorithm,
 			Key:       g.Key,
 		}

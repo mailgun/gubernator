@@ -2,7 +2,7 @@
 VERSION=$(shell cat version)
 LDFLAGS="-X main.Version=$(VERSION)"
 GOLANGCI_LINT = $(GOPATH)/bin/golangci-lint
-GOLANGCI_LINT_VERSION = 1.54.2
+GOLANGCI_LINT_VERSION = 1.55.2
 
 $(GOLANGCI_LINT):
 	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOPATH)/bin $(GOLANGCI_LINT_VERSION)
@@ -37,7 +37,8 @@ clean:
 
 .PHONY: proto
 proto:
-	scripts/proto.sh
+	# Install buf: https://buf.build/docs/installation
+	buf generate
 
 .PHONY: certs
 certs:

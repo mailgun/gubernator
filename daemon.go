@@ -19,6 +19,7 @@ package gubernator
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -40,6 +41,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/resolver"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -47,6 +49,8 @@ type Daemon struct {
 	GRPCListeners []net.Listener
 	HTTPListener  net.Listener
 	V1Server      *V1Instance
+	InstanceID    string
+	PeerInfo      PeerInfo
 
 	log           FieldLogger
 	pool          PoolInterface
@@ -59,6 +63,7 @@ type Daemon struct {
 	promRegister  *prometheus.Registry
 	gwCancel      context.CancelFunc
 	instanceConf  Config
+	client        V1Client
 }
 
 // SpawnDaemon starts a new gubernator daemon according to the provided DaemonConfig.
@@ -67,8 +72,9 @@ type Daemon struct {
 func SpawnDaemon(ctx context.Context, conf DaemonConfig) (*Daemon, error) {
 
 	s := &Daemon{
-		log:  conf.Logger,
-		conf: conf,
+		InstanceID: conf.InstanceID,
+		log:        conf.Logger,
+		conf:       conf,
 	}
 	return s, s.Start(ctx)
 }
@@ -77,8 +83,8 @@ func (s *Daemon) Start(ctx context.Context) error {
 	var err error
 
 	setter.SetDefault(&s.log, logrus.WithFields(logrus.Fields{
-		"instance-id": s.conf.InstanceID,
-		"category":    "gubernator",
+		"instance": s.conf.InstanceID,
+		"category": "gubernator",
 	}))
 
 	s.promRegister = prometheus.NewRegistry()
@@ -148,6 +154,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 		Behaviors:     s.conf.Behaviors,
 		CacheSize:     s.conf.CacheSize,
 		Workers:       s.conf.Workers,
+		InstanceID:    s.conf.InstanceID,
 	}
 
 	s.V1Server, err = NewV1Instance(s.instanceConf)
@@ -411,6 +418,30 @@ func (s *Daemon) Peers() []PeerInfo {
 	return peers
 }
 
+func (s *Daemon) MustClient() V1Client {
+	c, err := s.Client()
+	if err != nil {
+		panic(fmt.Sprintf("[%s] failed to init daemon client - '%s'", s.InstanceID, err))
+	}
+	return c
+}
+
+func (s *Daemon) Client() (V1Client, error) {
+	if s.client != nil {
+		return s.client, nil
+	}
+
+	conn, err := grpc.DialContext(context.Background(),
+		fmt.Sprintf("static:///%s", s.PeerInfo.GRPCAddress),
+		grpc.WithResolvers(newStaticBuilder()),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, err
+	}
+	s.client = NewV1Client(conn)
+	return s.client, nil
+}
+
 // WaitForConnect returns nil if the list of addresses is listening
 // for connections; will block until context is cancelled.
 func WaitForConnect(ctx context.Context, addresses []string) error {
@@ -451,3 +482,41 @@ func WaitForConnect(ctx context.Context, addresses []string) error {
 	}
 	return nil
 }
+
+type staticBuilder struct{}
+
+var _ resolver.Builder = (*staticBuilder)(nil)
+
+func (sb *staticBuilder) Scheme() string {
+	return "static"
+}
+
+func (sb *staticBuilder) Build(target resolver.Target, cc resolver.ClientConn, _ resolver.BuildOptions) (resolver.Resolver, error) {
+	var resolverAddrs []resolver.Address
+	for _, address := range strings.Split(target.Endpoint(), ",") {
+		resolverAddrs = append(resolverAddrs, resolver.Address{
+			Addr:       address,
+			ServerName: address,
+		})
+	}
+	if err := cc.UpdateState(resolver.State{Addresses: resolverAddrs}); err != nil {
+		return nil, err
+	}
+	return &staticResolver{cc: cc}, nil
+}
+
+// newStaticBuilder returns a builder which returns a staticResolver that tells GRPC
+// to connect a specific peer in the cluster.
+func newStaticBuilder() resolver.Builder {
+	return &staticBuilder{}
+}
+
+type staticResolver struct {
+	cc resolver.ClientConn
+}
+
+func (sr *staticResolver) ResolveNow(_ resolver.ResolveNowOptions) {}
+
+func (sr *staticResolver) Close() {}
+
+var _ resolver.Resolver = (*staticResolver)(nil)

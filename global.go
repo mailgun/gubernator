@@ -98,6 +98,11 @@ func (gm *globalManager) runAsyncHits() {
 			key := r.HashKey()
 			_, ok := hits[key]
 			if ok {
+				// If any of our hits includes a request to RESET_REMAINING
+				// ensure the owning peer gets this behavior
+				if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
+					SetBehavior(&hits[key].Behavior, Behavior_RESET_REMAINING, true)
+				}
 				hits[key].Hits += r.Hits
 			} else {
 				hits[key] = r
@@ -145,7 +150,6 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 			gm.log.WithError(err).Errorf("while getting peer for hash key '%s'", r.HashKey())
 			continue
 		}
-
 		p, ok := peerRequests[peer.Info().GRPCAddress]
 		if ok {
 			p.req.Requests = append(p.req.Requests, r)

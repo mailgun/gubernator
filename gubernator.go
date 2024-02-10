@@ -396,25 +396,9 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 		tracing.EndScope(ctx, err)
 	}()
 
-	/*
-		item, ok, err := s.workerPool.GetCacheItem(ctx, req.HashKey())
-		if err != nil {
-			countError(err, "Error in workerPool.GetCacheItem")
-			return nil, errors.Wrap(err, "during in workerPool.GetCacheItem")
-		}
-
-		if ok {
-			// Global rate limits are always stored as RateLimitResp regardless of algorithm
-			rl, ok := item.Value.(*RateLimitResp)
-			if ok {
-				return rl, nil
-			}
-			// We get here if the owning node hasn't asynchronously forwarded it's updates to us yet and
-			// our cache still holds the rate limit we created on the first hit.
-		}
-	*/
 	cpy := proto.Clone(req).(*RateLimitReq)
-	cpy.Behavior = Behavior_NO_BATCHING
+	SetBehavior(&cpy.Behavior, Behavior_NO_BATCHING, true)
+	SetBehavior(&cpy.Behavior, Behavior_GLOBAL, false)
 
 	// Process the rate limit like we own it
 	resp, err = s.getLocalRateLimit(ctx, cpy)
@@ -432,7 +416,7 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 	now := MillisecondNow()
 	for _, g := range r.Globals {
 		item := &CacheItem{
-			ExpireAt:  g.Status.ResetTime + 1000, // account for clock drift from owner where `ResetTime` might already be less than current time of the local machine. 
+			ExpireAt:  g.Status.ResetTime,
 			Algorithm: g.Algorithm,
 			Key:       g.Key,
 		}
@@ -503,6 +487,15 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 			// Extract the propagated context from the metadata in the request
 			prop := propagation.TraceContext{}
 			ctx := prop.Extract(ctx, &MetadataCarrier{Map: rin.req.Metadata})
+
+			// Forwarded global requests must have DRAIN_OVER_LIMIT set so token and leaky algorithms
+			// drain the remaining in the event a peer asks for more than is remaining.
+			// This is needed because with GLOBAL behavior peers will accumulate hits, which could
+			// result in requesting more hits than is remaining.
+			if HasBehavior(rin.req.Behavior, Behavior_GLOBAL) {
+				SetBehavior(&rin.req.Behavior, Behavior_DRAIN_OVER_LIMIT, true)
+			}
+
 			rl, err := s.getLocalRateLimit(ctx, rin.req)
 			if err != nil {
 				// Return the error for this request

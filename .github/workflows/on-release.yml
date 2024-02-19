@@ -33,7 +33,7 @@ jobs:
           password: ${{ github.token }}
 
       - name: Build and push
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v5
         with:
           tags: |
             ghcr.io/mailgun/gubernator:${{ github.event.release.tag_name }}

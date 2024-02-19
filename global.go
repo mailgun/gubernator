@@ -65,8 +65,8 @@ func newGlobalManager(conf BehaviorConfig, instance *V1Instance) *globalManager 
 			Help: "The count of requests queued up for global broadcast.  This is only used for GetRateLimit requests using global behavior.",
 		}),
 	}
-	gm.toOwners()
-	gm.fromOwners()
+	gm.runAsyncHits()
+	gm.runBroadcasts()
 	return &gm
 }
 
@@ -78,12 +78,12 @@ func (gm *globalManager) QueueUpdate(r *RateLimitReq) {
 	gm.updatesQueue <- r
 }
 
-// toOwners collects async hit requests in a forever loop,
+// runAsyncHits collects async hit requests in a forever loop,
 // aggregates them in one request, and sends them to
 // the owning peers.
 // The updates are sent both when the batch limit is hit
-// and in a periodic frequency determined by GlobalSyncWait
-func (gm *globalManager) toOwners() {
+// and in a periodic frequency determined by GlobalSyncWait.
+func (gm *globalManager) runAsyncHits() {
 	var interval = NewInterval(gm.conf.GlobalSyncWait)
 	hits := make(map[string]*RateLimitReq)
 
@@ -102,7 +102,7 @@ func (gm *globalManager) toOwners() {
 
 			// Send the hits if we reached our batch limit
 			if len(hits) == gm.conf.GlobalBatchLimit {
-				gm.sendHitsToOwners(hits)
+				gm.sendHits(hits)
 				hits = make(map[string]*RateLimitReq)
 				return true
 			}
@@ -115,7 +115,7 @@ func (gm *globalManager) toOwners() {
 
 		case <-interval.C:
 			if len(hits) != 0 {
-				gm.sendHitsToOwners(hits)
+				gm.sendHits(hits)
 				hits = make(map[string]*RateLimitReq)
 			}
 		case <-done:
@@ -125,9 +125,9 @@ func (gm *globalManager) toOwners() {
 	})
 }
 
-// sendHitsToOwners takes the hits collected by toOwners and sends them to their
+// sendHits takes the hits collected by runAsyncHits and sends them to their
 // owning peers
-func (gm *globalManager) sendHitsToOwners(hits map[string]*RateLimitReq) {
+func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 	type pair struct {
 		client *PeerClient
 		req    GetPeerRateLimitsReq
@@ -173,11 +173,11 @@ func (gm *globalManager) sendHitsToOwners(hits map[string]*RateLimitReq) {
 	fan.Wait()
 }
 
-// fromOwners collects status changes for global rate limits in a forever loop,
+// runBroadcasts collects status changes for global rate limits in a forever loop,
 // and broadcasts the changes to each peer in the cluster.
 // The updates are sent both when the batch limit is hit
-// and in a periodic frequency determined by GlobalSyncWait
-func (gm *globalManager) fromOwners() {
+// and in a periodic frequency determined by GlobalSyncWait.
+func (gm *globalManager) runBroadcasts() {
 	var interval = NewInterval(gm.conf.GlobalSyncWait)
 	updates := make(map[string]*RateLimitReq)
 

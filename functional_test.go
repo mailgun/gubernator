@@ -45,13 +45,6 @@ var algos = []struct {
 	{Name: "Leaky bucket", Algorithm: guber.Algorithm_LEAKY_BUCKET},
 }
 
-// runFunc implements goleak.TestingM around a function reference.
-//type runFunc func() int
-//
-//func (f runFunc) Run() int {
-//	return f()
-//}
-
 // Setup and shutdown the mock gubernator cluster for the entire test suite
 func TestMain(m *testing.M) {
 	if err := cluster.StartWith([]guber.PeerInfo{

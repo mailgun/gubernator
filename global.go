@@ -82,7 +82,6 @@ func (gm *globalManager) QueueUpdate(r *RateLimitReq) {
 // be sent to their owning peers.
 func (gm *globalManager) runAsyncHits() {
 	var interval = NewInterval(gm.conf.GlobalSyncWait)
-	defer interval.Stop()
 	hits := make(map[string]*RateLimitReq)
 
 	gm.wg.Until(func(done chan struct{}) bool {
@@ -117,6 +116,7 @@ func (gm *globalManager) runAsyncHits() {
 				hits = make(map[string]*RateLimitReq)
 			}
 		case <-done:
+			interval.Stop()
 			return false
 		}
 		return true
@@ -174,7 +174,6 @@ func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
 // runBroadcasts collects status changes for global rate limits and broadcasts the changes to each peer in the cluster.
 func (gm *globalManager) runBroadcasts() {
 	var interval = NewInterval(gm.conf.GlobalSyncWait)
-	defer interval.Stop()
 	updates := make(map[string]*RateLimitReq)
 
 	gm.wg.Until(func(done chan struct{}) bool {
@@ -205,6 +204,7 @@ func (gm *globalManager) runBroadcasts() {
 				gm.metricGlobalQueueLength.Set(0)
 			}
 		case <-done:
+			interval.Stop()
 			return false
 		}
 		return true

@@ -12,9 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: './go.mod'
           cache-dependency-path: './go.sum'
@@ -40,7 +40,7 @@ jobs:
           comment-on-alert: true
 
       - name: Save benchmark JSON to cache
-        uses: actions/cache/save@v3
+        uses: actions/cache/save@v4
         with:
           path: ./cache/benchmark-data.json
           # Save with commit hash to avoid "cache already exists"

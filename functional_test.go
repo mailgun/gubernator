@@ -37,6 +37,14 @@ import (
 	json "google.golang.org/protobuf/encoding/protojson"
 )
 
+var algos = []struct {
+	Name      string
+	Algorithm guber.Algorithm
+}{
+	{Name: "Token bucket", Algorithm: guber.Algorithm_TOKEN_BUCKET},
+	{Name: "Leaky bucket", Algorithm: guber.Algorithm_LEAKY_BUCKET},
+}
+
 // Setup and shutdown the mock gubernator cluster for the entire test suite
 func TestMain(m *testing.M) {
 	if err := cluster.StartWith([]guber.PeerInfo{
@@ -359,6 +367,72 @@ func TestTokenBucketNegativeHits(t *testing.T) {
 			assert.Equal(t, int64(2), rl.Limit)
 			assert.True(t, rl.ResetTime != 0)
 			clock.Advance(tt.Sleep)
+		})
+	}
+}
+
+func TestDrainOverLimit(t *testing.T) {
+	defer clock.Freeze(clock.Now()).Unfreeze()
+	client, errs := guber.DialV1Server(cluster.PeerAt(0).GRPCAddress, nil)
+	require.Nil(t, errs)
+
+	tests := []struct {
+		Name      string
+		Hits      int64
+		Remaining int64
+		Status    guber.Status
+	}{
+		{
+			Name:      "check remaining before hit",
+			Hits:      0,
+			Remaining: 10,
+			Status:    guber.Status_UNDER_LIMIT,
+		}, {
+			Name:      "first hit",
+			Hits:      1,
+			Remaining: 9,
+			Status:    guber.Status_UNDER_LIMIT,
+		}, {
+			Name:      "over limit hit",
+			Hits:      100,
+			Remaining: 0,
+			Status:    guber.Status_OVER_LIMIT,
+		}, {
+			Name:      "check remaining",
+			Hits:      0,
+			Remaining: 0,
+			Status:    guber.Status_UNDER_LIMIT,
+		},
+	}
+
+	for idx, algoCase := range algos {
+		t.Run(algoCase.Name, func(t *testing.T) {
+			for _, test := range tests {
+				ctx := context.Background()
+				t.Run(test.Name, func(t *testing.T) {
+					resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
+						Requests: []*guber.RateLimitReq{
+							{
+								Name:      "test_drain_over_limit",
+								UniqueKey: fmt.Sprintf("account:1234:%d", idx),
+								Algorithm: algoCase.Algorithm,
+								Behavior:  guber.Behavior_DRAIN_OVER_LIMIT,
+								Duration:  guber.Second * 30,
+								Hits:      test.Hits,
+								Limit:     10,
+							},
+						},
+					})
+					require.NoError(t, err)
+					require.Len(t, resp.Responses, 1)
+
+					rl := resp.Responses[0]
+					assert.Equal(t, test.Status, rl.Status)
+					assert.Equal(t, test.Remaining, rl.Remaining)
+					assert.Equal(t, int64(10), rl.Limit)
+					assert.NotZero(t, rl.ResetTime)
+				})
+			}
 		})
 	}
 }

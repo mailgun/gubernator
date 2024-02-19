@@ -4,6 +4,9 @@ on:
   pull_request:
     branches: [ master ]
 
+env:
+  GOLANGCI_LINT_VERSION: v1.56.2
+
 jobs:
   test:
     name: test
@@ -25,12 +28,12 @@ jobs:
         run: ./contrib/check-version.sh
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
 
       - name: Cache deps
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
@@ -40,6 +43,12 @@ jobs:
       - name: Install deps
         run: go mod download
 
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          skip-cache: true
+
       - name: Test
         run: go test -v -race -p=1 -count=1
   go-bench:
@@ -47,12 +56,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0 # to be able to retrieve the last commit in master branch
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version-file: './go.mod'
           cache-dependency-path: './go.sum'
@@ -71,7 +80,7 @@ jobs:
 
       - name: Get benchmark JSON from Master branch
         id: cache
-        uses: actions/cache/restore@v3
+        uses: actions/cache/restore@v4
         with:
           path: ./cache/benchmark-data.json
           key: ${{ steps.get-master-branch-sha.outputs.sha }}-${{ runner.os }}-go-benchmark

@@ -34,7 +34,6 @@ service V1 {
     };
   }
 
-
   // This method is for round trip benchmarking and can be used by
   // the client to determine connectivity to the server
   rpc HealthCheck (HealthCheckReq) returns (HealthCheckResp) {
@@ -126,6 +125,11 @@ enum Behavior {
   // 'member-list' peer discovery. Also requires GUBER_DATA_CENTER to be set to different values on at
   // least 2 instances of Gubernator.
   MULTI_REGION = 16;
+
+  // A GetRateLimits call drains the remaining counter on first over limit
+  // event. Then, successive GetRateLimits calls will return zero remaining
+  // counter and not any residual value.
+  DRAIN_OVER_LIMIT = 32;
 
   // TODO: Add support for LOCAL. Which would force the rate limit to be handled by the local instance
 }

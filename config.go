@@ -62,7 +62,7 @@ type BehaviorConfig struct {
 	GlobalTimeout time.Duration
 	// The max number of global updates we can batch into a single peer request
 	GlobalBatchLimit int
-	// ForceGlobal forces global mode on all rate limit checks.
+	// ForceGlobal forces global behavior on all rate limit checks.
 	ForceGlobal bool
 
 	// Number of concurrent requests that will be made to peers. Defaults to 100
@@ -263,9 +263,9 @@ func (d *DaemonConfig) ServerTLS() *tls.Config {
 	return nil
 }
 
-// SetupDaemonConfig returns a DaemonConfig object as configured by reading the provided config file
-// and environment.
-func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, error) {
+// SetupDaemonConfig returns a DaemonConfig object that is the result of merging the lines
+// in the provided configFile and the environment variables. See `example.conf` for all available config options and their descriptions.
+func SetupDaemonConfig(logger *logrus.Logger, configFile io.Reader) (DaemonConfig, error) {
 	log := logrus.NewEntry(logger)
 	var conf DaemonConfig
 	var logLevel string
@@ -273,7 +273,7 @@ func SetupDaemonConfig(logger *logrus.Logger, configFile string) (DaemonConfig, 
 	var advAddr, advPort string
 	var err error
 
-	if configFile != "" {
+	if configFile != nil {
 		log.Infof("Loading env config: %s", configFile)
 		if err := fromEnvFile(log, configFile); err != nil {
 			return conf, err
@@ -628,15 +628,10 @@ func getEnvSlice(name string) []string {
 	return strings.Split(v, ",")
 }
 
-// Take values from a file in the format `GUBER_CONF_ITEM=my-value` and put them into the environment
-// lines that begin with `#` are ignored
-func fromEnvFile(log logrus.FieldLogger, configFile string) error {
-	fd, err := os.Open(configFile)
-	if err != nil {
-		return fmt.Errorf("while opening config file: %s", err)
-	}
-
-	contents, err := io.ReadAll(fd)
+// Take values from a file in the format `GUBER_CONF_ITEM=my-value` and sets them as environment variables.
+// Lines that begin with `#` are ignored
+func fromEnvFile(log logrus.FieldLogger, configFile io.Reader) error {
+	contents, err := io.ReadAll(configFile)
 	if err != nil {
 		return fmt.Errorf("while reading config file '%s': %s", configFile, err)
 	}

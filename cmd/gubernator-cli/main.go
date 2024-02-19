@@ -89,7 +89,11 @@ func main() {
 		cmdLine := strings.Join(os.Args[1:], " ")
 		logrus.WithContext(ctx).Info("Command line: " + cmdLine)
 
-		conf, err := guber.SetupDaemonConfig(log, configFile)
+		configFileReader, err := os.Open(configFile)
+		if err != nil {
+			return fmt.Errorf("while opening config file: %s", err)
+		}
+		conf, err := guber.SetupDaemonConfig(log, configFileReader)
 		if err != nil {
 			return err
 		}

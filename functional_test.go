@@ -76,14 +76,6 @@ func TestMain(m *testing.M) {
 
 	// os.Exit doesn't run deferred functions
 	os.Exit(code)
-
-	//goleak.VerifyTestMain(
-	//	runFunc(func() int {
-	//		exitCode := m.Run()
-	//		cluster.Stop()
-	//		return exitCode
-	//	}),
-	//)
 }
 
 func TestOverTheLimit(t *testing.T) {

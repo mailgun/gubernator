@@ -167,10 +167,6 @@ func (s *V1Instance) Close() (err error) {
 		return errors.Wrap(err, "Error in workerPool.Close")
 	}
 
-	//for _, client := range s.conf.LocalPicker.Peers() {
-	//	client.Shutdown(ctx)
-	//}
-
 	s.isClosed = true
 	return nil
 }

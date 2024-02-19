@@ -32,12 +32,19 @@ docker: ## Build Docker image
 	docker tag ghcr.io/mailgun/gubernator:$(VERSION) ghcr.io/mailgun/gubernator:latest
 
 .PHONY: build
-build: ## Build binary
+build: proto ## Build binary
 	go build -v -ldflags $(LDFLAGS) -o gubernator ./cmd/gubernator/main.go
 
 .PHONY: clean
 clean: ## Clean binaries
 	rm -f gubernator gubernator-cli
+
+.PHONY: clean-proto
+clean-proto: ## Clean the generated source files from the protobuf sources
+	@echo "==> Cleaning up the go generated files from proto"
+	@find . -name "*.pb.go" -type f -delete
+	@find . -name "*.pb.*.go" -type f -delete
+
 
 .PHONY: proto
 proto: ## Build protos

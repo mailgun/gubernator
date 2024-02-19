@@ -64,8 +64,11 @@ func TestMain(m *testing.M) {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	defer cluster.Stop()
-	os.Exit(m.Run())
+	code := m.Run()
+	cluster.Stop()
+
+	// os.Exit doesn't run deferred functions
+	os.Exit(code)
 }
 
 func TestOverTheLimit(t *testing.T) {

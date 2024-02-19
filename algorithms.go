@@ -181,6 +181,11 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			trace.SpanFromContext(ctx).AddEvent("Over the limit")
 			metricOverLimitCounter.Add(1)
 			rl.Status = Status_OVER_LIMIT
+			if HasBehavior(r.Behavior, Behavior_DRAIN_OVER_LIMIT) {
+				// DRAIN_OVER_LIMIT behavior drains the remaining counter.
+				t.Remaining = 0
+				rl.Remaining = 0
+			}
 			return rl, nil
 		}
 
@@ -394,6 +399,11 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		if r.Hits > int64(b.Remaining) {
 			metricOverLimitCounter.Add(1)
 			rl.Status = Status_OVER_LIMIT
+			if HasBehavior(r.Behavior, Behavior_DRAIN_OVER_LIMIT) {
+				// DRAIN_OVER_LIMIT behavior drains the remaining counter.
+				b.Remaining = 0
+				rl.Remaining = 0
+			}
 			return rl, nil
 		}
 

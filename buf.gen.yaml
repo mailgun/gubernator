@@ -2,7 +2,7 @@
 ---
 version: v1
 plugins:
-  - plugin: buf.build/protocolbuffers/go:v1.28.1
+  - plugin: buf.build/protocolbuffers/go:v1.32.0
     out: ./
     opt: paths=source_relative
   - plugin: buf.build/grpc/go:v1.3.0
@@ -10,7 +10,7 @@ plugins:
     opt:
       - paths=source_relative
       - require_unimplemented_servers=false
-  - plugin: buf.build/grpc-ecosystem/gateway:v2.15.0
+  - plugin: buf.build/grpc-ecosystem/gateway:v2.19.1
     out: ./
     opt:
       - paths=source_relative

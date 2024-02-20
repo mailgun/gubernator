@@ -1,4 +1,4 @@
-#!/usr/bin/env -S buf generate  --debug --template
+#!/usr/bin/env -S buf generate --debug --template
 ---
 version: v1
 plugins:

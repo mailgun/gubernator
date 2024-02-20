@@ -91,8 +91,7 @@ func TestPeerClientShutdown(t *testing.T) {
 			// yield the processor that way we allow other goroutines to start their request
 			runtime.Gosched()
 
-			err := client.Shutdown(context.Background())
-			assert.NoError(t, err)
+			client.Shutdown()
 
 			wg.Wait()
 		})

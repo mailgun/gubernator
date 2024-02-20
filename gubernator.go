@@ -627,9 +627,6 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 	s.log.WithField("peers", peerInfo).Debug("peers updated")
 
 	// Shutdown any old peers we no longer need
-	ctx, cancel := context.WithTimeout(context.Background(), s.conf.Behaviors.BatchTimeout)
-	defer cancel()
-
 	var shutdownPeers []*PeerClient
 	for _, peer := range oldLocalPicker.Peers() {
 		if peerInfo := s.conf.LocalPicker.GetByPeerInfo(peer.Info()); peerInfo == nil {
@@ -649,10 +646,7 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 	for _, p := range shutdownPeers {
 		wg.Run(func(obj interface{}) error {
 			pc := obj.(*PeerClient)
-			err := pc.Shutdown(ctx)
-			if err != nil {
-				s.log.WithError(err).WithField("peer", pc).Error("while shutting down peer")
-			}
+			pc.Shutdown()
 			return nil
 		}, p)
 	}

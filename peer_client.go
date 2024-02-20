@@ -97,8 +97,8 @@ func NewPeerClient(conf PeerConfig) *PeerClient {
 
 // Connect establishes a GRPC connection to a peer
 func (c *PeerClient) connect(ctx context.Context) (err error) {
-	// NOTE: To future self, this statusMutex is used here because we need to know if the peer is disconnecting and
-	// handle ErrClosing. Since this statusMutex MUST be here we take this opportunity to also see if we are connected.
+	// NOTE: To future self, this mutex is used here because we need to know if the peer is disconnecting and
+	// handle ErrClosing. Since this mutex MUST be here we take this opportunity to also see if we are connected.
 	// Doing this here encapsulates managing the connected state to the PeerClient struct. Previously a PeerClient
 	// was connected when `NewPeerClient()` was called however, when adding support for multi data centers having a
 	// PeerClient connected to every Peer in every data center continuously is not desirable.
@@ -116,7 +116,7 @@ func (c *PeerClient) connect(ctx context.Context) (err error) {
 	}
 
 	if c.status == peerNotConnected {
-		// This statusMutex stuff looks wonky, but it allows us to use RLock() 99% of the time, while the 1% where we
+		// This mutex stuff looks wonky, but it allows us to use RLock() 99% of the time, while the 1% where we
 		// actually need to connect uses a full Lock(), using RLock() most of which should reduce the over head
 		// of a full lock on every call
 
@@ -485,14 +485,6 @@ func (c *PeerClient) Shutdown() {
 	c.status = peerClosing
 	c.statusMutex.Unlock()
 
-	defer func() {
-		c.clientMutex.Lock()
-		if c.conn != nil {
-			c.conn.Close()
-		}
-		c.clientMutex.Unlock()
-	}()
-
 	// drain in-flight requests
 	c.wgMutex.RLock()
 	c.wg.Wait()
@@ -500,6 +492,13 @@ func (c *PeerClient) Shutdown() {
 
 	// no more items will be sent
 	close(c.queue)
+
+	// close the client connection
+	c.clientMutex.Lock()
+	if c.conn != nil {
+		c.conn.Close()
+	}
+	c.clientMutex.Unlock()
 }
 
 // PeerErr is returned if the peer is not connected or is in a closing state

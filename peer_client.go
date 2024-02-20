@@ -217,8 +217,8 @@ func (c *PeerClient) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	// a race condition if called within a separate go routine if the internal wg is `0`
 	// when Wait() is called then Add(1) is called concurrently.
 	c.wgMutex.Lock()
+	defer c.wgMutex.Unlock() // unlock at the very end of this function
 	c.wg.Add(1)
-	c.wgMutex.Unlock()
 	defer c.wg.Done()
 
 	c.clientMutex.RLock()
@@ -247,8 +247,8 @@ func (c *PeerClient) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 
 	// See NOTE above about RLock and wg.Add(1)
 	c.wgMutex.Lock()
+	defer c.wgMutex.Unlock() // unlock at the very end of this function
 	c.wg.Add(1)
-	c.wgMutex.Unlock()
 	defer c.wg.Done()
 
 	c.clientMutex.RLock()
@@ -317,8 +317,8 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	}
 
 	c.wgMutex.Lock()
+	defer c.wgMutex.Unlock() // unlock at the very end of this function
 	c.wg.Add(1)
-	c.wgMutex.Unlock()
 	defer c.wg.Done()
 
 	// Enqueue the request to be sent
@@ -486,9 +486,9 @@ func (c *PeerClient) Shutdown() {
 	c.statusMutex.Unlock()
 
 	// drain in-flight requests
-	c.wgMutex.RLock()
+	c.wgMutex.Lock()
+	defer c.wgMutex.Unlock()
 	c.wg.Wait()
-	c.wgMutex.RUnlock()
 
 	// no more items will be sent
 	close(c.queue)

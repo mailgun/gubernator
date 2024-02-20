@@ -95,7 +95,8 @@ func NewPeerClient(conf PeerConfig) *PeerClient {
 	}
 }
 
-// Connect establishes a GRPC connection to a peer
+// Connect tries to establish a GRPC connection to a peer.
+// If the peer is shutting down it returns an error.
 func (c *PeerClient) connect(ctx context.Context) (err error) {
 	// NOTE: To future self, this mutex is used here because we need to know if the peer is disconnecting and
 	// handle ErrClosing. Since this mutex MUST be here we take this opportunity to also see if we are connected.
@@ -301,15 +302,6 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 		return nil, c.setLastErr(err)
 	}
 
-	c.statusMutex.RLock()
-	if c.status == peerClosing {
-		c.statusMutex.RUnlock()
-		err := &PeerErr{err: errors.New("already disconnecting")}
-		return nil, c.setLastErr(err)
-	}
-	c.statusMutex.RUnlock()
-
-	// Wait for a response or context cancel
 	req := request{
 		resp:    make(chan *response, 1),
 		ctx:     ctx,
@@ -332,6 +324,7 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 		return nil, errors.Wrap(ctx.Err(), "Context error while enqueuing request")
 	}
 
+	// Wait for a response or context cancel
 	select {
 	case re := <-req.resp:
 		if re.err != nil {
@@ -482,8 +475,9 @@ func (c *PeerClient) Shutdown() {
 	c.statusMutex.RUnlock()
 
 	c.statusMutex.Lock()
+	// unlock at the very end of this function so that new requests don't try to send through a closed channel
+	defer c.statusMutex.Unlock()
 	c.status = peerClosing
-	c.statusMutex.Unlock()
 
 	// drain in-flight requests
 	c.wgMutex.Lock()

@@ -71,6 +71,8 @@ type BehaviorConfig struct {
 
 // Config for a gubernator instance
 type Config struct {
+	InstanceID string
+
 	// (Required) A list of GRPC servers to register our instance with
 	GRPCServers []*grpc.Server
 

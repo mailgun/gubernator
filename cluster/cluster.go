@@ -68,6 +68,47 @@ func PeerAt(idx int) gubernator.PeerInfo {
 	return peers[idx]
 }
 
+// FindOwningPeer finds the peer which owns the rate limit with the provided name and unique key
+func FindOwningPeer(name, key string) (gubernator.PeerInfo, error) {
+	p, err := daemons[0].V1Server.GetPeer(context.Background(), name+"_"+key)
+	if err != nil {
+		return gubernator.PeerInfo{}, err
+	}
+	return p.Info(), nil
+}
+
+// FindOwningDaemon finds the daemon which owns the rate limit with the provided name and unique key
+func FindOwningDaemon(name, key string) (*gubernator.Daemon, error) {
+	p, err := daemons[0].V1Server.GetPeer(context.Background(), name+"_"+key)
+	if err != nil {
+		return &gubernator.Daemon{}, err
+	}
+
+	for i, d := range daemons {
+		if d.PeerInfo.GRPCAddress == p.Info().GRPCAddress {
+			return daemons[i], nil
+		}
+	}
+	return &gubernator.Daemon{}, errors.New("unable to find owning daemon")
+}
+
+// ListNonOwningDaemons returns a list of daemons in the cluster that do not own the rate limit
+// for the name and key provided.
+func ListNonOwningDaemons(name, key string) ([]*gubernator.Daemon, error) {
+	owner, err := FindOwningDaemon(name, key)
+	if err != nil {
+		return []*gubernator.Daemon{}, err
+	}
+
+	var daemons []*gubernator.Daemon
+	for _, d := range GetDaemons() {
+		if d.PeerInfo.GRPCAddress != owner.PeerInfo.GRPCAddress {
+			daemons = append(daemons, d)
+		}
+	}
+	return daemons, nil
+}
+
 // DaemonAt returns a specific daemon
 func DaemonAt(idx int) *gubernator.Daemon {
 	return daemons[idx]
@@ -112,6 +153,7 @@ func StartWith(localPeers []gubernator.PeerInfo) error {
 		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
 		d, err := gubernator.SpawnDaemon(ctx, gubernator.DaemonConfig{
 			Logger:            logrus.WithField("instance", peer.GRPCAddress),
+			InstanceID:        peer.GRPCAddress,
 			GRPCListenAddress: peer.GRPCAddress,
 			HTTPListenAddress: peer.HTTPAddress,
 			DataCenter:        peer.DataCenter,
@@ -127,12 +169,15 @@ func StartWith(localPeers []gubernator.PeerInfo) error {
 			return errors.Wrapf(err, "while starting server for addr '%s'", peer.GRPCAddress)
 		}
 
-		// Add the peers and daemons to the package level variables
-		peers = append(peers, gubernator.PeerInfo{
+		p := gubernator.PeerInfo{
 			GRPCAddress: d.GRPCListeners[0].Addr().String(),
 			HTTPAddress: d.HTTPListener.Addr().String(),
 			DataCenter:  peer.DataCenter,
-		})
+		}
+		d.PeerInfo = p
+
+		// Add the peers and daemons to the package level variables
+		peers = append(peers, p)
 		daemons = append(daemons, d)
 	}
 

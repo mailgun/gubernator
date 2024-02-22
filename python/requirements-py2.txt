@@ -4,7 +4,7 @@ enum34==1.1.6
 funcsigs==1.0.2
 futures==3.2.0
 googleapis-common-protos==1.5.8
-grpcio==1.53.0
+grpcio==1.53.2
 more-itertools==5.0.0
 pathlib2==2.3.3
 pluggy==0.8.1

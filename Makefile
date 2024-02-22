@@ -2,7 +2,7 @@
 VERSION=$(shell cat version)
 LDFLAGS="-X main.Version=$(VERSION)"
 GOLANGCI_LINT = $(GOPATH)/bin/golangci-lint
-GOLANGCI_LINT_VERSION = 1.54.2
+GOLANGCI_LINT_VERSION = 1.56.2
 
 $(GOLANGCI_LINT):
 	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOPATH)/bin $(GOLANGCI_LINT_VERSION)
@@ -13,7 +13,7 @@ lint: $(GOLANGCI_LINT)
 
 .PHONY: test
 test:
-	(go test -v -race -p=1 -count=1 -coverprofile coverage.out ./...; ret=$$?; \
+	(go test -v -race -p=1 -count=1 -tags holster_test_mode -coverprofile coverage.out ./...; ret=$$?; \
 		go tool cover -func coverage.out; \
 		go tool cover -html coverage.out -o coverage.html; \
 		exit $$ret)
@@ -37,7 +37,8 @@ clean:
 
 .PHONY: proto
 proto:
-	scripts/proto.sh
+	# Install buf: https://buf.build/docs/installation
+	buf generate
 
 .PHONY: certs
 certs:

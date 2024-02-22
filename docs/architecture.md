@@ -45,7 +45,7 @@ apply the new config immediately.
 
 ## Global Behavior
 Since Gubernator rate limits are hashed and handled by a single peer in the
-cluster. Rate limits that apply to every request in a data center would result
+cluster, rate limits that apply to every request in a data center could result
 in the rate limit request being handled by a single peer for the entirety of
 the data center. For example, consider a rate limit with
 `name=requests_per_datacenter` and a `unique_id=us-east-1`. Now imagine that a
@@ -68,7 +68,7 @@ limit status from the owner.
 #### Side effects of global behavior
 Since Hits are batched and forwarded to the owning peer asynchronously, the
 immediate response to the client will not include the most accurate remaining
-counts. As that count will only get updated after the async call to the owner
+counts, as that count will only get updated after the async call to the owner
 peer is complete and the owning peer has had time to update all the peers in
 the cluster. As a result the use of GLOBAL allows for greater scale but at the
 cost of consistency.
@@ -83,18 +83,18 @@ updates before all nodes have the `Hit` updated in their cache.
 To calculate the WORST case scenario, we total the number of network updates
 that must occur for each global rate limit.
 
-Count 1 incoming request to the node
-Count 1 request when forwarding to the owning node
-Count 1 + (number of nodes in cluster) to update all the nodes with the current Hit count.
+- Count 1 incoming request to the node
+- Count 1 request when forwarding to the owning node
+- Count 1 + (number of nodes in cluster) to update all the nodes with the current Hit count.
 
-Remember this is the WORST case, as the node that recieved the request might be
-the owning node thus no need to forward to the owner. Additionally we improve
+Remember this is the WORST case, as the node that received the request might be
+the owning node thus no need to forward to the owner. Additionally, we improve
 the worst case by having the owning node batch Hits when forwarding to all the
 nodes in the cluster. Such that 1,000 individual requests of Hit = 1 each for a
 unique key will result in batched request from the owner to each node with a
 single Hit = 1,000 update.
 
-Additionally thousands of hits to different unique keys will also be batched
+Additionally, thousands of hits to different unique keys will also be batched
 such that network usage doesn't increase until the number of requests in an
 update batch exceeds the `BehaviorConfig.GlobalBatchLimit` or when the number of
 nodes in the cluster increases. (thus more batch updates) When that occurs you

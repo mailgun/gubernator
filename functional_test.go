@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
 	"strings"
@@ -1025,6 +1026,7 @@ func TestGlobalRateLimitsWithLoadBalancing(t *testing.T) {
 	owner := cluster.PeerAt(2).GRPCAddress
 	peer := cluster.PeerAt(0).GRPCAddress
 	assert.NotEqual(t, owner, peer)
+	key := fmt.Sprintf("key:%04x", rand.Intn(1<<16))
 
 	dialOpts := []grpc.DialOption{
 		grpc.WithResolvers(newStaticBuilder()),
@@ -1045,7 +1047,7 @@ func TestGlobalRateLimitsWithLoadBalancing(t *testing.T) {
 			Requests: []*guber.RateLimitReq{
 				{
 					Name:      "test_global",
-					UniqueKey: "account:12345",
+					UniqueKey: key,
 					Algorithm: guber.Algorithm_LEAKY_BUCKET,
 					Behavior:  guber.Behavior_GLOBAL,
 					Duration:  guber.Minute * 5,

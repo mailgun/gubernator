@@ -1073,16 +1073,16 @@ func TestGlobalRateLimitsWithLoadBalancing(t *testing.T) {
 	}
 
 	// Send two hits that should be processed by the owner and non-owner and
-	// deplete the limit consistently
+	// deplete the limit consistently.
 	sendHit(guber.Status_UNDER_LIMIT, 1)
 	sendHit(guber.Status_UNDER_LIMIT, 2)
 
-	// Sleep to ensure the global broadcast occurs (every 100ms)
+	// Sleep to ensure the global broadcast occurs (every 100ms).
 	time.Sleep(150 * time.Millisecond)
 
 	// All successive hits should return OVER_LIMIT.
-	for i := 0; i < 10; i++ {
-		sendHit(guber.Status_OVER_LIMIT, i+2)
+	for i := 2; i <= 10; i++ {
+		sendHit(guber.Status_OVER_LIMIT, i)
 	}
 }
 

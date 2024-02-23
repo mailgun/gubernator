@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
 	"strings"
@@ -35,6 +36,9 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	json "google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -1015,6 +1019,70 @@ func TestGlobalRateLimits(t *testing.T) {
 	require.NoError(t, waitForBroadcast(clock.Second*3, owner, 2))
 
 	sendHit(peers[4].MustClient(), guber.Status_OVER_LIMIT, 1, 0)
+}
+
+// Ensure global broadcast updates all peers when GetRateLimits is called on
+// either owner or non-owner peer.
+func TestGlobalRateLimitsWithLoadBalancing(t *testing.T) {
+	ctx := context.Background()
+	const name = "test_global"
+	key := fmt.Sprintf("key:%016x", rand.Int())
+
+	// Determine owner and non-owner peers.
+	ownerPeerInfo, err := cluster.FindOwningPeer(name, key)
+	require.NoError(t, err)
+	owner := ownerPeerInfo.GRPCAddress
+	nonOwner := cluster.PeerAt(0).GRPCAddress
+	if nonOwner == owner {
+		nonOwner = cluster.PeerAt(1).GRPCAddress
+	}
+	require.NotEqual(t, owner, nonOwner)
+
+	// Connect to owner and non-owner peers in round robin.
+	dialOpts := []grpc.DialOption{
+		grpc.WithResolvers(guber.NewStaticBuilder()),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"round_robin":{}}]}`),
+	}
+	address := fmt.Sprintf("static:///%s,%s", owner, nonOwner)
+	conn, err := grpc.DialContext(ctx, address, dialOpts...)
+	require.NoError(t, err)
+	client := guber.NewV1Client(conn)
+
+	sendHit := func(status guber.Status, i int) {
+		ctx, cancel := context.WithTimeout(ctx, 10*clock.Second)
+		defer cancel()
+		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
+			Requests: []*guber.RateLimitReq{
+				{
+					Name:      name,
+					UniqueKey: key,
+					Algorithm: guber.Algorithm_LEAKY_BUCKET,
+					Behavior:  guber.Behavior_GLOBAL,
+					Duration:  guber.Minute * 5,
+					Hits:      1,
+					Limit:     2,
+				},
+			},
+		})
+		require.NoError(t, err, i)
+		item := resp.Responses[0]
+		assert.Equal(t, "", item.GetError(), fmt.Sprintf("mismatch error, iteration %d", i))
+		assert.Equal(t, status, item.GetStatus(), fmt.Sprintf("mismatch status, iteration %d", i))
+	}
+
+	// Send two hits that should be processed by the owner and non-owner and
+	// deplete the limit consistently.
+	sendHit(guber.Status_UNDER_LIMIT, 1)
+	sendHit(guber.Status_UNDER_LIMIT, 2)
+
+	// Sleep to ensure the global broadcast occurs (every 100ms).
+	time.Sleep(150 * time.Millisecond)
+
+	// All successive hits should return OVER_LIMIT.
+	for i := 2; i <= 10; i++ {
+		sendHit(guber.Status_OVER_LIMIT, i)
+	}
 }
 
 func TestGlobalRateLimitsPeerOverLimit(t *testing.T) {

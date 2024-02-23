@@ -25,6 +25,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	guber "github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/gubernator/v2/cluster"
@@ -36,14 +37,6 @@ import (
 	"github.com/stretchr/testify/require"
 	json "google.golang.org/protobuf/encoding/protojson"
 )
-
-var algos = []struct {
-	Name      string
-	Algorithm guber.Algorithm
-}{
-	{Name: "Token bucket", Algorithm: guber.Algorithm_TOKEN_BUCKET},
-	{Name: "Leaky bucket", Algorithm: guber.Algorithm_LEAKY_BUCKET},
-}
 
 // Setup and shutdown the mock gubernator cluster for the entire test suite
 func TestMain(m *testing.M) {
@@ -405,8 +398,8 @@ func TestDrainOverLimit(t *testing.T) {
 		},
 	}
 
-	for idx, algoCase := range algos {
-		t.Run(algoCase.Name, func(t *testing.T) {
+	for idx, algoCase := range []guber.Algorithm{guber.Algorithm_TOKEN_BUCKET, guber.Algorithm_LEAKY_BUCKET} {
+		t.Run(guber.Algorithm_name[int32(algoCase)], func(t *testing.T) {
 			for _, test := range tests {
 				ctx := context.Background()
 				t.Run(test.Name, func(t *testing.T) {
@@ -415,7 +408,7 @@ func TestDrainOverLimit(t *testing.T) {
 							{
 								Name:      "test_drain_over_limit",
 								UniqueKey: fmt.Sprintf("account:1234:%d", idx),
-								Algorithm: algoCase.Algorithm,
+								Algorithm: algoCase,
 								Behavior:  guber.Behavior_DRAIN_OVER_LIMIT,
 								Duration:  guber.Second * 30,
 								Hits:      test.Hits,
@@ -435,6 +428,49 @@ func TestDrainOverLimit(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTokenBucketRequestMoreThanAvailable(t *testing.T) {
+	defer clock.Freeze(clock.Now()).Unfreeze()
+
+	client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
+	require.NoError(t, err)
+
+	sendHit := func(status guber.Status, remain int64, hit int64) *guber.RateLimitResp {
+		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
+		defer cancel()
+		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
+			Requests: []*guber.RateLimitReq{
+				{
+					Name:      "test_token_more_than_available",
+					UniqueKey: "account:123456",
+					Algorithm: guber.Algorithm_TOKEN_BUCKET,
+					Duration:  guber.Millisecond * 1000,
+					Hits:      hit,
+					Limit:     2000,
+				},
+			},
+		})
+		require.NoError(t, err, hit)
+		assert.Equal(t, "", resp.Responses[0].Error)
+		assert.Equal(t, status, resp.Responses[0].Status)
+		assert.Equal(t, remain, resp.Responses[0].Remaining)
+		assert.Equal(t, int64(2000), resp.Responses[0].Limit)
+		return resp.Responses[0]
+	}
+
+	// Use half of the bucket
+	sendHit(guber.Status_UNDER_LIMIT, 1000, 1000)
+
+	// Ask for more than the bucket has and the remainder is still 1000.
+	// See NOTE in algorithms.go
+	sendHit(guber.Status_OVER_LIMIT, 1000, 1500)
+
+	// Now other clients can ask for some of the remaining until we hit our limit
+	sendHit(guber.Status_UNDER_LIMIT, 500, 500)
+	sendHit(guber.Status_UNDER_LIMIT, 100, 400)
+	sendHit(guber.Status_UNDER_LIMIT, 0, 100)
+	sendHit(guber.Status_OVER_LIMIT, 0, 1)
 }
 
 func TestLeakyBucket(t *testing.T) {
@@ -696,7 +732,7 @@ func TestLeakyBucketGregorian(t *testing.T) {
 			Hits:      1,
 			Remaining: 58,
 			Status:    guber.Status_UNDER_LIMIT,
-			Sleep:     clock.Second,
+			Sleep:     clock.Millisecond * 1200,
 		},
 		{
 			Name:      "third hit; leak one hit",
@@ -706,7 +742,12 @@ func TestLeakyBucketGregorian(t *testing.T) {
 		},
 	}
 
+	// Truncate to the nearest minute
 	now := clock.Now()
+	now = now.Truncate(1 * time.Minute)
+	// So we don't start on the minute boundary
+	now = now.Add(time.Millisecond * 100)
+
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
 			resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
@@ -807,6 +848,50 @@ func TestLeakyBucketNegativeHits(t *testing.T) {
 	}
 }
 
+func TestLeakyBucketRequestMoreThanAvailable(t *testing.T) {
+	// Freeze time so we don't leak during the test
+	defer clock.Freeze(clock.Now()).Unfreeze()
+
+	client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
+	require.NoError(t, err)
+
+	sendHit := func(status guber.Status, remain int64, hits int64) *guber.RateLimitResp {
+		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
+		defer cancel()
+		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
+			Requests: []*guber.RateLimitReq{
+				{
+					Name:      "test_leaky_more_than_available",
+					UniqueKey: "account:123456",
+					Algorithm: guber.Algorithm_LEAKY_BUCKET,
+					Duration:  guber.Millisecond * 1000,
+					Hits:      hits,
+					Limit:     2000,
+				},
+			},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "", resp.Responses[0].Error)
+		assert.Equal(t, status, resp.Responses[0].Status)
+		assert.Equal(t, remain, resp.Responses[0].Remaining)
+		assert.Equal(t, int64(2000), resp.Responses[0].Limit)
+		return resp.Responses[0]
+	}
+
+	// Use half of the bucket
+	sendHit(guber.Status_UNDER_LIMIT, 1000, 1000)
+
+	// Ask for more than the rate limit has and the remainder is still 1000.
+	// See NOTE in algorithms.go
+	sendHit(guber.Status_OVER_LIMIT, 1000, 1500)
+
+	// Now other clients can ask for some of the remaining until we hit our limit
+	sendHit(guber.Status_UNDER_LIMIT, 500, 500)
+	sendHit(guber.Status_UNDER_LIMIT, 100, 400)
+	sendHit(guber.Status_UNDER_LIMIT, 0, 100)
+	sendHit(guber.Status_OVER_LIMIT, 0, 1)
+}
+
 func TestMissingFields(t *testing.T) {
 	client, errs := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
 	require.Nil(t, errs)
@@ -871,12 +956,16 @@ func TestMissingFields(t *testing.T) {
 }
 
 func TestGlobalRateLimits(t *testing.T) {
-	peer := cluster.PeerAt(0).GRPCAddress
-	client, errs := guber.DialV1Server(peer, nil)
-	require.NoError(t, errs)
+	const (
+		name = "test_global"
+		key  = "account:12345"
+	)
 
-	sendHit := func(status guber.Status, remain int64, i int) string {
-		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*5)
+	peers, err := cluster.ListNonOwningDaemons(name, key)
+	require.NoError(t, err)
+
+	sendHit := func(client guber.V1Client, status guber.Status, hits int64, remain int64) {
+		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
 		defer cancel()
 		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
 			Requests: []*guber.RateLimitReq{
@@ -885,59 +974,346 @@ func TestGlobalRateLimits(t *testing.T) {
 					UniqueKey: "account:12345",
 					Algorithm: guber.Algorithm_TOKEN_BUCKET,
 					Behavior:  guber.Behavior_GLOBAL,
-					Duration:  guber.Second * 3,
-					Hits:      1,
+					Duration:  guber.Minute * 3,
+					Hits:      hits,
 					Limit:     5,
 				},
 			},
 		})
-		require.NoError(t, err, i)
-		assert.Equal(t, "", resp.Responses[0].Error, i)
-		assert.Equal(t, status, resp.Responses[0].Status, i)
-		assert.Equal(t, remain, resp.Responses[0].Remaining, i)
-		assert.Equal(t, int64(5), resp.Responses[0].Limit, i)
-
-		// ensure that we have a canonical host
-		assert.NotEmpty(t, resp.Responses[0].Metadata["owner"])
-
-		// name/key should ensure our connected peer is NOT the owner,
-		// the peer we are connected to should forward requests asynchronously to the owner.
-		assert.NotEqual(t, peer, resp.Responses[0].Metadata["owner"])
-
-		return resp.Responses[0].Metadata["owner"]
+		require.NoError(t, err)
+		assert.Equal(t, "", resp.Responses[0].Error)
+		assert.Equal(t, remain, resp.Responses[0].Remaining)
+		assert.Equal(t, status, resp.Responses[0].Status)
+		assert.Equal(t, int64(5), resp.Responses[0].Limit)
 	}
-
 	// Our first hit should create the request on the peer and queue for async forward
-	sendHit(guber.Status_UNDER_LIMIT, 4, 1)
+	sendHit(peers[0].MustClient(), guber.Status_UNDER_LIMIT, 1, 4)
 
 	// Our second should be processed as if we own it since the async forward hasn't occurred yet
-	sendHit(guber.Status_UNDER_LIMIT, 3, 2)
+	sendHit(peers[0].MustClient(), guber.Status_UNDER_LIMIT, 2, 2)
 
 	testutil.UntilPass(t, 20, clock.Millisecond*200, func(t testutil.TestingT) {
-		// Inspect our metrics, ensure they collected the counts we expected during this test
-		d := cluster.DaemonAt(0)
-		metricsURL := fmt.Sprintf("http://%s/metrics", d.Config().HTTPListenAddress)
-		m := getMetricRequest(t, metricsURL, "gubernator_global_send_duration_count")
+		// Inspect peers metrics, ensure the peer sent the global rate limit to the owner
+		metricsURL := fmt.Sprintf("http://%s/metrics", peers[0].Config().HTTPListenAddress)
+		m, err := getMetricRequest(metricsURL, "gubernator_global_send_duration_count")
+		assert.NoError(t, err)
 		assert.Equal(t, 1, int(m.Value))
-
-		// Expect one peer (the owning peer) to indicate a broadcast.
-		var broadcastCount int
-		for i := 0; i < cluster.NumOfDaemons(); i++ {
-			d := cluster.DaemonAt(i)
-			metricsURL := fmt.Sprintf("http://%s/metrics", d.Config().HTTPListenAddress)
-			m := getMetricRequest(t, metricsURL, "gubernator_broadcast_duration_count")
-			broadcastCount += int(m.Value)
-		}
-
-		assert.Equal(t, 1, broadcastCount)
 	})
+	owner, err := cluster.FindOwningDaemon(name, key)
+	require.NoError(t, err)
+
+	require.NoError(t, waitForBroadcast(clock.Second*3, owner, 1))
+
+	// Check different peers, they should have gotten the broadcast from the owner
+	sendHit(peers[1].MustClient(), guber.Status_UNDER_LIMIT, 0, 2)
+	sendHit(peers[2].MustClient(), guber.Status_UNDER_LIMIT, 0, 2)
+
+	// Non owning peer should calculate the rate limit remaining before forwarding
+	// to the owner.
+	sendHit(peers[3].MustClient(), guber.Status_UNDER_LIMIT, 2, 0)
+
+	require.NoError(t, waitForBroadcast(clock.Second*3, owner, 2))
+
+	sendHit(peers[4].MustClient(), guber.Status_OVER_LIMIT, 1, 0)
 }
 
-func getMetricRequest(t testutil.TestingT, url string, name string) *model.Sample {
-	resp, err := http.Get(url)
+func TestGlobalRateLimitsPeerOverLimit(t *testing.T) {
+	const (
+		name = "test_global_token_limit"
+		key  = "account:12345"
+	)
+
+	peers, err := cluster.ListNonOwningDaemons(name, key)
 	require.NoError(t, err)
+
+	sendHit := func(expectedStatus guber.Status, hits int64) {
+		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
+		defer cancel()
+		resp, err := peers[0].MustClient().GetRateLimits(ctx, &guber.GetRateLimitsReq{
+			Requests: []*guber.RateLimitReq{
+				{
+					Name:      name,
+					UniqueKey: key,
+					Algorithm: guber.Algorithm_TOKEN_BUCKET,
+					Behavior:  guber.Behavior_GLOBAL,
+					Duration:  guber.Minute * 5,
+					Hits:      hits,
+					Limit:     2,
+				},
+			},
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, "", resp.Responses[0].GetError())
+		assert.Equal(t, expectedStatus, resp.Responses[0].GetStatus())
+	}
+	owner, err := cluster.FindOwningDaemon(name, key)
+	require.NoError(t, err)
+
+	// Send two hits that should be processed by the owner and the broadcast to peer, depleting the remaining
+	sendHit(guber.Status_UNDER_LIMIT, 1)
+	sendHit(guber.Status_UNDER_LIMIT, 1)
+	// Wait for the broadcast from the owner to the peer
+	require.NoError(t, waitForBroadcast(clock.Second*3, owner, 1))
+	// Since the remainder is 0, the peer should set OVER_LIMIT instead of waiting for the owner
+	// to respond with OVER_LIMIT.
+	sendHit(guber.Status_OVER_LIMIT, 1)
+	// Wait for the broadcast from the owner to the peer
+	require.NoError(t, waitForBroadcast(clock.Second*3, owner, 2))
+	// The status should still be OVER_LIMIT
+	sendHit(guber.Status_OVER_LIMIT, 0)
+}
+
+func TestGlobalRateLimitsPeerOverLimitLeaky(t *testing.T) {
+	const (
+		name = "test_global_token_limit_leaky"
+		key  = "account:12345"
+	)
+
+	peers, err := cluster.ListNonOwningDaemons(name, key)
+	require.NoError(t, err)
+
+	sendHit := func(client guber.V1Client, expectedStatus guber.Status, hits int64) {
+		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
+		defer cancel()
+		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
+			Requests: []*guber.RateLimitReq{
+				{
+					Name:      name,
+					UniqueKey: key,
+					Algorithm: guber.Algorithm_LEAKY_BUCKET,
+					Behavior:  guber.Behavior_GLOBAL,
+					Duration:  guber.Minute * 5,
+					Hits:      hits,
+					Limit:     2,
+				},
+			},
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, "", resp.Responses[0].GetError())
+		assert.Equal(t, expectedStatus, resp.Responses[0].GetStatus())
+	}
+	owner, err := cluster.FindOwningDaemon(name, key)
+	require.NoError(t, err)
+
+	// Send two hits that should be processed by the owner and the broadcast to peer, depleting the remaining
+	sendHit(peers[0].MustClient(), guber.Status_UNDER_LIMIT, 1)
+	sendHit(peers[0].MustClient(), guber.Status_UNDER_LIMIT, 1)
+	// Wait for the broadcast from the owner to the peers
+	require.NoError(t, waitForBroadcast(clock.Second*3, owner, 1))
+	// Ask a different peer if the status is over the limit
+	sendHit(peers[1].MustClient(), guber.Status_OVER_LIMIT, 1)
+}
+
+func TestGlobalRequestMoreThanAvailable(t *testing.T) {
+	const (
+		name = "test_global_more_than_available"
+		key  = "account:123456"
+	)
+
+	peers, err := cluster.ListNonOwningDaemons(name, key)
+	require.NoError(t, err)
+
+	sendHit := func(client guber.V1Client, expectedStatus guber.Status, hits int64, remaining int64) {
+		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
+		defer cancel()
+		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
+			Requests: []*guber.RateLimitReq{
+				{
+					Name:      name,
+					UniqueKey: key,
+					Algorithm: guber.Algorithm_LEAKY_BUCKET,
+					Behavior:  guber.Behavior_GLOBAL,
+					Duration:  guber.Minute * 1_000,
+					Hits:      hits,
+					Limit:     100,
+				},
+			},
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, "", resp.Responses[0].GetError())
+		assert.Equal(t, expectedStatus, resp.Responses[0].GetStatus())
+	}
+	owner, err := cluster.FindOwningDaemon(name, key)
+	require.NoError(t, err)
+
+	prev, err := getBroadcastCount(owner)
+	require.NoError(t, err)
+
+	// Ensure GRPC has connections to each peer before we start, as we want
+	// the actual test requests to happen quite fast.
+	for _, p := range peers {
+		sendHit(p.MustClient(), guber.Status_UNDER_LIMIT, 0, 100)
+	}
+
+	// Send a request for 50 hits from each non owning peer in the cluster. These requests
+	// will be queued and sent to the owner as accumulated hits. As a result of the async nature
+	// of `Behavior_GLOBAL` rate limit requests spread across peers like this will be allowed to
+	// over-consume their resource within the rate limit window until the owner is updated and
+	// a broadcast to all peers is received.
+	//
+	// The maximum number of resources that can be over-consumed can be calculated by multiplying
+	// the remainder by the number of peers in the cluster. For example: If you have a remainder of 100
+	// and a cluster of 10 instances, then the maximum over-consumed resource is 1,000. If you need
+	// a more accurate remaining calculation, and wish to avoid over consuming a resource, then do
+	// not use `Behavior_GLOBAL`.
+	for _, p := range peers {
+		sendHit(p.MustClient(), guber.Status_UNDER_LIMIT, 50, 50)
+	}
+
+	// Wait for the broadcast from the owner to the peers
+	require.NoError(t, waitForBroadcast(clock.Second*10, owner, prev+1))
+
+	// We should be over the limit
+	sendHit(peers[0].MustClient(), guber.Status_OVER_LIMIT, 1, 0)
+}
+
+func TestGlobalNegativeHits(t *testing.T) {
+	const (
+		name = "test_global_negative_hits"
+		key  = "account:12345"
+	)
+
+	peers, err := cluster.ListNonOwningDaemons(name, key)
+	require.NoError(t, err)
+
+	sendHit := func(client guber.V1Client, status guber.Status, hits int64, remaining int64) {
+		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
+		defer cancel()
+		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
+			Requests: []*guber.RateLimitReq{
+				{
+					Name:      name,
+					UniqueKey: key,
+					Algorithm: guber.Algorithm_TOKEN_BUCKET,
+					Behavior:  guber.Behavior_GLOBAL,
+					Duration:  guber.Minute * 100,
+					Hits:      hits,
+					Limit:     2,
+				},
+			},
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, "", resp.Responses[0].GetError())
+		assert.Equal(t, status, resp.Responses[0].GetStatus())
+		assert.Equal(t, remaining, resp.Responses[0].Remaining)
+	}
+	owner, err := cluster.FindOwningDaemon(name, key)
+	require.NoError(t, err)
+	prev, err := getBroadcastCount(owner)
+	require.NoError(t, err)
+
+	// Send a negative hit on a rate limit with no hits
+	sendHit(peers[0].MustClient(), guber.Status_UNDER_LIMIT, -1, 3)
+
+	// Wait for the negative remaining to propagate
+	require.NoError(t, waitForBroadcast(clock.Second*10, owner, prev+1))
+
+	// Send another negative hit to a different peer
+	sendHit(peers[1].MustClient(), guber.Status_UNDER_LIMIT, -1, 4)
+
+	require.NoError(t, waitForBroadcast(clock.Second*10, owner, prev+2))
+
+	// Should have 4 in the remainder
+	sendHit(peers[2].MustClient(), guber.Status_UNDER_LIMIT, 4, 0)
+
+	require.NoError(t, waitForBroadcast(clock.Second*10, owner, prev+3))
+
+	sendHit(peers[3].MustClient(), guber.Status_UNDER_LIMIT, 0, 0)
+}
+
+func TestGlobalResetRemaining(t *testing.T) {
+	const (
+		name = "test_global_reset"
+		key  = "account:123456"
+	)
+
+	peers, err := cluster.ListNonOwningDaemons(name, key)
+	require.NoError(t, err)
+
+	sendHit := func(client guber.V1Client, expectedStatus guber.Status, hits int64, remaining int64) {
+		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
+		defer cancel()
+		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
+			Requests: []*guber.RateLimitReq{
+				{
+					Name:      name,
+					UniqueKey: key,
+					Algorithm: guber.Algorithm_LEAKY_BUCKET,
+					Behavior:  guber.Behavior_GLOBAL,
+					Duration:  guber.Minute * 1_000,
+					Hits:      hits,
+					Limit:     100,
+				},
+			},
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, "", resp.Responses[0].GetError())
+		assert.Equal(t, expectedStatus, resp.Responses[0].GetStatus())
+		assert.Equal(t, remaining, resp.Responses[0].Remaining)
+	}
+	owner, err := cluster.FindOwningDaemon(name, key)
+	require.NoError(t, err)
+	prev, err := getBroadcastCount(owner)
+	require.NoError(t, err)
+
+	for _, p := range peers {
+		sendHit(p.MustClient(), guber.Status_UNDER_LIMIT, 50, 50)
+	}
+
+	// Wait for the broadcast from the owner to the peers
+	require.NoError(t, waitForBroadcast(clock.Second*10, owner, prev+1))
+
+	// We should be over the limit and remaining should be zero
+	sendHit(peers[0].MustClient(), guber.Status_OVER_LIMIT, 1, 0)
+
+	// Now reset the remaining
+	ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
+	defer cancel()
+	resp, err := peers[0].MustClient().GetRateLimits(ctx, &guber.GetRateLimitsReq{
+		Requests: []*guber.RateLimitReq{
+			{
+				Name:      name,
+				UniqueKey: key,
+				Algorithm: guber.Algorithm_LEAKY_BUCKET,
+				Behavior:  guber.Behavior_GLOBAL | guber.Behavior_RESET_REMAINING,
+				Duration:  guber.Minute * 1_000,
+				Hits:      0,
+				Limit:     100,
+			},
+		},
+	})
+	require.NoError(t, err)
+	assert.NotEqual(t, 100, resp.Responses[0].Remaining)
+
+	// Wait for the reset to propagate.
+	require.NoError(t, waitForBroadcast(clock.Second*10, owner, prev+2))
+
+	// Check a different peer to ensure remaining has been reset
+	resp, err = peers[1].MustClient().GetRateLimits(ctx, &guber.GetRateLimitsReq{
+		Requests: []*guber.RateLimitReq{
+			{
+				Name:      name,
+				UniqueKey: key,
+				Algorithm: guber.Algorithm_LEAKY_BUCKET,
+				Behavior:  guber.Behavior_GLOBAL,
+				Duration:  guber.Minute * 1_000,
+				Hits:      0,
+				Limit:     100,
+			},
+		},
+	})
+	require.NoError(t, err)
+	assert.NotEqual(t, 100, resp.Responses[0].Remaining)
+
+}
+
+func getMetricRequest(url string, name string) (*model.Sample, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
 	defer resp.Body.Close()
-	return getMetric(t, resp.Body, name)
+	return getMetric(resp.Body, name)
 }
 
 func TestChangeLimit(t *testing.T) {
@@ -1174,6 +1550,7 @@ func TestHealthCheck(t *testing.T) {
 }
 
 func TestLeakyBucketDivBug(t *testing.T) {
+	// Freeze time so we don't leak during the test
 	defer clock.Freeze(clock.Now()).Unfreeze()
 
 	client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
@@ -1321,7 +1698,7 @@ func TestGetPeerRateLimits(t *testing.T) {
 
 // TODO: Add a test for sending no rate limits RateLimitReqList.RateLimits = nil
 
-func getMetric(t testutil.TestingT, in io.Reader, name string) *model.Sample {
+func getMetric(in io.Reader, name string) (*model.Sample, error) {
 	dec := expfmt.SampleDecoder{
 		Dec: expfmt.NewDecoder(in, expfmt.FmtText),
 		Opts: &expfmt.DecodeOptions{
@@ -1336,14 +1713,58 @@ func getMetric(t testutil.TestingT, in io.Reader, name string) *model.Sample {
 		if err == io.EOF {
 			break
 		}
-		assert.NoError(t, err)
+		if err != nil {
+			return nil, err
+		}
 		all = append(all, smpls...)
 	}
 
 	for _, s := range all {
 		if strings.Contains(s.Metric.String(), name) {
-			return s
+			return s, nil
 		}
 	}
-	return nil
+	return nil, nil
+}
+
+// getBroadcastCount returns the current broadcast count for use with waitForBroadcast()
+// TODO: Replace this with something else, we can call and reset via HTTP/GRPC calls in gubernator v3
+func getBroadcastCount(d *guber.Daemon) (int, error) {
+	m, err := getMetricRequest(fmt.Sprintf("http://%s/metrics", d.Config().HTTPListenAddress),
+		"gubernator_broadcast_duration_count")
+	if err != nil {
+		return 0, err
+	}
+
+	return int(m.Value), nil
+}
+
+// waitForBroadcast waits until the broadcast count for the daemon passed
+// changes to the expected value. Returns an error if the expected value is
+// not found before the context is cancelled.
+func waitForBroadcast(timeout clock.Duration, d *guber.Daemon, expect int) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	for {
+		m, err := getMetricRequest(fmt.Sprintf("http://%s/metrics", d.Config().HTTPListenAddress),
+			"gubernator_broadcast_duration_count")
+		if err != nil {
+			return err
+		}
+
+		// It's possible a broadcast occurred twice if waiting for multiple peer to
+		// forward updates to the owner.
+		if int(m.Value) >= expect {
+			// Give the nodes some time to process the broadcasts
+			clock.Sleep(clock.Millisecond * 500)
+			return nil
+		}
+
+		select {
+		case <-clock.After(time.Millisecond * 800):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }

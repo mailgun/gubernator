@@ -17,7 +17,7 @@ lint: $(GOLANGCI_LINT) ## Run Go linter
 
 .PHONY: test
 test: ## Run unit tests and measure code coverage
-	(go test -v -race -p=1 -count=1 -coverprofile coverage.out ./...; ret=$$?; \
+	(go test -v -race -p=1 -count=1 -tags holster_test_mode -coverprofile coverage.out ./...; ret=$$?; \
 		go tool cover -func coverage.out; \
 		go tool cover -html coverage.out -o coverage.html; \
 		exit $$ret)

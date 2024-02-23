@@ -26,10 +26,10 @@ import "gubernator.proto";
 
 // NOTE: For use by gubernator peers only
 service PeersV1 {
-    // Used by peers to relay batches of requests to an authoritative peer
+    // Used by peers to relay batches of requests to an owner peer
     rpc GetPeerRateLimits (GetPeerRateLimitsReq) returns (GetPeerRateLimitsResp) {}
 
-    // Used by peers send global rate limit updates to other peers
+    // Used by owner peers to send global rate limit updates to non-owner peers
     rpc UpdatePeerGlobals (UpdatePeerGlobalsReq) returns (UpdatePeerGlobalsResp) {}
 }
 

@@ -1,0 +1,4 @@
+*.pb.go linguist-generated=true
+*.pb.*.go linguist-generated=true
+go.sum linguist-generated=true
+buf.lock linguist-generated=true

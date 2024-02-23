@@ -32,14 +32,14 @@ class PeersV1Servicer(object):
     """
 
     def GetPeerRateLimits(self, request, context):
-        """Used by peers to relay batches of requests to an authoritative peer
+        """Used by peers to relay batches of requests to an owner peer
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def UpdatePeerGlobals(self, request, context):
-        """Used by peers send global rate limit updates to other peers
+        """Used by owner peers to send global rate limit updates to non-owner peers
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')

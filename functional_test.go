@@ -39,7 +39,6 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/resolver"
 	json "google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -1041,7 +1040,7 @@ func TestGlobalRateLimitsWithLoadBalancing(t *testing.T) {
 
 	// Connect to owner and non-owner peers in round robin.
 	dialOpts := []grpc.DialOption{
-		grpc.WithResolvers(newStaticBuilder()),
+		grpc.WithResolvers(guber.NewStaticBuilder()),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"round_robin":{}}]}`),
 	}
@@ -1837,46 +1836,3 @@ func waitForBroadcast(timeout clock.Duration, d *guber.Daemon, expect int) error
 		}
 	}
 }
-
-// staticBuilder implements the `resolver.Builder` interface.
-type staticBuilder struct{}
-
-func newStaticBuilder() resolver.Builder {
-	return &staticBuilder{}
-}
-
-func (sb *staticBuilder) Build(target resolver.Target, cc resolver.ClientConn, _ resolver.BuildOptions) (resolver.Resolver, error) {
-	var resolverAddrs []resolver.Address
-	for _, address := range strings.Split(target.Endpoint(), ",") {
-		resolverAddrs = append(resolverAddrs, resolver.Address{
-			Addr:       address,
-			ServerName: address,
-		})
-
-	}
-	r, err := newStaticResolver(cc, resolverAddrs)
-	if err != nil {
-		return nil, err
-	}
-	return r, nil
-}
-
-func (sb *staticBuilder) Scheme() string {
-	return "static"
-}
-
-type staticResolver struct {
-	cc resolver.ClientConn
-}
-
-func newStaticResolver(cc resolver.ClientConn, addresses []resolver.Address) (resolver.Resolver, error) {
-	err := cc.UpdateState(resolver.State{Addresses: addresses})
-	if err != nil {
-		return nil, err
-	}
-	return &staticResolver{cc: cc}, nil
-}
-
-func (sr *staticResolver) ResolveNow(_ resolver.ResolveNowOptions) {}
-
-func (sr *staticResolver) Close() {}

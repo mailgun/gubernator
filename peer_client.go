@@ -79,7 +79,7 @@ type PeerConfig struct {
 	TraceGRPC bool
 }
 
-// NewPeerClient establishes a connection to a peer in a non-blocking fashion.
+// NewPeerClient establishes a connection to a peer in a blocking fashion.
 // If batching is enabled, it also starts a goroutine where batches will be processed.
 func NewPeerClient(conf PeerConfig) (*PeerClient, error) {
 	peerClient := &PeerClient{
@@ -87,7 +87,7 @@ func NewPeerClient(conf PeerConfig) (*PeerClient, error) {
 		conf:     conf,
 		lastErrs: collections.NewLRUCache(100),
 	}
-	var opts []grpc.DialOption
+	opts := []grpc.DialOption{grpc.WithBlock()}
 
 	if conf.TraceGRPC {
 		opts = []grpc.DialOption{
@@ -402,7 +402,8 @@ func (c *PeerClient) sendBatch(ctx context.Context, queue []*request) {
 	}
 }
 
-// Shutdown waits until all outstanding requests have finished and then closes the grpc connection
+// Shutdown waits until all outstanding requests have finished or the context is cancelled.
+// Then it closes the grpc connection.
 func (c *PeerClient) Shutdown(ctx context.Context) error {
 	// ensure we don't leak goroutines, even if the Shutdown times out
 	defer c.conn.Close()

@@ -588,7 +588,8 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (_ 
 	return resp, nil
 }
 
-// SetPeers is called by the implementor to indicate the pool of peers has changed
+// SetPeers replaces the peers and shuts down all the previous peers.
+// TODO this should return an error if we failed to connect to any of the new peers
 func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 	localPicker := s.conf.LocalPicker.New()
 	regionPicker := s.conf.RegionPicker.New()

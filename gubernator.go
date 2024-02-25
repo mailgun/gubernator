@@ -345,7 +345,7 @@ func (s *V1Instance) asyncRequest(ctx context.Context, req *AsyncReq) {
 		// Make an RPC call to the peer that owns this rate limit
 		r, err := req.Peer.GetPeerRateLimit(ctx, req.Req)
 		if err != nil {
-			if IsNotReady(err) {
+			if errors.Is(err, context.DeadlineExceeded) {
 				attempts++
 				metricBatchSendRetries.WithLabelValues(req.Req.Name).Inc()
 				req.Peer, err = s.GetPeer(ctx, req.Key)
@@ -599,13 +599,17 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 			peer := s.conf.RegionPicker.GetByPeerInfo(info)
 			// If we don't have an existing PeerClient create a new one
 			if peer == nil {
-				peer = NewPeerClient(PeerConfig{
+				var err error
+				peer, err = NewPeerClient(PeerConfig{
 					TraceGRPC: s.conf.PeerTraceGRPC,
 					Behavior:  s.conf.Behaviors,
 					TLS:       s.conf.PeerTLS,
 					Log:       s.log,
 					Info:      info,
 				})
+				if err != nil {
+					s.log.Error("error connecting to peer: %s", err)
+				}
 			}
 			regionPicker.Add(peer)
 			continue
@@ -613,13 +617,17 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 		// If we don't have an existing PeerClient create a new one
 		peer := s.conf.LocalPicker.GetByPeerInfo(info)
 		if peer == nil {
-			peer = NewPeerClient(PeerConfig{
+			var err error
+			peer, err = NewPeerClient(PeerConfig{
 				TraceGRPC: s.conf.PeerTraceGRPC,
 				Behavior:  s.conf.Behaviors,
 				TLS:       s.conf.PeerTLS,
 				Log:       s.log,
 				Info:      info,
 			})
+			if err != nil {
+				s.log.Error("error connecting to peer: %s", err)
+			}
 		}
 		localPicker.Add(peer)
 	}

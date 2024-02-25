@@ -1720,9 +1720,10 @@ func TestGRPCGateway(t *testing.T) {
 
 func TestGetPeerRateLimits(t *testing.T) {
 	ctx := context.Background()
-	peerClient := guber.NewPeerClient(guber.PeerConfig{
+	peerClient, err := guber.NewPeerClient(guber.PeerConfig{
 		Info: cluster.GetRandomPeer(cluster.DataCenterNone),
 	})
+	require.NoError(t, err)
 
 	t.Run("Stable rate check request order", func(t *testing.T) {
 		// Ensure response order matches rate check request order.

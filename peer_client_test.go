@@ -19,13 +19,15 @@ package gubernator_test
 import (
 	"context"
 	"runtime"
-	"sync"
+	"strings"
 	"testing"
 
 	gubernator "github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/gubernator/v2/cluster"
 	"github.com/mailgun/holster/v4/clock"
-	"github.com/stretchr/testify/assert"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestPeerClientShutdown(t *testing.T) {
@@ -56,17 +58,17 @@ func TestPeerClientShutdown(t *testing.T) {
 		c := cases[i]
 
 		t.Run(c.Name, func(t *testing.T) {
-			client := gubernator.NewPeerClient(gubernator.PeerConfig{
+			client, err := gubernator.NewPeerClient(gubernator.PeerConfig{
 				Info:     cluster.GetRandomPeer(cluster.DataCenterNone),
 				Behavior: config,
 			})
+			require.NoError(t, err)
 
-			wg := sync.WaitGroup{}
-			wg.Add(threads)
+			wg := errgroup.Group{}
+			wg.SetLimit(threads)
 			// Spawn a whole bunch of concurrent requests to test shutdown in various states
 			for j := 0; j < threads; j++ {
-				go func() {
-					defer wg.Done()
+				wg.Go(func() error {
 					ctx := context.Background()
 					_, err := client.GetPeerRateLimit(ctx, &gubernator.RateLimitReq{
 						Hits:     1,
@@ -74,18 +76,13 @@ func TestPeerClientShutdown(t *testing.T) {
 						Behavior: c.Behavior,
 					})
 
-					isExpectedErr := false
-
-					switch err.(type) {
-					case *gubernator.PeerErr:
-						isExpectedErr = true
-					case nil:
-						isExpectedErr = true
+					if err != nil {
+						if !strings.Contains(err.Error(), "client connection is closing") {
+							return errors.Wrap(err, "unexpected error")
+						}
 					}
-
-					assert.True(t, true, isExpectedErr)
-
-				}()
+					return nil
+				})
 			}
 
 			// yield the processor that way we allow other goroutines to start their request
@@ -93,7 +90,11 @@ func TestPeerClientShutdown(t *testing.T) {
 
 			client.Shutdown()
 
-			wg.Wait()
+			err = wg.Wait()
+			if err != nil {
+				t.Error(err)
+				t.Fail()
+			}
 		})
 
 	}

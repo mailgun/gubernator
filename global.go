@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"github.com/mailgun/holster/v4/syncutil"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -247,8 +248,8 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 			cancel()
 
 			if err != nil {
-				// Skip peers that are not in a ready state
-				if !IsNotReady(err) {
+				// Only log if it's an unknown error
+				if !errors.Is(err, context.Canceled) && errors.Is(err, context.DeadlineExceeded) {
 					gm.log.WithError(err).Errorf("while broadcasting global updates to '%s'", peer.Info().GRPCAddress)
 				}
 			}

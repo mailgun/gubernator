@@ -530,7 +530,7 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (health
 	localPeers := s.conf.LocalPicker.Peers()
 	for _, peer := range localPeers {
 		for _, errMsg := range peer.GetLastErr() {
-			err := fmt.Errorf("Error returned from local peer.GetLastErr: %s", errMsg)
+			err := fmt.Errorf("error returned from local peer.GetLastErr: %s", errMsg)
 			span.RecordError(err)
 			errs = append(errs, err.Error())
 		}
@@ -540,7 +540,7 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (health
 	regionPeers := s.conf.RegionPicker.Peers()
 	for _, peer := range regionPeers {
 		for _, errMsg := range peer.GetLastErr() {
-			err := fmt.Errorf("Error returned from region peer.GetLastErr: %s", errMsg)
+			err := fmt.Errorf("error returned from region peer.GetLastErr: %s", errMsg)
 			span.RecordError(err)
 			errs = append(errs, err.Error())
 		}

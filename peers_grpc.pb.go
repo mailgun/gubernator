@@ -42,9 +42,9 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type PeersV1Client interface {
-	// Used by peers to relay batches of requests to an authoritative peer
+	// Used by peers to relay batches of requests to an owner peer
 	GetPeerRateLimits(ctx context.Context, in *GetPeerRateLimitsReq, opts ...grpc.CallOption) (*GetPeerRateLimitsResp, error)
-	// Used by peers send global rate limit updates to other peers
+	// Used by owner peers to send global rate limit updates to non-owner peers
 	UpdatePeerGlobals(ctx context.Context, in *UpdatePeerGlobalsReq, opts ...grpc.CallOption) (*UpdatePeerGlobalsResp, error)
 }
 
@@ -78,9 +78,9 @@ func (c *peersV1Client) UpdatePeerGlobals(ctx context.Context, in *UpdatePeerGlo
 // All implementations should embed UnimplementedPeersV1Server
 // for forward compatibility
 type PeersV1Server interface {
-	// Used by peers to relay batches of requests to an authoritative peer
+	// Used by peers to relay batches of requests to an owner peer
 	GetPeerRateLimits(context.Context, *GetPeerRateLimitsReq) (*GetPeerRateLimitsResp, error)
-	// Used by peers send global rate limit updates to other peers
+	// Used by owner peers to send global rate limit updates to non-owner peers
 	UpdatePeerGlobals(context.Context, *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error)
 }
 

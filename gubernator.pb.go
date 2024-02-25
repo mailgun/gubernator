@@ -109,7 +109,7 @@ const (
 	// distributed to each peer and cached locally. A rate limit request received from any peer in the
 	// cluster will first check the local cache for a rate limit answer, if it exists the peer will
 	// immediately return the answer to the client and asynchronously forward the aggregate hits to
-	// the peer coordinator. Because of GLOBALS async nature we lose some accuracy in rate limit
+	// the owner peer. Because of GLOBALS async nature we lose some accuracy in rate limit
 	// reporting, which may result in allowing some requests beyond the chosen rate limit. However we
 	// gain massive performance as every request coming into the system does not have to wait for a
 	// single peer to decide if the rate limit has been reached.
@@ -478,15 +478,15 @@ type RateLimitResp struct {
 
 	// The status of the rate limit.
 	Status Status `protobuf:"varint,1,opt,name=status,proto3,enum=pb.gubernator.Status" json:"status,omitempty"`
-	// The currently configured request limit (Identical to RateLimitRequest.rate_limit_config.limit).
+	// The currently configured request limit (Identical to [[RateLimitReq.limit]]).
 	Limit int64 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	// This is the number of requests remaining before the limit is hit.
+	// This is the number of requests remaining before the rate limit is hit but after subtracting the hits from the current request
 	Remaining int64 `protobuf:"varint,3,opt,name=remaining,proto3" json:"remaining,omitempty"`
 	// This is the time when the rate limit span will be reset, provided as a unix timestamp in milliseconds.
 	ResetTime int64 `protobuf:"varint,4,opt,name=reset_time,json=resetTime,proto3" json:"reset_time,omitempty"`
 	// Contains the error; If set all other values should be ignored
 	Error string `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
-	// This is additional metadata that a client might find useful. (IE: Additional headers, corrdinator ownership, etc..)
+	// This is additional metadata that a client might find useful. (IE: Additional headers, coordinator ownership, etc..)
 	Metadata map[string]string `protobuf:"bytes,6,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 

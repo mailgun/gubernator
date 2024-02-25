@@ -145,7 +145,7 @@ func RegisterV1HandlerServer(ctx context.Context, mux *runtime.ServeMux, server 
 // RegisterV1HandlerFromEndpoint is same as RegisterV1Handler but
 // automatically dials to "endpoint" and closes the connection when "ctx" gets done.
 func RegisterV1HandlerFromEndpoint(ctx context.Context, mux *runtime.ServeMux, endpoint string, opts []grpc.DialOption) (err error) {
-	conn, err := grpc.Dial(endpoint, opts...)
+	conn, err := grpc.DialContext(ctx, endpoint, opts...)
 	if err != nil {
 		return err
 	}

@@ -26,6 +26,13 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// ### NOTE ###
+// The both token and leaky follow the same semantic which allows for requests of more than the limit
+// to be rejected, but subsequent requests within the same window that are under the limit to succeed.
+// IE: client attempts to send 1000 emails but 100 is their limit. The request is rejected as over the
+// limit, but we do not set the remainder to 0 in the cache. The client can retry within the same window
+// with 100 emails and the request will succeed. You can override this default behavior with `DRAIN_OVER_LIMIT`
+
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket
 func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
 
@@ -82,12 +89,6 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 				ResetTime: 0,
 			}, nil
 		}
-
-		// The following semantic allows for requests of more than the limit to be rejected, but subsequent
-		// requests within the same duration that are under the limit to succeed. IE: client attempts to
-		// send 1000 emails but 100 is their limit. The request is rejected as over the limit, but since we
-		// don't store OVER_LIMIT in the cache the client can retry within the same rate limit duration with
-		// 100 emails and the request will succeed.
 		t, ok := item.Value.(*TokenBucketItem)
 		if !ok {
 			// Client switched algorithms; perhaps due to a migration?
@@ -388,22 +389,24 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 		// If requested hits takes the remainder
 		if int64(b.Remaining) == r.Hits {
-			b.Remaining -= float64(r.Hits)
-			rl.Remaining = 0
+			b.Remaining = 0
+			rl.Remaining = int64(b.Remaining)
 			rl.ResetTime = now + (rl.Limit-rl.Remaining)*int64(rate)
 			return rl, nil
 		}
 
 		// If requested is more than available, then return over the limit
-		// without updating the bucket.
+		// without updating the bucket, unless `DRAIN_OVER_LIMIT` is set.
 		if r.Hits > int64(b.Remaining) {
 			metricOverLimitCounter.Add(1)
 			rl.Status = Status_OVER_LIMIT
+
+			// DRAIN_OVER_LIMIT behavior drains the remaining counter.
 			if HasBehavior(r.Behavior, Behavior_DRAIN_OVER_LIMIT) {
-				// DRAIN_OVER_LIMIT behavior drains the remaining counter.
 				b.Remaining = 0
 				rl.Remaining = 0
 			}
+
 			return rl, nil
 		}
 

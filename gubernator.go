@@ -394,23 +394,9 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 		tracing.EndScope(ctx, err)
 	}()
 
-	item, ok, err := s.workerPool.GetCacheItem(ctx, req.HashKey())
-	if err != nil {
-		countError(err, "Error in workerPool.GetCacheItem")
-		return nil, errors.Wrap(err, "during in workerPool.GetCacheItem")
-	}
-	if ok {
-		// Global rate limits are always stored as RateLimitResp regardless of algorithm
-		rl, ok := item.Value.(*RateLimitResp)
-		if ok {
-			return rl, nil
-		}
-		// We get here if the owning node hasn't asynchronously forwarded it's updates to us yet and
-		// our cache still holds the rate limit we created on the first hit.
-	}
-
 	cpy := proto.Clone(req).(*RateLimitReq)
-	cpy.Behavior = Behavior_NO_BATCHING
+	SetBehavior(&cpy.Behavior, Behavior_NO_BATCHING, true)
+	SetBehavior(&cpy.Behavior, Behavior_GLOBAL, false)
 
 	// Process the rate limit like we own it
 	resp, err = s.getLocalRateLimit(ctx, cpy)
@@ -425,12 +411,28 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 // UpdatePeerGlobals updates the local cache with a list of global rate limits. This method should only
 // be called by a peer who is the owner of a global rate limit.
 func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
+	now := MillisecondNow()
 	for _, g := range r.Globals {
 		item := &CacheItem{
 			ExpireAt:  g.Status.ResetTime,
 			Algorithm: g.Algorithm,
-			Value:     g.Status,
 			Key:       g.Key,
+		}
+		switch g.Algorithm {
+		case Algorithm_LEAKY_BUCKET:
+			item.Value = &LeakyBucketItem{
+				Remaining: float64(g.Status.Remaining),
+				Limit:     g.Status.Limit,
+				Burst:     g.Status.Limit,
+				UpdatedAt: now,
+			}
+		case Algorithm_TOKEN_BUCKET:
+			item.Value = &TokenBucketItem{
+				Status:    g.Status.Status,
+				Limit:     g.Status.Limit,
+				Remaining: g.Status.Remaining,
+				CreatedAt: now,
+			}
 		}
 		err := s.workerPool.AddCacheItem(ctx, g.Key, item)
 		if err != nil {
@@ -483,6 +485,15 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 			// Extract the propagated context from the metadata in the request
 			prop := propagation.TraceContext{}
 			ctx := prop.Extract(ctx, &MetadataCarrier{Map: rin.req.Metadata})
+
+			// Forwarded global requests must have DRAIN_OVER_LIMIT set so token and leaky algorithms
+			// drain the remaining in the event a peer asks for more than is remaining.
+			// This is needed because with GLOBAL behavior peers will accumulate hits, which could
+			// result in requesting more hits than is remaining.
+			if HasBehavior(rin.req.Behavior, Behavior_GLOBAL) {
+				SetBehavior(&rin.req.Behavior, Behavior_DRAIN_OVER_LIMIT, true)
+			}
+
 			rl, err := s.getLocalRateLimit(ctx, rin.req)
 			if err != nil {
 				// Return the error for this request
@@ -567,11 +578,9 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (_ 
 	}
 
 	metricGetRateLimitCounter.WithLabelValues("local").Inc()
-
-	// If global behavior and owning peer, broadcast update to all peers.
-	// Assuming that this peer does not own the ratelimit.
+	// If global behavior, then broadcast update to all peers.
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
-		s.global.QueueUpdate(r)
+		s.global.QueueUpdate(r, resp)
 	}
 
 	return resp, nil

@@ -1,6 +1,8 @@
+#!/usr/bin/env -S buf generate --debug --template
+---
 version: v1
 plugins:
-  - name: go
+  - plugin: buf.build/protocolbuffers/go:v1.32.0
     out: ./
     opt: paths=source_relative
   - plugin: buf.build/grpc/go:v1.3.0
@@ -8,6 +10,12 @@ plugins:
     opt:
       - paths=source_relative
       - require_unimplemented_servers=false
+  - plugin: buf.build/grpc-ecosystem/gateway:v2.18.0 # same version in go.mod
+    out: ./
+    opt:
+      - paths=source_relative
+      - logtostderr=true
+      - generate_unbound_methods=true
   - plugin: buf.build/grpc/python:v1.57.0
     out: ./python/gubernator
   - plugin: buf.build/protocolbuffers/python

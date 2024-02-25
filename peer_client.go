@@ -251,6 +251,7 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 	metricBatchQueueLength.WithLabelValues(peerAddr).Set(float64(len(c.queue)))
 
 	if c.queueClosed.Load() {
+		// this check prevents "panic: send on close channel"
 		return nil, grpc.ErrClientConnClosing
 	}
 

@@ -18,9 +18,8 @@ package gubernator_test
 
 import (
 	"testing"
-	"time"
 
-	gubernator "github.com/mailgun/gubernator/v2"
+	"github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,18 +27,18 @@ import (
 
 func TestInterval(t *testing.T) {
 	t.Run("Happy path", func(t *testing.T) {
-		interval := gubernator.NewInterval(10 * time.Millisecond)
+		interval := gubernator.NewInterval(10 * clock.Millisecond)
 		defer interval.Stop()
 		interval.Next()
 
 		assert.Empty(t, interval.C)
 
-		time.Sleep(10 * time.Millisecond)
+		clock.Sleep(10 * clock.Millisecond)
 
 		// Wait for tick.
 		select {
 		case <-interval.C:
-		case <-time.After(100 * time.Millisecond):
+		case <-clock.After(100 * clock.Millisecond):
 			require.Fail(t, "timeout")
 		}
 	})

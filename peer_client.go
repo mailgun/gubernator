@@ -243,7 +243,7 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 
 	c.wgMutex.Lock()
 	c.wg.Add(1)
-	c.wgMutex.Unlock() // unlock at the very end of this function
+	c.wgMutex.Unlock()
 	defer c.wg.Done()
 
 	// Enqueue the request to be sent

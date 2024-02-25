@@ -404,6 +404,9 @@ func (c *PeerClient) sendBatch(ctx context.Context, queue []*request) {
 
 // Shutdown waits until all outstanding requests have finished and then closes the grpc connection
 func (c *PeerClient) Shutdown(ctx context.Context) error {
+	// ensure we don't leak goroutines, even if the Shutdown times out
+	defer c.conn.Close()
+
 	waitChan := make(chan struct{})
 	go func() {
 		// drain in-flight requests
@@ -414,9 +417,6 @@ func (c *PeerClient) Shutdown(ctx context.Context) error {
 		// signal that no more items will be sent
 		c.queueClosed.Store(true)
 		close(c.queue)
-
-		// close connection
-		_ = c.conn.Close()
 
 		close(waitChan)
 	}()

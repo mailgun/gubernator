@@ -34,8 +34,10 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
 
 type PeerPicker interface {
@@ -252,7 +254,7 @@ func (c *PeerClient) getPeerRateLimitsBatch(ctx context.Context, r *RateLimitReq
 
 	if c.queueClosed.Load() {
 		// this check prevents "panic: send on close channel"
-		return nil, grpc.ErrClientConnClosing
+		return nil, status.Error(codes.Canceled, "grpc: the client connection is closing")
 	}
 
 	select {

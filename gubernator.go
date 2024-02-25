@@ -610,6 +610,7 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 				})
 				if err != nil {
 					s.log.Error("error connecting to peer: %s", err)
+					return
 				}
 			}
 			regionPicker.Add(peer)
@@ -628,6 +629,7 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 			})
 			if err != nil {
 				s.log.Error("error connecting to peer: %s", err)
+				return
 			}
 		}
 		localPicker.Add(peer)

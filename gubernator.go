@@ -345,7 +345,7 @@ func (s *V1Instance) asyncRequest(ctx context.Context, req *AsyncReq) {
 		// Make an RPC call to the peer that owns this rate limit
 		r, err := req.Peer.GetPeerRateLimit(ctx, req.Req)
 		if err != nil {
-			if errors.Is(err, context.DeadlineExceeded) {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				attempts++
 				metricBatchSendRetries.WithLabelValues(req.Req.Name).Inc()
 				req.Peer, err = s.GetPeer(ctx, req.Key)

@@ -403,15 +403,28 @@ func (c *PeerClient) sendBatch(ctx context.Context, queue []*request) {
 }
 
 // Shutdown waits until all outstanding requests have finished and then closes the grpc connection
-func (c *PeerClient) Shutdown() {
-	// drain in-flight requests
-	c.wgMutex.Lock()
-	defer c.wgMutex.Unlock()
-	c.wg.Wait()
+func (c *PeerClient) Shutdown(ctx context.Context) error {
+	waitChan := make(chan struct{})
+	go func() {
+		// drain in-flight requests
+		c.wgMutex.Lock()
+		defer c.wgMutex.Unlock()
+		c.wg.Wait()
 
-	// signal that no more items will be sent
-	c.queueClosed.Store(true)
-	close(c.queue)
+		// signal that no more items will be sent
+		c.queueClosed.Store(true)
+		close(c.queue)
 
-	c.conn.Close()
+		// close connection
+		_ = c.conn.Close()
+
+		close(waitChan)
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-waitChan:
+		return nil
+	}
 }

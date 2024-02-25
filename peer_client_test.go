@@ -78,7 +78,7 @@ func TestPeerClientShutdown(t *testing.T) {
 
 					if err != nil {
 						if !strings.Contains(err.Error(), "client connection is closing") {
-							return errors.Wrap(err, "unexpected error")
+							return errors.Wrap(err, "unexpected error in test")
 						}
 					}
 					return nil
@@ -88,14 +88,14 @@ func TestPeerClientShutdown(t *testing.T) {
 			// yield the processor that way we allow other goroutines to start their request
 			runtime.Gosched()
 
-			client.Shutdown()
+			shutDownErr := client.Shutdown(context.Background())
 
 			err = wg.Wait()
 			if err != nil {
 				t.Error(err)
 				t.Fail()
 			}
+			require.NoError(t, shutDownErr)
 		})
-
 	}
 }

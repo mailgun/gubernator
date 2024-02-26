@@ -263,4 +263,7 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 
 func (gm *globalManager) Close() {
 	gm.wg.Stop()
+	for _, peer := range gm.instance.GetPeerList() {
+		_ = peer.Shutdown(context.Background())
+	}
 }

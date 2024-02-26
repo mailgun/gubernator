@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -52,6 +53,7 @@ type Daemon struct {
 	PeerInfo      PeerInfo
 
 	log           FieldLogger
+	logWriter     *io.PipeWriter
 	pool          PoolInterface
 	conf          DaemonConfig
 	httpSrv       *http.Server
@@ -288,7 +290,8 @@ func (s *Daemon) Start(ctx context.Context) error {
 		s.promRegister, promhttp.HandlerFor(s.promRegister, promhttp.HandlerOpts{}),
 	))
 	mux.Handle("/", gateway)
-	log := log.New(newLogWriter(s.log), "", 0)
+	s.logWriter = newLogWriter(s.log)
+	log := log.New(s.logWriter, "", 0)
 	s.httpSrv = &http.Server{Addr: s.conf.HTTPListenAddress, Handler: mux, ErrorLog: log}
 
 	s.HTTPListener, err = net.Listen("tcp", s.conf.HTTPListenAddress)
@@ -382,6 +385,8 @@ func (s *Daemon) Close() {
 		s.log.Infof("GRPC close for %s ...", s.GRPCListeners[i].Addr())
 		srv.GracefulStop()
 	}
+	s.logWriter.Close()
+	_ = s.V1Server.Close()
 	s.wg.Stop()
 	s.statsHandler.Close()
 	s.gwCancel()

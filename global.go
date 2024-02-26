@@ -127,6 +127,7 @@ func (gm *globalManager) runAsyncHits() {
 				hits = make(map[string]*RateLimitReq)
 			}
 		case <-done:
+			interval.Stop()
 			return false
 		}
 		return true
@@ -216,6 +217,7 @@ func (gm *globalManager) runBroadcasts() {
 				gm.metricGlobalQueueLength.Set(0)
 			}
 		case <-done:
+			interval.Stop()
 			return false
 		}
 		return true

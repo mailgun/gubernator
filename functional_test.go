@@ -971,7 +971,7 @@ func TestGlobalRateLimits(t *testing.T) {
 	peers, err := cluster.ListNonOwningDaemons(name, key)
 	require.NoError(t, err)
 
-	sendHit := func(client guber.V1Client, status guber.Status, hits int64, remain int64) {
+	sendHit := func(client guber.V1Client, status guber.Status, hits, expectRemaining, expectResetTime int64) int64 {
 		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
 		defer cancel()
 		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
@@ -988,16 +988,21 @@ func TestGlobalRateLimits(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		assert.Equal(t, "", resp.Responses[0].Error)
-		assert.Equal(t, remain, resp.Responses[0].Remaining)
-		assert.Equal(t, status, resp.Responses[0].Status)
-		assert.Equal(t, int64(5), resp.Responses[0].Limit)
+		item := resp.Responses[0]
+		assert.Equal(t, "", item.Error)
+		assert.Equal(t, expectRemaining, item.Remaining)
+		assert.Equal(t, status, item.Status)
+		assert.Equal(t, int64(5), item.Limit)
+		if expectResetTime != 0 {
+			assert.Equal(t, expectResetTime, item.ResetTime)
+		}
+		return item.ResetTime
 	}
 	// Our first hit should create the request on the peer and queue for async forward
-	sendHit(peers[0].MustClient(), guber.Status_UNDER_LIMIT, 1, 4)
+	_ = sendHit(peers[0].MustClient(), guber.Status_UNDER_LIMIT, 1, 4, 0)
 
 	// Our second should be processed as if we own it since the async forward hasn't occurred yet
-	sendHit(peers[0].MustClient(), guber.Status_UNDER_LIMIT, 2, 2)
+	_ = sendHit(peers[0].MustClient(), guber.Status_UNDER_LIMIT, 2, 2, 0)
 
 	testutil.UntilPass(t, 20, clock.Millisecond*200, func(t testutil.TestingT) {
 		// Inspect peers metrics, ensure the peer sent the global rate limit to the owner
@@ -1009,19 +1014,21 @@ func TestGlobalRateLimits(t *testing.T) {
 	owner, err := cluster.FindOwningDaemon(name, key)
 	require.NoError(t, err)
 
+	// Get the ResetTime from owner.
+	expectResetTime := sendHit(owner.MustClient(), guber.Status_UNDER_LIMIT, 0, 2, 0)
 	require.NoError(t, waitForBroadcast(clock.Second*3, owner, 1))
 
 	// Check different peers, they should have gotten the broadcast from the owner
-	sendHit(peers[1].MustClient(), guber.Status_UNDER_LIMIT, 0, 2)
-	sendHit(peers[2].MustClient(), guber.Status_UNDER_LIMIT, 0, 2)
+	sendHit(peers[1].MustClient(), guber.Status_UNDER_LIMIT, 0, 2, expectResetTime)
+	sendHit(peers[2].MustClient(), guber.Status_UNDER_LIMIT, 0, 2, expectResetTime)
 
 	// Non owning peer should calculate the rate limit remaining before forwarding
 	// to the owner.
-	sendHit(peers[3].MustClient(), guber.Status_UNDER_LIMIT, 2, 0)
+	sendHit(peers[3].MustClient(), guber.Status_UNDER_LIMIT, 2, 0, expectResetTime)
 
 	require.NoError(t, waitForBroadcast(clock.Second*3, owner, 2))
 
-	sendHit(peers[4].MustClient(), guber.Status_OVER_LIMIT, 1, 0)
+	sendHit(peers[4].MustClient(), guber.Status_OVER_LIMIT, 1, 0, expectResetTime)
 }
 
 // Ensure global broadcast updates all peers when GetRateLimits is called on
@@ -1033,6 +1040,8 @@ func TestGlobalRateLimitsWithLoadBalancing(t *testing.T) {
 
 	// Determine owner and non-owner peers.
 	ownerPeerInfo, err := cluster.FindOwningPeer(name, key)
+	require.NoError(t, err)
+	ownerDaemon, err := cluster.FindOwningDaemon(name, key)
 	require.NoError(t, err)
 	owner := ownerPeerInfo.GRPCAddress
 	nonOwner := cluster.PeerAt(0).GRPCAddress
@@ -1078,9 +1087,7 @@ func TestGlobalRateLimitsWithLoadBalancing(t *testing.T) {
 	// deplete the limit consistently.
 	sendHit(guber.Status_UNDER_LIMIT, 1)
 	sendHit(guber.Status_UNDER_LIMIT, 2)
-
-	// Sleep to ensure the global broadcast occurs (every 100ms).
-	time.Sleep(150 * time.Millisecond)
+	require.NoError(t, waitForBroadcast(clock.Second*3, ownerDaemon, 1))
 
 	// All successive hits should return OVER_LIMIT.
 	for i := 2; i <= 10; i++ {

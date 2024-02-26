@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/collections"
@@ -71,9 +72,10 @@ type response struct {
 }
 
 type request struct {
-	request *RateLimitReq
-	resp    chan *response
-	ctx     context.Context
+	request     *RateLimitReq
+	resp        chan *response
+	ctx         context.Context
+	requestTime time.Time
 }
 
 type PeerConfig struct {

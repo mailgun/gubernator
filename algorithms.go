@@ -18,6 +18,7 @@ package gubernator
 
 import (
 	"context"
+	"time"
 
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/prometheus/client_golang/prometheus"
@@ -34,8 +35,7 @@ import (
 // with 100 emails and the request will succeed. You can override this default behavior with `DRAIN_OVER_LIMIT`
 
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket
-func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
-
+func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, requestTime time.Time) (resp *RateLimitResp, err error) {
 	tokenBucketTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("tokenBucket"))
 	defer tokenBucketTimer.ObserveDuration()
 
@@ -100,7 +100,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 				s.Remove(ctx, hashKey)
 			}
 
-			return tokenBucketNewItem(ctx, s, c, r)
+			return tokenBucketNewItem(ctx, s, c, r, requestTime)
 		}
 
 		// Update the limit if it changed.
@@ -133,7 +133,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 			}
 
 			// If our new duration means we are currently expired.
-			now := MillisecondNow()
+			now := EpochMillis(requestTime)
 			if expire <= now {
 				// Renew item.
 				span.AddEvent("Limit has expired")
@@ -196,12 +196,12 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 	}
 
 	// Item is not found in cache or store, create new.
-	return tokenBucketNewItem(ctx, s, c, r)
+	return tokenBucketNewItem(ctx, s, c, r, requestTime)
 }
 
 // Called by tokenBucket() when adding a new item in the store.
-func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
-	now := MillisecondNow()
+func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, requestTime time.Time) (resp *RateLimitResp, err error) {
+	now := EpochMillis(requestTime)
 	expire := now + r.Duration
 
 	t := &TokenBucketItem{
@@ -252,7 +252,7 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 }
 
 // Implements leaky bucket algorithm for rate limiting https://en.wikipedia.org/wiki/Leaky_bucket
-func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, requestTime time.Time) (resp *RateLimitResp, err error) {
 	leakyBucketTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getRateLimit_leakyBucket"))
 	defer leakyBucketTimer.ObserveDuration()
 
@@ -260,7 +260,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		r.Burst = r.Limit
 	}
 
-	now := MillisecondNow()
+	now := EpochMillis(requestTime)
 
 	// Get rate limit from cache.
 	hashKey := r.HashKey()
@@ -309,7 +309,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 				s.Remove(ctx, hashKey)
 			}
 
-			return leakyBucketNewItem(ctx, s, c, r)
+			return leakyBucketNewItem(ctx, s, c, r, requestTime)
 		}
 
 		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
@@ -421,12 +421,12 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		return rl, nil
 	}
 
-	return leakyBucketNewItem(ctx, s, c, r)
+	return leakyBucketNewItem(ctx, s, c, r, requestTime)
 }
 
 // Called by leakyBucket() when adding a new item in the store.
-func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
-	now := MillisecondNow()
+func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, requestTime time.Time) (resp *RateLimitResp, err error) {
+	now := EpochMillis(requestTime)
 	duration := r.Duration
 	rate := float64(duration) / float64(r.Limit)
 	if HasBehavior(r.Behavior, Behavior_DURATION_IS_GREGORIAN) {
@@ -479,4 +479,8 @@ func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 	}
 
 	return &rl, nil
+}
+
+func EpochMillis(t time.Time) int64 {
+	return t.UnixNano() / 1_000_000
 }

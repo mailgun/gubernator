@@ -23,6 +23,7 @@ import (
 	"sync"
 
 	"github.com/mailgun/errors"
+	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/mailgun/holster/v4/tracing"
 	"github.com/prometheus/client_golang/prometheus"
@@ -423,6 +424,7 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 			item.Value = &LeakyBucketItem{
 				Remaining: float64(g.Status.Remaining),
 				Limit:     g.Status.Limit,
+				Duration:  g.Duration,
 				Burst:     g.Status.Limit,
 				UpdatedAt: now,
 			}
@@ -430,6 +432,7 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 			item.Value = &TokenBucketItem{
 				Status:    g.Status.Status,
 				Limit:     g.Status.Limit,
+				Duration:  g.Duration,
 				Remaining: g.Status.Remaining,
 				CreatedAt: now,
 			}
@@ -572,7 +575,8 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (_ 
 	defer func() { tracing.EndScope(ctx, err) }()
 	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getLocalRateLimit")).ObserveDuration()
 
-	resp, err := s.workerPool.GetRateLimit(ctx, r)
+	requestTime := clock.Now()
+	resp, err := s.workerPool.GetRateLimit(ctx, r, requestTime)
 	if err != nil {
 		return nil, errors.Wrap(err, "during workerPool.GetRateLimit")
 	}
@@ -580,7 +584,7 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (_ 
 	metricGetRateLimitCounter.WithLabelValues("local").Inc()
 	// If global behavior, then broadcast update to all peers.
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
-		s.global.QueueUpdate(r, resp)
+		s.global.QueueUpdate(r, resp, requestTime)
 	}
 
 	return resp, nil

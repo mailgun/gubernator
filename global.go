@@ -18,6 +18,7 @@ package gubernator
 
 import (
 	"context"
+	"time"
 
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/prometheus/client_golang/prometheus"
@@ -73,11 +74,13 @@ func (gm *globalManager) QueueHit(r *RateLimitReq) {
 	gm.hitsQueue <- r
 }
 
-func (gm *globalManager) QueueUpdate(req *RateLimitReq, resp *RateLimitResp) {
+func (gm *globalManager) QueueUpdate(req *RateLimitReq, resp *RateLimitResp, requestTime time.Time) {
 	gm.broadcastQueue <- &UpdatePeerGlobal{
-		Key:       req.HashKey(),
-		Algorithm: req.Algorithm,
-		Status:    resp,
+		Key:         req.HashKey(),
+		Algorithm:   req.Algorithm,
+		Duration:    req.Duration,
+		Status:      resp,
+		RequestTime: EpochMillis(requestTime),
 	}
 }
 

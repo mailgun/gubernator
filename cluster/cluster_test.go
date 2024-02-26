@@ -23,12 +23,16 @@ import (
 	"github.com/mailgun/gubernator/v2/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 )
 
 func TestStartMultipleInstances(t *testing.T) {
+	t.Cleanup(func() {
+		goleak.VerifyNone(t)
+	})
 	err := cluster.Start(2)
 	require.NoError(t, err)
-	defer cluster.Stop()
+	t.Cleanup(cluster.Stop)
 
 	assert.Equal(t, 2, len(cluster.GetPeers()))
 	assert.Equal(t, 2, len(cluster.GetDaemons()))

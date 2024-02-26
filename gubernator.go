@@ -149,17 +149,15 @@ func (s *V1Instance) Close() (err error) {
 		return nil
 	}
 
-	if s.conf.Loader == nil {
-		return nil
-	}
-
 	s.global.Close()
 
-	err = s.workerPool.Store(ctx)
-	if err != nil {
-		s.log.WithError(err).
-			Error("Error in workerPool.Store")
-		return errors.Wrap(err, "Error in workerPool.Store")
+	if s.conf.Loader != nil {
+		err = s.workerPool.Store(ctx)
+		if err != nil {
+			s.log.WithError(err).
+				Error("Error in workerPool.Store")
+			return errors.Wrap(err, "Error in workerPool.Store")
+		}
 	}
 
 	err = s.workerPool.Close()

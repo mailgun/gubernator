@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/collections"
@@ -80,7 +79,7 @@ type PeerConfig struct {
 	TraceGRPC bool
 }
 
-// NewPeerClient tries to establish a connection to a peer in a blocking fashion with a 1 second timeout.
+// NewPeerClient tries to establish a connection to a peer in a non-blocking fashion.
 // If batching is enabled, it also starts a goroutine where batches will be processed.
 func NewPeerClient(conf PeerConfig) (*PeerClient, error) {
 	peerClient := &PeerClient{
@@ -88,7 +87,7 @@ func NewPeerClient(conf PeerConfig) (*PeerClient, error) {
 		conf:     conf,
 		lastErrs: collections.NewLRUCache(100),
 	}
-	opts := []grpc.DialOption{grpc.WithBlock()}
+	var opts []grpc.DialOption
 
 	if conf.TraceGRPC {
 		opts = []grpc.DialOption{
@@ -102,11 +101,8 @@ func NewPeerClient(conf PeerConfig) (*PeerClient, error) {
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-
 	var err error
-	peerClient.conn, err = grpc.DialContext(ctx, conf.Info.GRPCAddress, opts...)
+	peerClient.conn, err = grpc.Dial(conf.Info.GRPCAddress, opts...)
 	if err != nil {
 		return nil, err
 	}

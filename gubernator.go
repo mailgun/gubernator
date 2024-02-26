@@ -609,7 +609,7 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 					Info:      info,
 				})
 				if err != nil {
-					s.log.Error("error connecting to peer: %s", err)
+					s.log.Errorf("error connecting to peer %s: %s", info.GRPCAddress, err)
 					return
 				}
 			}
@@ -628,7 +628,7 @@ func (s *V1Instance) SetPeers(peerInfo []PeerInfo) {
 				Info:      info,
 			})
 			if err != nil {
-				s.log.Error("error connecting to peer: %s", err)
+				s.log.Errorf("error connecting to peer %s: %s", info.GRPCAddress, err)
 				return
 			}
 		}

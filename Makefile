@@ -13,7 +13,7 @@ $(GOLANGCI_LINT): ## Download Go linter
 
 .PHONY: lint
 lint: $(GOLANGCI_LINT) ## Run Go linter
-	$(GOLANGCI_LINT) run -v --fix -c .golangci.yml ./...
+	$(GOLANGCI_LINT) run -v -c .golangci.yml ./...
 
 .PHONY: test
 test: ## Run unit tests and measure code coverage

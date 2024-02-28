@@ -168,6 +168,11 @@ message RateLimitReq {
   // this to pass trace context to other peers. Might be useful for future clients to pass along
   // trace information to gubernator.
   map<string, string> metadata = 9;
+
+  // The exact time of request in Epoch milliseconds.
+  // The is intended to be used for peer-to-peer requests to preserve
+  // timestamps.
+  optional int64 request_time = 10;
 }
 
 enum Status {

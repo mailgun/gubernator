@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/mailgun/errors"
 	"github.com/mailgun/holster/v4/clock"
@@ -575,7 +576,13 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (_ 
 	defer func() { tracing.EndScope(ctx, err) }()
 	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getLocalRateLimit")).ObserveDuration()
 
-	requestTime := clock.Now()
+	var requestTime time.Time
+	if r.RequestTime != nil {
+		requestTime = time.UnixMilli(*r.RequestTime)
+	}
+	if requestTime.IsZero() {
+		requestTime = clock.Now()
+	}
 	resp, err := s.workerPool.GetRateLimit(ctx, r, requestTime)
 	if err != nil {
 		return nil, errors.Wrap(err, "during workerPool.GetRateLimit")

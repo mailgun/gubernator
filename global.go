@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/mailgun/holster/v4/syncutil"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -32,7 +33,7 @@ type globalManager struct {
 	wg                       syncutil.WaitGroup
 	conf                     BehaviorConfig
 	log                      FieldLogger
-	instance                 *V1Instance // todo circular import? V1Instance also holds a reference to globalManager
+	instance                 *V1Instance // TODO circular import? V1Instance also holds a reference to globalManager
 	metricGlobalSendDuration prometheus.Summary
 	metricBroadcastDuration  prometheus.Summary
 	metricBroadcastCounter   *prometheus.CounterVec
@@ -252,8 +253,8 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 			cancel()
 
 			if err != nil {
-				// Skip peers that are not in a ready state
-				if !IsNotReady(err) {
+				// Only log if it's an unknown error
+				if !errors.Is(err, context.Canceled) && errors.Is(err, context.DeadlineExceeded) {
 					gm.log.WithError(err).Errorf("while broadcasting global updates to '%s'", peer.Info().GRPCAddress)
 				}
 			}
@@ -263,6 +264,10 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 	fan.Wait()
 }
 
+// Close stops all goroutines and shuts down all the peers.
 func (gm *globalManager) Close() {
 	gm.wg.Stop()
+	for _, peer := range gm.instance.GetPeerList() {
+		_ = peer.Shutdown(context.Background())
+	}
 }

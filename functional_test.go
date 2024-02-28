@@ -36,7 +36,6 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	json "google.golang.org/protobuf/encoding/protojson"
@@ -1625,6 +1624,16 @@ func TestHealthCheck(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), clock.Second*15)
 	defer cancel()
 	require.NoError(t, cluster.Restart(ctx))
+
+	// wait for every peer instance to come back online
+	for _, peer := range cluster.GetPeers() {
+		peerClient, err := guber.DialV1Server(peer.GRPCAddress, nil)
+		require.NoError(t, err)
+		testutil.UntilPass(t, 10, clock.Millisecond*300, func(t testutil.TestingT) {
+			healthResp, err = peerClient.HealthCheck(context.Background(), &guber.HealthCheckReq{})
+			assert.Equal(t, "healthy", healthResp.GetStatus())
+		})
+	}
 }
 
 func TestLeakyBucketDivBug(t *testing.T) {
@@ -1730,9 +1739,10 @@ func TestGRPCGateway(t *testing.T) {
 
 func TestGetPeerRateLimits(t *testing.T) {
 	ctx := context.Background()
-	peerClient := guber.NewPeerClient(guber.PeerConfig{
+	peerClient, err := guber.NewPeerClient(guber.PeerConfig{
 		Info: cluster.GetRandomPeer(cluster.DataCenterNone),
 	})
+	require.NoError(t, err)
 
 	t.Run("Stable rate check request order", func(t *testing.T) {
 		// Ensure response order matches rate check request order.

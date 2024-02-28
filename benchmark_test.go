@@ -33,10 +33,13 @@ func BenchmarkServer(b *testing.B) {
 	require.NoError(b, err, "Error in conf.SetDefaults")
 
 	b.Run("GetPeerRateLimit() with no batching", func(b *testing.B) {
-		client := guber.NewPeerClient(guber.PeerConfig{
+		client, err := guber.NewPeerClient(guber.PeerConfig{
 			Info:     cluster.GetRandomPeer(cluster.DataCenterNone),
 			Behavior: conf.Behaviors,
 		})
+		if err != nil {
+			b.Errorf("Error building client: %s", err)
+		}
 
 		b.ResetTimer()
 

@@ -32,7 +32,7 @@ type globalManager struct {
 	wg                       syncutil.WaitGroup
 	conf                     BehaviorConfig
 	log                      FieldLogger
-	instance                 *V1Instance // todo circular import? V1Instance also holds a reference to globalManager
+	instance                 *V1Instance // TODO circular import? V1Instance also holds a reference to globalManager
 	metricGlobalSendDuration prometheus.Summary
 	metricBroadcastDuration  prometheus.Summary
 	metricBroadcastCounter   *prometheus.CounterVec
@@ -261,6 +261,7 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 	fan.Wait()
 }
 
+// Close stops all goroutines and shuts down all the peers.
 func (gm *globalManager) Close() {
 	gm.wg.Stop()
 	for _, peer := range gm.instance.GetPeerList() {

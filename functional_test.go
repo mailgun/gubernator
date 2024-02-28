@@ -1618,8 +1618,13 @@ func TestHealthCheck(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), clock.Second*15)
 	defer cancel()
 	require.NoError(t, cluster.Restart(ctx))
-	// wait for instances to come online
-	time.Sleep(1 * time.Second)
+
+	// wait for instances to come back online
+	testutil.UntilPass(t, 10, clock.Millisecond*300, func(t testutil.TestingT) {
+		healthResp, err = client.HealthCheck(context.Background(), &guber.HealthCheckReq{})
+		assert.Nil(t, err)
+		assert.Equal(t, "healthy", healthResp.GetStatus())
+	})
 }
 
 func TestLeakyBucketDivBug(t *testing.T) {

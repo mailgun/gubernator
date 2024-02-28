@@ -415,6 +415,9 @@ func (c *PeerClient) Shutdown(ctx context.Context) error {
 		defer c.wgMutex.Unlock()
 		c.wg.Wait()
 
+		// clear errors
+		c.lastErrs = collections.NewLRUCache(100)
+
 		// signal that no more items will be sent
 		c.queueClosed.Store(true)
 		close(c.queue)

@@ -19,6 +19,8 @@ package gubernator
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -47,8 +49,11 @@ type Daemon struct {
 	GRPCListeners []net.Listener
 	HTTPListener  net.Listener
 	V1Server      *V1Instance
+	InstanceID    string
+	PeerInfo      PeerInfo
 
 	log           FieldLogger
+	logWriter     *io.PipeWriter
 	pool          PoolInterface
 	conf          DaemonConfig
 	httpSrv       *http.Server
@@ -59,6 +64,7 @@ type Daemon struct {
 	promRegister  *prometheus.Registry
 	gwCancel      context.CancelFunc
 	instanceConf  Config
+	client        V1Client
 }
 
 // SpawnDaemon starts a new gubernator daemon according to the provided DaemonConfig.
@@ -67,8 +73,9 @@ type Daemon struct {
 func SpawnDaemon(ctx context.Context, conf DaemonConfig) (*Daemon, error) {
 
 	s := &Daemon{
-		log:  conf.Logger,
-		conf: conf,
+		InstanceID: conf.InstanceID,
+		log:        conf.Logger,
+		conf:       conf,
 	}
 	return s, s.Start(ctx)
 }
@@ -77,8 +84,8 @@ func (s *Daemon) Start(ctx context.Context) error {
 	var err error
 
 	setter.SetDefault(&s.log, logrus.WithFields(logrus.Fields{
-		"instance-id": s.conf.InstanceID,
-		"category":    "gubernator",
+		"instance": s.conf.InstanceID,
+		"category": "gubernator",
 	}))
 
 	s.promRegister = prometheus.NewRegistry()
@@ -148,6 +155,7 @@ func (s *Daemon) Start(ctx context.Context) error {
 		Behaviors:     s.conf.Behaviors,
 		CacheSize:     s.conf.CacheSize,
 		Workers:       s.conf.Workers,
+		InstanceID:    s.conf.InstanceID,
 	}
 
 	s.V1Server, err = NewV1Instance(s.instanceConf)
@@ -282,7 +290,8 @@ func (s *Daemon) Start(ctx context.Context) error {
 		s.promRegister, promhttp.HandlerFor(s.promRegister, promhttp.HandlerOpts{}),
 	))
 	mux.Handle("/", gateway)
-	log := log.New(newLogWriter(s.log), "", 0)
+	s.logWriter = newLogWriter(s.log)
+	log := log.New(s.logWriter, "", 0)
 	s.httpSrv = &http.Server{Addr: s.conf.HTTPListenAddress, Handler: mux, ErrorLog: log}
 
 	s.HTTPListener, err = net.Listen("tcp", s.conf.HTTPListenAddress)
@@ -376,6 +385,8 @@ func (s *Daemon) Close() {
 		s.log.Infof("GRPC close for %s ...", s.GRPCListeners[i].Addr())
 		srv.GracefulStop()
 	}
+	s.logWriter.Close()
+	_ = s.V1Server.Close()
 	s.wg.Stop()
 	s.statsHandler.Close()
 	s.gwCancel()
@@ -409,6 +420,30 @@ func (s *Daemon) Peers() []PeerInfo {
 		peers = append(peers, client.Info())
 	}
 	return peers
+}
+
+func (s *Daemon) MustClient() V1Client {
+	c, err := s.Client()
+	if err != nil {
+		panic(fmt.Sprintf("[%s] failed to init daemon client - '%s'", s.InstanceID, err))
+	}
+	return c
+}
+
+func (s *Daemon) Client() (V1Client, error) {
+	if s.client != nil {
+		return s.client, nil
+	}
+
+	conn, err := grpc.DialContext(context.Background(),
+		fmt.Sprintf("static:///%s", s.PeerInfo.GRPCAddress),
+		grpc.WithResolvers(NewStaticBuilder()),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, err
+	}
+	s.client = NewV1Client(conn)
+	return s.client, nil
 }
 
 // WaitForConnect returns nil if the list of addresses is listening

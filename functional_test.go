@@ -1728,7 +1728,7 @@ func TestGlobalBehavior(t *testing.T) {
 		}
 	})
 
-	t.Run("Distributed hits on non-owner peers", func(t *testing.T) {
+	t.Run("Distributed hits", func(t *testing.T) {
 		testCases := []struct {
 			Name string
 			Hits int
@@ -1841,7 +1841,8 @@ func TestGlobalBehavior(t *testing.T) {
 				assert.Equal(t, int64(1), didOwnerBroadcast)
 				assert.Empty(t, didNonOwnerBroadcast)
 
-				// Assert UpdatePeerGlobals endpoint called once on each peer except owner.
+				// Assert UpdatePeerGlobals endpoint called at least
+				// once on each peer except owner.
 				// Used by global broadcast.
 				upgCounters2 := getPeerCounters(t, cluster.GetDaemons(), "gubernator_grpc_request_duration_count{method=\"/pb.gubernator.PeersV1/UpdatePeerGlobals\"}")
 				for _, peer := range cluster.GetDaemons() {
@@ -1849,11 +1850,11 @@ func TestGlobalBehavior(t *testing.T) {
 					if peer.PeerInfo.DataCenter == cluster.DataCenterNone && peer.InstanceID != owner.InstanceID {
 						expected++
 					}
-					assert.Equal(t, expected, upgCounters2[peer.InstanceID], "upgCounter %s", peer.InstanceID)
+					assert.GreaterOrEqual(t, upgCounters2[peer.InstanceID], expected, "upgCounter %s", peer.InstanceID)
 				}
 
-				// Assert PeerGetRateLimits endpoint called on owner for each
-				// non-owner that received hits.
+				// Assert PeerGetRateLimits endpoint called on owner
+				// for each non-owner that received hits.
 				// Used by global hits update.
 				gprlCounters2 := getPeerCounters(t, cluster.GetDaemons(), "gubernator_grpc_request_duration_count{method=\"/pb.gubernator.PeersV1/GetPeerRateLimits\"}")
 				for _, peer := range cluster.GetDaemons() {

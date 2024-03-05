@@ -1457,7 +1457,9 @@ func TestGlobalRateLimitsToOwnerPeer(t *testing.T) {
 	t.Logf("Owner peer: %s", owner.InstanceID)
 
 	sendHit := func(d *guber.Daemon, status guber.Status, hits, expectRemaining int64) {
-		t.Logf("Sending %d hits to peer %s", hits, d.InstanceID)
+		if hits != 0 {
+			t.Logf("Sending %d hits to peer %s", hits, d.InstanceID)
+		}
 		client := d.MustClient()
 		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
 		defer cancel()
@@ -1562,6 +1564,14 @@ func TestGlobalRateLimitsToOwnerPeer(t *testing.T) {
 		expected := gprlCounters[peer.InstanceID]
 		assert.Equal(t, expected, gprlCounters2[peer.InstanceID])
 	}
+
+	// Verify all peers report same remaining value.
+	for _, peer := range cluster.GetDaemons() {
+		if peer.PeerInfo.DataCenter != cluster.DataCenterNone {
+			continue
+		}
+		sendHit(peer, guber.Status_UNDER_LIMIT, 0, 999)
+	}
 }
 
 func TestGlobalRateLimitsToNonOwnerPeer(t *testing.T) {
@@ -1577,7 +1587,9 @@ func TestGlobalRateLimitsToNonOwnerPeer(t *testing.T) {
 	t.Logf("Owner peer: %s", owner.InstanceID)
 
 	sendHit := func(d *guber.Daemon, status guber.Status, hits, expectRemaining int64) {
-		t.Logf("Sending %d hits to peer %s", hits, d.InstanceID)
+		if hits != 0 {
+			t.Logf("Sending %d hits to peer %s", hits, d.InstanceID)
+		}
 		client := d.MustClient()
 		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
 		defer cancel()
@@ -1686,5 +1698,13 @@ func TestGlobalRateLimitsToNonOwnerPeer(t *testing.T) {
 			expected++
 		}
 		assert.Equal(t, expected, gprlCounters2[peer.InstanceID], "gprlCounter %s", peer.InstanceID)
+	}
+
+	// Verify all peers report same remaining value.
+	for _, peer := range cluster.GetDaemons() {
+		if peer.PeerInfo.DataCenter != cluster.DataCenterNone {
+			continue
+		}
+		sendHit(peer, guber.Status_UNDER_LIMIT, 0, 999)
 	}
 }

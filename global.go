@@ -71,11 +71,15 @@ func newGlobalManager(conf BehaviorConfig, instance *V1Instance) *globalManager 
 }
 
 func (gm *globalManager) QueueHit(r *RateLimitReq) {
-	gm.hitsQueue <- r
+	if r.Hits != 0 {
+		gm.hitsQueue <- r
+	}
 }
 
 func (gm *globalManager) QueueUpdate(r *RateLimitReq) {
-	gm.updatesQueue <- r
+	if r.Hits != 0 {
+		gm.updatesQueue <- r
+	}
 }
 
 // runAsyncHits collects async hit requests in a forever loop,

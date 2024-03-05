@@ -24,10 +24,13 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"golang.org/x/exp/maps"
 
 	guber "github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/gubernator/v2/cluster"
@@ -1458,7 +1461,9 @@ func sendHit(t *testing.T, d *guber.Daemon, req *guber.RateLimitReq, expectStatu
 	require.NoError(t, err)
 	item := resp.Responses[0]
 	assert.Equal(t, "", item.Error)
-	assert.Equal(t, expectRemaining, item.Remaining)
+	if expectRemaining >= 0 {
+		assert.Equal(t, expectRemaining, item.Remaining)
+	}
 	assert.Equal(t, expectStatus, item.Status)
 	assert.Equal(t, req.Limit, item.Limit)
 }
@@ -1710,6 +1715,151 @@ func TestGlobalBehavior(t *testing.T) {
 						continue
 					}
 					sendHit(t, peer, makeReq(name, key, 0), guber.Status_UNDER_LIMIT, limit-testCase.Hits)
+				}
+			})
+		}
+	})
+
+	t.Run("Distributed hits on non-owner peers", func(t *testing.T) {
+		testCases := []struct {
+			Name string
+			Hits int
+		}{
+			{Name: "2 hits", Hits: 2},
+			{Name: "10 hits", Hits: 10},
+			{Name: "100 hits", Hits: 100},
+		}
+
+		for _, testCase := range testCases {
+			t.Run(testCase.Name, func(t *testing.T) {
+				name := t.Name()
+				key := fmt.Sprintf("account:%08x", rand.Int())
+				peers, err := cluster.ListNonOwningDaemons(name, key)
+				require.NoError(t, err)
+				owner, err := cluster.FindOwningDaemon(name, key)
+				require.NoError(t, err)
+				var localPeers []*guber.Daemon
+				for _, peer := range cluster.GetDaemons() {
+					if peer.PeerInfo.DataCenter == cluster.DataCenterNone && peer.InstanceID != owner.InstanceID {
+						localPeers = append(localPeers, peer)
+					}
+				}
+				t.Logf("Owner peer: %s", owner.InstanceID)
+
+				broadcastCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_broadcast_duration_count")
+				updateCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_global_send_duration_count")
+				upgCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_grpc_request_duration_count{method=\"/pb.gubernator.PeersV1/UpdatePeerGlobals\"}")
+				gprlCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_grpc_request_duration_count{method=\"/pb.gubernator.PeersV1/GetPeerRateLimits\"}")
+				expectUpdate := make(map[string]struct{})
+				var wg sync.WaitGroup
+				var mutex sync.Mutex
+
+				// When
+				wg.Add(testCase.Hits)
+				for i := 0; i < testCase.Hits; i++ {
+					peer := localPeers[i%len(localPeers)]
+					go func(peer *guber.Daemon) {
+						sendHit(t, peer, makeReq(name, key, 1), guber.Status_UNDER_LIMIT, -1)
+						if peer.InstanceID != owner.InstanceID {
+							mutex.Lock()
+							expectUpdate[peer.InstanceID] = struct{}{}
+							mutex.Unlock()
+						}
+						wg.Done()
+					}(peer)
+				}
+				wg.Wait()
+
+				// Then
+				// Check for global hits update from non-owner to owner peer.
+				// Expect single update from each non-owner peer that received
+				// hits.
+				t.Log("Waiting for global hits updates")
+				var didOwnerUpdate int
+				var didNonOwnerUpdate []string
+				wg.Add(len(peers) + 1)
+				go func() {
+					expected := updateCounters[owner.InstanceID] + 1
+					if err := waitForUpdate(broadcastTimeout, owner, expected); err == nil {
+						didOwnerUpdate++
+						t.Log("Global hits update from owner")
+					}
+					wg.Done()
+				}()
+				for _, peer := range peers {
+					go func(peer *guber.Daemon) {
+						expected := updateCounters[peer.InstanceID] + 1
+						if err := waitForUpdate(broadcastTimeout, peer, expected); err == nil {
+							didNonOwnerUpdate = append(didNonOwnerUpdate, peer.InstanceID)
+							t.Logf("Global hits update from peer %s", peer.InstanceID)
+						}
+						wg.Done()
+
+					}(peer)
+				}
+				wg.Wait()
+				assert.Zero(t, didOwnerUpdate)
+				assert.Len(t, didNonOwnerUpdate, len(expectUpdate))
+				expectedNonOwnerUpdate := maps.Keys(expectUpdate)
+				slices.Sort(expectedNonOwnerUpdate)
+				slices.Sort(didNonOwnerUpdate)
+				assert.Equal(t, expectedNonOwnerUpdate, didNonOwnerUpdate)
+
+				// Expect a single global broadcast to all non-owner peers.
+				t.Log("Waiting for global broadcasts")
+				var didOwnerBroadcast, didNonOwnerBroadcast int
+				wg.Add(len(peers) + 1)
+				go func() {
+					expected := broadcastCounters[owner.InstanceID] + 1
+					if err := waitForBroadcast(broadcastTimeout, owner, expected); err == nil {
+						didOwnerBroadcast++
+						t.Log("Global broadcast from owner")
+					}
+					wg.Done()
+				}()
+				for _, peer := range peers {
+					go func(peer *guber.Daemon) {
+						expected := broadcastCounters[peer.InstanceID] + 1
+						if err = waitForBroadcast(broadcastTimeout, peer, expected); err == nil {
+							didNonOwnerBroadcast++
+							t.Logf("Global broadcast from peer %s", peer.InstanceID)
+						}
+						wg.Done()
+					}(peer)
+				}
+				wg.Wait()
+				assert.Equal(t, 1, didOwnerBroadcast)
+				assert.Empty(t, didNonOwnerBroadcast)
+
+				// Assert UpdatePeerGlobals endpoint called once on each peer except owner.
+				// Used by global broadcast.
+				upgCounters2 := getPeerCounters(t, cluster.GetDaemons(), "gubernator_grpc_request_duration_count{method=\"/pb.gubernator.PeersV1/UpdatePeerGlobals\"}")
+				for _, peer := range cluster.GetDaemons() {
+					expected := upgCounters[peer.InstanceID]
+					if peer.PeerInfo.DataCenter == cluster.DataCenterNone && peer.InstanceID != owner.InstanceID {
+						expected++
+					}
+					assert.Equal(t, expected, upgCounters2[peer.InstanceID], "upgCounter %s", peer.InstanceID)
+				}
+
+				// Assert PeerGetRateLimits endpoint called on owner for each
+				// non-owner that received hits.
+				// Used by global hits update.
+				gprlCounters2 := getPeerCounters(t, cluster.GetDaemons(), "gubernator_grpc_request_duration_count{method=\"/pb.gubernator.PeersV1/GetPeerRateLimits\"}")
+				for _, peer := range cluster.GetDaemons() {
+					expected := gprlCounters[peer.InstanceID]
+					if peer.InstanceID == owner.InstanceID {
+						expected += len(expectUpdate)
+					}
+					assert.Equal(t, expected, gprlCounters2[peer.InstanceID], "gprlCounter %s", peer.InstanceID)
+				}
+
+				// Verify all peers report same remaining value.
+				for _, peer := range cluster.GetDaemons() {
+					if peer.PeerInfo.DataCenter != cluster.DataCenterNone {
+						continue
+					}
+					sendHit(t, peer, makeReq(name, key, 0), guber.Status_UNDER_LIMIT, int64(limit-testCase.Hits))
 				}
 			})
 		}

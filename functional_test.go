@@ -27,6 +27,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -71,6 +72,13 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	defer cluster.Stop()
+
+	// Populate peer clients. Avoids data races when goroutines conflict trying
+	// to instantiate client singletons.
+	for _, peer := range cluster.GetDaemons() {
+		_ = peer.MustClient()
+	}
+
 	os.Exit(m.Run())
 }
 
@@ -1530,7 +1538,7 @@ func TestGlobalBehavior(t *testing.T) {
 				for _, peer := range peers {
 					go func(peer *guber.Daemon) {
 						expected := broadcastCounters[peer.InstanceID] + 1
-						if err = waitForBroadcast(broadcastTimeout, peer, expected); err == nil {
+						if err := waitForBroadcast(broadcastTimeout, peer, expected); err == nil {
 							didNonOwnerBroadcast++
 							t.Logf("Global broadcast from peer %s", peer.InstanceID)
 						}
@@ -1676,7 +1684,7 @@ func TestGlobalBehavior(t *testing.T) {
 				for _, peer := range peers {
 					go func(peer *guber.Daemon) {
 						expected := broadcastCounters[peer.InstanceID] + 1
-						if err = waitForBroadcast(broadcastTimeout, peer, expected); err == nil {
+						if err := waitForBroadcast(broadcastTimeout, peer, expected); err == nil {
 							didNonOwnerBroadcast++
 							t.Logf("Global broadcast from peer %s", peer.InstanceID)
 						}
@@ -1775,13 +1783,13 @@ func TestGlobalBehavior(t *testing.T) {
 				// Expect single update from each non-owner peer that received
 				// hits.
 				t.Log("Waiting for global hits updates")
-				var didOwnerUpdate int
+				var didOwnerUpdate int64
 				var didNonOwnerUpdate []string
 				wg.Add(len(peers) + 1)
 				go func() {
 					expected := updateCounters[owner.InstanceID] + 1
 					if err := waitForUpdate(broadcastTimeout, owner, expected); err == nil {
-						didOwnerUpdate++
+						atomic.AddInt64(&didOwnerUpdate, 1)
 						t.Log("Global hits update from owner")
 					}
 					wg.Done()
@@ -1790,7 +1798,9 @@ func TestGlobalBehavior(t *testing.T) {
 					go func(peer *guber.Daemon) {
 						expected := updateCounters[peer.InstanceID] + 1
 						if err := waitForUpdate(broadcastTimeout, peer, expected); err == nil {
+							mutex.Lock()
 							didNonOwnerUpdate = append(didNonOwnerUpdate, peer.InstanceID)
+							mutex.Unlock()
 							t.Logf("Global hits update from peer %s", peer.InstanceID)
 						}
 						wg.Done()
@@ -1807,12 +1817,12 @@ func TestGlobalBehavior(t *testing.T) {
 
 				// Expect a single global broadcast to all non-owner peers.
 				t.Log("Waiting for global broadcasts")
-				var didOwnerBroadcast, didNonOwnerBroadcast int
+				var didOwnerBroadcast, didNonOwnerBroadcast int64
 				wg.Add(len(peers) + 1)
 				go func() {
 					expected := broadcastCounters[owner.InstanceID] + 1
 					if err := waitForBroadcast(broadcastTimeout, owner, expected); err == nil {
-						didOwnerBroadcast++
+						atomic.AddInt64(&didOwnerBroadcast, 1)
 						t.Log("Global broadcast from owner")
 					}
 					wg.Done()
@@ -1820,15 +1830,15 @@ func TestGlobalBehavior(t *testing.T) {
 				for _, peer := range peers {
 					go func(peer *guber.Daemon) {
 						expected := broadcastCounters[peer.InstanceID] + 1
-						if err = waitForBroadcast(broadcastTimeout, peer, expected); err == nil {
-							didNonOwnerBroadcast++
+						if err := waitForBroadcast(broadcastTimeout, peer, expected); err == nil {
+							atomic.AddInt64(&didNonOwnerBroadcast, 1)
 							t.Logf("Global broadcast from peer %s", peer.InstanceID)
 						}
 						wg.Done()
 					}(peer)
 				}
 				wg.Wait()
-				assert.Equal(t, 1, didOwnerBroadcast)
+				assert.Equal(t, int64(1), didOwnerBroadcast)
 				assert.Empty(t, didNonOwnerBroadcast)
 
 				// Assert UpdatePeerGlobals endpoint called once on each peer except owner.

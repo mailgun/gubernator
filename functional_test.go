@@ -24,7 +24,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
-	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1811,8 +1811,8 @@ func TestGlobalBehavior(t *testing.T) {
 				assert.Zero(t, didOwnerUpdate)
 				assert.Len(t, didNonOwnerUpdate, len(expectUpdate))
 				expectedNonOwnerUpdate := maps.Keys(expectUpdate)
-				slices.Sort(expectedNonOwnerUpdate)
-				slices.Sort(didNonOwnerUpdate)
+				sort.Strings(expectedNonOwnerUpdate)
+				sort.Strings(didNonOwnerUpdate)
 				assert.Equal(t, expectedNonOwnerUpdate, didNonOwnerUpdate)
 
 				// Expect a single global broadcast to all non-owner peers.

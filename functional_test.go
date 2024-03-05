@@ -1466,7 +1466,7 @@ func sendHit(t *testing.T, d *guber.Daemon, req *guber.RateLimitReq, expectStatu
 
 func TestGlobalBehavior(t *testing.T) {
 	const limit = 1000
-	broadcastTimeout := 400 * clock.Millisecond
+	broadcastTimeout := 200 * clock.Millisecond
 
 	makeReq := func(name, key string, hits int64) *guber.RateLimitReq {
 		return &guber.RateLimitReq{
@@ -1513,6 +1513,9 @@ func TestGlobalBehavior(t *testing.T) {
 				// Expect a single global broadcast to all non-owner peers.
 				var wg sync.WaitGroup
 				var didOwnerBroadcast, didNonOwnerBroadcast int
+				clock.Freeze(clock.Now())
+				clock.Advance(100*clock.Millisecond)
+				clock.Unfreeze()
 				wg.Add(len(peers) + 1)
 				go func() {
 					expected := broadcastCounters[owner.InstanceID] + 1
@@ -1540,6 +1543,9 @@ func TestGlobalBehavior(t *testing.T) {
 				// Expect no global hits update because the hits were given
 				// directly to the owner peer.
 				var didOwnerUpdate, didNonOwnerUpdate int
+				clock.Freeze(clock.Now())
+				clock.Advance(100*clock.Millisecond)
+				clock.Unfreeze()
 				wg.Add(len(peers) + 1)
 				go func() {
 					expected := updateCounters[owner.InstanceID] + 1
@@ -1625,10 +1631,13 @@ func TestGlobalBehavior(t *testing.T) {
 
 				// Then
 				// Check for global hits update from non-owner to owner peer.
-				// Expect single global hits update from non-owner update all peers.
+				// Expect single global hits update from non-owner peer that received hits.
 				var wg sync.WaitGroup
 				var didOwnerUpdate int
 				var didNonOwnerUpdate []string
+				clock.Freeze(clock.Now())
+				clock.Advance(100*clock.Millisecond)
+				clock.Unfreeze()
 				wg.Add(len(peers) + 1)
 				go func() {
 					expected := updateCounters[owner.InstanceID] + 1
@@ -1657,6 +1666,9 @@ func TestGlobalBehavior(t *testing.T) {
 				// Global broadcast.
 				// Expect a single global broadcast to all non-owner peers.
 				var didOwnerBroadcast, didNonOwnerBroadcast int
+				clock.Freeze(clock.Now())
+				clock.Advance(100*clock.Millisecond)
+				clock.Unfreeze()
 				wg.Add(len(peers) + 1)
 				go func() {
 					expected := broadcastCounters[owner.InstanceID] + 1

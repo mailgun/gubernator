@@ -413,6 +413,7 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 // UpdatePeerGlobals updates the local cache with a list of global rate limits. This method should only
 // be called by a peer who is the owner of a global rate limit.
 func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
+	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.UpdatePeerGlobals")).ObserveDuration()
 	now := MillisecondNow()
 	for _, g := range r.Globals {
 		item := &CacheItem{
@@ -449,6 +450,7 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 
 // GetPeerRateLimits is called by other peers to get the rate limits owned by this peer.
 func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (resp *GetPeerRateLimitsResp, err error) {
+	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.GetPeerRateLimits")).ObserveDuration()
 	if len(r.Requests) > maxBatchSize {
 		err := fmt.Errorf("'PeerRequest.rate_limits' list too large; max size is '%d'", maxBatchSize)
 		metricCheckErrorCounter.WithLabelValues("Request too large").Inc()
@@ -588,12 +590,12 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (_ 
 		return nil, errors.Wrap(err, "during workerPool.GetRateLimit")
 	}
 
-	metricGetRateLimitCounter.WithLabelValues("local").Inc()
 	// If global behavior, then broadcast update to all peers.
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
-		s.global.QueueUpdate(r, resp, requestTime)
+		s.global.QueueUpdate(r, requestTime)
 	}
 
+	metricGetRateLimitCounter.WithLabelValues("local").Inc()
 	return resp, nil
 }
 

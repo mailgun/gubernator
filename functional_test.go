@@ -1622,11 +1622,10 @@ func TestHealthCheck(t *testing.T) {
 
 	testutil.UntilPass(t, 20, clock.Millisecond*300, func(t testutil.TestingT) {
 		// Check the health again to get back the connection error
-		healthResp, err = client.HealthCheck(context.Background(), &guber.HealthCheckReq{})
-		if assert.Nil(t, err) {
+		healthResp, err := client.HealthCheck(context.Background(), &guber.HealthCheckReq{})
+		if !assert.NoError(t, err) {
 			return
 		}
-
 		assert.Equal(t, "unhealthy", healthResp.GetStatus())
 		assert.Contains(t, healthResp.GetMessage(), "connect: connection refused")
 	})
@@ -1637,12 +1636,17 @@ func TestHealthCheck(t *testing.T) {
 	require.NoError(t, cluster.Restart(ctx))
 
 	// wait for every peer instance to come back online
+	numPeers := int32(len(cluster.GetPeers()))
 	for _, peer := range cluster.GetPeers() {
 		peerClient, err := guber.DialV1Server(peer.GRPCAddress, nil)
 		require.NoError(t, err)
-		testutil.UntilPass(t, 10, clock.Millisecond*300, func(t testutil.TestingT) {
-			healthResp, err = peerClient.HealthCheck(context.Background(), &guber.HealthCheckReq{})
-			assert.Equal(t, "healthy", healthResp.GetStatus())
+		testutil.UntilPass(t, 10, 300*clock.Millisecond, func(t testutil.TestingT) {
+			healthResp, err := peerClient.HealthCheck(context.Background(), &guber.HealthCheckReq{})
+			if !assert.NoError(t, err) {
+				return
+			}
+			assert.Equal(t, "healthy", healthResp.Status)
+			assert.Equal(t, numPeers, healthResp.PeerCount)
 		})
 	}
 }

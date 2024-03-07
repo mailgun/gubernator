@@ -23,6 +23,7 @@ import (
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"google.golang.org/protobuf/proto"
 )
 
 // globalManager manages async hit queue and updates peers in
@@ -243,8 +244,7 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 
 	for _, update := range updates {
 		// Get current rate limit state.
-		grlReq := new(RateLimitReq)
-		*grlReq = *update.Request
+		grlReq := proto.Clone(update.Request).(*RateLimitReq)
 		grlReq.Hits = 0
 		status, err := gm.instance.workerPool.GetRateLimit(ctx, grlReq, update.RequestTime)
 		if err != nil {

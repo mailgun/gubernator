@@ -1497,8 +1497,6 @@ func TestGlobalBehavior(t *testing.T) {
 				upgCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_grpc_request_duration_count{method=\"/pb.gubernator.PeersV1/UpdatePeerGlobals\"}")
 				gprlCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_grpc_request_duration_count{method=\"/pb.gubernator.PeersV1/GetPeerRateLimits\"}")
 
-				require.NoError(t, waitForIdle(1*clock.Minute, cluster.GetDaemons()...))
-
 				// When
 				for i := int64(0); i < testCase.Hits; i++ {
 					sendHit(t, owner, makeReq(name, key, 1), guber.Status_UNDER_LIMIT, 999-i)
@@ -1610,12 +1608,12 @@ func TestGlobalBehavior(t *testing.T) {
 				require.NoError(t, err)
 				t.Logf("Owner peer: %s", owner.InstanceID)
 
+				require.NoError(t, waitForIdle(1*clock.Minute, cluster.GetDaemons()...))
+
 				broadcastCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_broadcast_duration_count")
 				updateCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_global_send_duration_count")
 				upgCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_grpc_request_duration_count{method=\"/pb.gubernator.PeersV1/UpdatePeerGlobals\"}")
 				gprlCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_grpc_request_duration_count{method=\"/pb.gubernator.PeersV1/GetPeerRateLimits\"}")
-
-				require.NoError(t, waitForIdle(1*clock.Minute, cluster.GetDaemons()...))
 
 				// When
 				for i := int64(0); i < testCase.Hits; i++ {
@@ -1739,6 +1737,8 @@ func TestGlobalBehavior(t *testing.T) {
 				}
 				t.Logf("Owner peer: %s", owner.InstanceID)
 
+				require.NoError(t, waitForIdle(1*clock.Minute, cluster.GetDaemons()...))
+
 				broadcastCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_broadcast_duration_count")
 				updateCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_global_send_duration_count")
 				upgCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_grpc_request_duration_count{method=\"/pb.gubernator.PeersV1/UpdatePeerGlobals\"}")
@@ -1746,8 +1746,6 @@ func TestGlobalBehavior(t *testing.T) {
 				expectUpdate := make(map[string]struct{})
 				var wg sync.WaitGroup
 				var mutex sync.Mutex
-
-				require.NoError(t, waitForIdle(1*clock.Minute, cluster.GetDaemons()...))
 
 				// When
 				wg.Add(testCase.Hits)

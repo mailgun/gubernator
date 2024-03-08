@@ -1009,8 +1009,7 @@ func TestGlobalRateLimitsWithLoadBalancing(t *testing.T) {
 		assert.Equal(t, status, item.Status, fmt.Sprintf("mismatch status, iteration %d", i))
 	}
 
-	require.NoError(t, waitForBroadcast(1*clock.Minute, owner, 0))
-	require.NoError(t, waitForBroadcast(1*clock.Minute, nonOwner, 0))
+	require.NoError(t, waitForIdle(1*clock.Minute, cluster.GetDaemons()...))
 
 	// Send two hits that should be processed by the owner and non-owner and
 	// deplete the limit consistently.
@@ -1541,6 +1540,8 @@ func TestGlobalBehavior(t *testing.T) {
 				upgCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_grpc_request_duration_count{method=\"/pb.gubernator.PeersV1/UpdatePeerGlobals\"}")
 				gprlCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_grpc_request_duration_count{method=\"/pb.gubernator.PeersV1/GetPeerRateLimits\"}")
 
+				require.NoError(t, waitForIdle(1*clock.Minute, cluster.GetDaemons()...))
+
 				// When
 				for i := int64(0); i < testCase.Hits; i++ {
 					sendHit(t, owner, makeReq(name, key, 1), guber.Status_UNDER_LIMIT, 999-i)
@@ -1656,6 +1657,8 @@ func TestGlobalBehavior(t *testing.T) {
 				updateCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_global_send_duration_count")
 				upgCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_grpc_request_duration_count{method=\"/pb.gubernator.PeersV1/UpdatePeerGlobals\"}")
 				gprlCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_grpc_request_duration_count{method=\"/pb.gubernator.PeersV1/GetPeerRateLimits\"}")
+
+				require.NoError(t, waitForIdle(1*clock.Minute, cluster.GetDaemons()...))
 
 				// When
 				for i := int64(0); i < testCase.Hits; i++ {
@@ -1786,6 +1789,8 @@ func TestGlobalBehavior(t *testing.T) {
 				expectUpdate := make(map[string]struct{})
 				var wg sync.WaitGroup
 				var mutex sync.Mutex
+
+				require.NoError(t, waitForIdle(1*clock.Minute, cluster.GetDaemons()...))
 
 				// When
 				wg.Add(testCase.Hits)

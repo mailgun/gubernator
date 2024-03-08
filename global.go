@@ -27,17 +27,17 @@ import (
 // globalManager manages async hit queue and updates peers in
 // the cluster periodically when a global rate limit we own updates.
 type globalManager struct {
-	hitsQueue                chan *RateLimitReq
-	updatesQueue             chan *RateLimitReq
-	wg                       syncutil.WaitGroup
-	conf                     BehaviorConfig
-	log                      FieldLogger
-	instance                 *V1Instance // todo circular import? V1Instance also holds a reference to globalManager
-	metricGlobalSendDuration prometheus.Summary
+	hitsQueue                   chan *RateLimitReq
+	updatesQueue                chan *RateLimitReq
+	wg                          syncutil.WaitGroup
+	conf                        BehaviorConfig
+	log                         FieldLogger
+	instance                    *V1Instance // todo circular import? V1Instance also holds a reference to globalManager
+	metricGlobalSendDuration    prometheus.Summary
 	metricGlobalSendQueueLength prometheus.Gauge
-	metricBroadcastDuration  prometheus.Summary
-	metricBroadcastCounter   *prometheus.CounterVec
-	metricGlobalQueueLength  prometheus.Gauge
+	metricBroadcastDuration     prometheus.Summary
+	metricBroadcastCounter      *prometheus.CounterVec
+	metricGlobalQueueLength     prometheus.Gauge
 }
 
 func newGlobalManager(conf BehaviorConfig, instance *V1Instance) *globalManager {

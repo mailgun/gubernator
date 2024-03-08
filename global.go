@@ -34,6 +34,7 @@ type globalManager struct {
 	log                      FieldLogger
 	instance                 *V1Instance // todo circular import? V1Instance also holds a reference to globalManager
 	metricGlobalSendDuration prometheus.Summary
+	metricGlobalSendQueueLength prometheus.Gauge
 	metricBroadcastDuration  prometheus.Summary
 	metricBroadcastCounter   *prometheus.CounterVec
 	metricGlobalQueueLength  prometheus.Gauge
@@ -50,6 +51,10 @@ func newGlobalManager(conf BehaviorConfig, instance *V1Instance) *globalManager 
 			Name:       "gubernator_global_send_duration",
 			Help:       "The duration of GLOBAL async sends in seconds.",
 			Objectives: map[float64]float64{0.5: 0.05, 0.99: 0.001},
+		}),
+		metricGlobalSendQueueLength: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "gubernator_global_send_queue_length",
+			Help: "The count of requests queued up for global broadcast.  This is only used for GetRateLimit requests using global behavior.",
 		}),
 		metricBroadcastDuration: prometheus.NewSummary(prometheus.SummaryOpts{
 			Name:       "gubernator_broadcast_duration",
@@ -95,6 +100,7 @@ func (gm *globalManager) runAsyncHits() {
 
 		select {
 		case r := <-gm.hitsQueue:
+			gm.metricGlobalSendQueueLength.Set(float64(len(hits)))
 			// Aggregate the hits into a single request
 			key := r.HashKey()
 			_, ok := hits[key]
@@ -108,6 +114,7 @@ func (gm *globalManager) runAsyncHits() {
 			if len(hits) == gm.conf.GlobalBatchLimit {
 				gm.sendHits(hits)
 				hits = make(map[string]*RateLimitReq)
+				gm.metricGlobalSendQueueLength.Set(0)
 				return true
 			}
 
@@ -121,6 +128,7 @@ func (gm *globalManager) runAsyncHits() {
 			if len(hits) != 0 {
 				gm.sendHits(hits)
 				hits = make(map[string]*RateLimitReq)
+				gm.metricGlobalSendQueueLength.Set(0)
 			}
 		case <-done:
 			return false
@@ -132,6 +140,7 @@ func (gm *globalManager) runAsyncHits() {
 // sendHits takes the hits collected by runAsyncHits and sends them to their
 // owning peers
 func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
+	// fmt.Printf("sendHits() %s, hits: %d\n", gm.instance.conf.InstanceID, len(hits))
 	type pair struct {
 		client *PeerClient
 		req    GetPeerRateLimitsReq
@@ -189,29 +198,32 @@ func (gm *globalManager) runBroadcasts() {
 		select {
 		case r := <-gm.updatesQueue:
 			updates[r.HashKey()] = r
+			gm.metricGlobalQueueLength.Set(float64(len(updates)))
 
-			// Send the hits if we reached our batch limit
+			// Send the broadcast if we reached our batch limit
 			if len(updates) >= gm.conf.GlobalBatchLimit {
 				gm.metricBroadcastCounter.WithLabelValues("queue_full").Inc()
-				gm.broadcastPeers(context.Background(), updates)
+				gm.broadcastPeers(updates)
 				updates = make(map[string]*RateLimitReq)
+				gm.metricGlobalQueueLength.Set(0)
 				return true
 			}
 
-			// If this is our first queued hit since last send
+			// If this is our first queued updated since last send
 			// queue the next interval
 			if len(updates) == 1 {
 				interval.Next()
 			}
 
 		case <-interval.C:
-			if len(updates) != 0 {
-				gm.metricBroadcastCounter.WithLabelValues("timer").Inc()
-				gm.broadcastPeers(context.Background(), updates)
-				updates = make(map[string]*RateLimitReq)
-			} else {
-				gm.metricGlobalQueueLength.Set(0)
+			if len(updates) == 0 {
+				break
 			}
+			gm.metricBroadcastCounter.WithLabelValues("timer").Inc()
+			gm.broadcastPeers(updates)
+			updates = make(map[string]*RateLimitReq)
+			gm.metricGlobalQueueLength.Set(0)
+
 		case <-done:
 			return false
 		}
@@ -220,11 +232,11 @@ func (gm *globalManager) runBroadcasts() {
 }
 
 // broadcastPeers broadcasts global rate limit statuses to all other peers
-func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]*RateLimitReq) {
+func (gm *globalManager) broadcastPeers(updates map[string]*RateLimitReq) {
+	// fmt.Printf("broadcastPeers() %s, updates: %d\n", gm.instance.conf.InstanceID, len(updates))
 	defer prometheus.NewTimer(gm.metricBroadcastDuration).ObserveDuration()
+	ctx := context.Background()
 	var req UpdatePeerGlobalsReq
-
-	gm.metricGlobalQueueLength.Set(float64(len(updates)))
 
 	for _, r := range updates {
 		// Copy the original since we are removing the GLOBAL behavior

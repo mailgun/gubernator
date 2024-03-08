@@ -406,10 +406,12 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 		rl, ok := item.Value.(*RateLimitResp)
 		if ok {
 			rl2 := proto.Clone(rl).(*RateLimitResp)
-			if req.Hits > rl2.Remaining {
-				rl2.Status = Status_OVER_LIMIT
-			} else {
-				rl2.Status = Status_UNDER_LIMIT
+			if req.Hits != 0 {
+				if req.Hits > rl2.Remaining {
+					rl2.Status = Status_OVER_LIMIT
+				} else {
+					rl2.Status = Status_UNDER_LIMIT
+				}
 			}
 			return rl2, nil
 		}
@@ -433,7 +435,6 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 // UpdatePeerGlobals updates the local cache with a list of global rate limits. This method should only
 // be called by a peer who is the owner of a global rate limit.
 func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
-	// fmt.Printf("UpdatePeerGlobals() %s, req: %s", s.conf.InstanceID, spew.Sdump(r))
 	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.UpdatePeerGlobals")).ObserveDuration()
 	for _, g := range r.Globals {
 		item := &CacheItem{
@@ -501,7 +502,6 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 				rl = &RateLimitResp{Error: err.Error()}
 				// metricCheckErrorCounter is updated within getLocalRateLimit(), not in GetPeerRateLimits.
 			}
-			// fmt.Printf("GetPeerRateLimits() %s, hits: %d, resp: %#v\n", s.conf.InstanceID, req.Hits, rl)
 
 			respChan <- respOut{rin.idx, rl}
 			return nil
@@ -578,7 +578,6 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (_ 
 		return nil, errors.Wrap(err, "during workerPool.GetRateLimit")
 	}
 
-	// fmt.Printf("getLocalRateLimit() %s, resp: %#v\n", s.conf.InstanceID, resp)
 	metricGetRateLimitCounter.WithLabelValues("local").Inc()
 
 	// If global behavior and owning peer, broadcast update to all peers.

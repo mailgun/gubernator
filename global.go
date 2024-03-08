@@ -140,7 +140,6 @@ func (gm *globalManager) runAsyncHits() {
 // sendHits takes the hits collected by runAsyncHits and sends them to their
 // owning peers
 func (gm *globalManager) sendHits(hits map[string]*RateLimitReq) {
-	// fmt.Printf("sendHits() %s, hits: %d\n", gm.instance.conf.InstanceID, len(hits))
 	type pair struct {
 		client *PeerClient
 		req    GetPeerRateLimitsReq
@@ -233,7 +232,6 @@ func (gm *globalManager) runBroadcasts() {
 
 // broadcastPeers broadcasts global rate limit statuses to all other peers
 func (gm *globalManager) broadcastPeers(updates map[string]*RateLimitReq) {
-	// fmt.Printf("broadcastPeers() %s, updates: %d\n", gm.instance.conf.InstanceID, len(updates))
 	defer prometheus.NewTimer(gm.metricBroadcastDuration).ObserveDuration()
 	ctx := context.Background()
 	var req UpdatePeerGlobalsReq

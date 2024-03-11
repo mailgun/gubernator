@@ -503,6 +503,12 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 				SetBehavior(&rin.req.Behavior, Behavior_DRAIN_OVER_LIMIT, true)
 			}
 
+			// Assign default to RequestTime for backwards compatibility.
+			if r.RequestTime == nil || *r.RequestTime == 0 {
+				requestTime := epochMillis(clock.Now())
+				r.RequestTime = &requestTime
+			}
+
 			rl, err := s.getLocalRateLimit(ctx, rin.req)
 			if err != nil {
 				// Return the error for this request

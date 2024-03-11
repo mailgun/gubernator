@@ -607,8 +607,6 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq, rs 
 
 	if rs.IsOwner {
 		metricGetRateLimitCounter.WithLabelValues("local").Inc()
-	} else {
-		metricGetRateLimitCounter.WithLabelValues("local non-owner").Inc()
 	}
 	return resp, nil
 }

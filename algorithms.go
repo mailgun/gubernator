@@ -34,7 +34,7 @@ import (
 // with 100 emails and the request will succeed. You can override this default behavior with `DRAIN_OVER_LIMIT`
 
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket
-func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, rs RateLimitReqState) (resp *RateLimitResp, err error) {
 	tokenBucketTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("tokenBucket"))
 	defer tokenBucketTimer.ObserveDuration()
 
@@ -99,7 +99,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 				s.Remove(ctx, hashKey)
 			}
 
-			return tokenBucketNewItem(ctx, s, c, r)
+			return tokenBucketNewItem(ctx, s, c, r, rs)
 		}
 
 		// Update the limit if it changed.
@@ -161,7 +161,9 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		// If we are already at the limit.
 		if rl.Remaining == 0 && r.Hits > 0 {
 			trace.SpanFromContext(ctx).AddEvent("Already over the limit")
-			metricOverLimitCounter.Add(1)
+			if rs.IsOwner {
+				metricOverLimitCounter.Add(1)
+			}
 			rl.Status = Status_OVER_LIMIT
 			t.Status = rl.Status
 			return rl, nil
@@ -179,7 +181,9 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		// without updating the cache.
 		if r.Hits > t.Remaining {
 			trace.SpanFromContext(ctx).AddEvent("Over the limit")
-			metricOverLimitCounter.Add(1)
+			if rs.IsOwner {
+				metricOverLimitCounter.Add(1)
+			}
 			rl.Status = Status_OVER_LIMIT
 			if HasBehavior(r.Behavior, Behavior_DRAIN_OVER_LIMIT) {
 				// DRAIN_OVER_LIMIT behavior drains the remaining counter.
@@ -195,11 +199,11 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 	}
 
 	// Item is not found in cache or store, create new.
-	return tokenBucketNewItem(ctx, s, c, r)
+	return tokenBucketNewItem(ctx, s, c, r, rs)
 }
 
 // Called by tokenBucket() when adding a new item in the store.
-func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, rs RateLimitReqState) (resp *RateLimitResp, err error) {
 	requestTime := *r.RequestTime
 	expire := requestTime + r.Duration
 
@@ -235,7 +239,9 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 	// Client could be requesting that we always return OVER_LIMIT.
 	if r.Hits > r.Limit {
 		trace.SpanFromContext(ctx).AddEvent("Over the limit")
-		metricOverLimitCounter.Add(1)
+		if rs.IsOwner {
+			metricOverLimitCounter.Add(1)
+		}
 		rl.Status = Status_OVER_LIMIT
 		rl.Remaining = r.Limit
 		t.Remaining = r.Limit
@@ -251,7 +257,7 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 }
 
 // Implements leaky bucket algorithm for rate limiting https://en.wikipedia.org/wiki/Leaky_bucket
-func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, rs RateLimitReqState) (resp *RateLimitResp, err error) {
 	leakyBucketTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getRateLimit_leakyBucket"))
 	defer leakyBucketTimer.ObserveDuration()
 
@@ -308,7 +314,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 				s.Remove(ctx, hashKey)
 			}
 
-			return leakyBucketNewItem(ctx, s, c, r)
+			return leakyBucketNewItem(ctx, s, c, r, rs)
 		}
 
 		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
@@ -381,7 +387,9 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 
 		// If we are already at the limit
 		if int64(b.Remaining) == 0 && r.Hits > 0 {
-			metricOverLimitCounter.Add(1)
+			if rs.IsOwner {
+				metricOverLimitCounter.Add(1)
+			}
 			rl.Status = Status_OVER_LIMIT
 			return rl, nil
 		}
@@ -397,7 +405,9 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		// If requested is more than available, then return over the limit
 		// without updating the bucket, unless `DRAIN_OVER_LIMIT` is set.
 		if r.Hits > int64(b.Remaining) {
-			metricOverLimitCounter.Add(1)
+			if rs.IsOwner {
+				metricOverLimitCounter.Add(1)
+			}
 			rl.Status = Status_OVER_LIMIT
 
 			// DRAIN_OVER_LIMIT behavior drains the remaining counter.
@@ -420,11 +430,11 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *
 		return rl, nil
 	}
 
-	return leakyBucketNewItem(ctx, s, c, r)
+	return leakyBucketNewItem(ctx, s, c, r, rs)
 }
 
 // Called by leakyBucket() when adding a new item in the store.
-func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) (resp *RateLimitResp, err error) {
+func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, rs RateLimitReqState) (resp *RateLimitResp, err error) {
 	requestTime := *r.RequestTime
 	duration := r.Duration
 	rate := float64(duration) / float64(r.Limit)
@@ -457,7 +467,9 @@ func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 
 	// Client could be requesting that we start with the bucket OVER_LIMIT
 	if r.Hits > r.Burst {
-		metricOverLimitCounter.Add(1)
+		if rs.IsOwner {
+			metricOverLimitCounter.Add(1)
+		}
 		rl.Status = Status_OVER_LIMIT
 		rl.Remaining = 0
 		rl.ResetTime = requestTime + (rl.Limit-rl.Remaining)*int64(rate)

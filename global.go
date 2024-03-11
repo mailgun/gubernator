@@ -234,6 +234,7 @@ func (gm *globalManager) runBroadcasts() {
 func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]*RateLimitReq) {
 	defer prometheus.NewTimer(gm.metricBroadcastDuration).ObserveDuration()
 	var req UpdatePeerGlobalsReq
+	reqState := RateLimitReqState{IsOwner: false}
 
 	gm.metricGlobalQueueLength.Set(float64(len(updates)))
 
@@ -241,7 +242,7 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 		// Get current rate limit state.
 		grlReq := proto.Clone(update).(*RateLimitReq)
 		grlReq.Hits = 0
-		status, err := gm.instance.workerPool.GetRateLimit(ctx, grlReq)
+		status, err := gm.instance.workerPool.GetRateLimit(ctx, grlReq, reqState)
 		if err != nil {
 			gm.log.WithError(err).Error("while retrieving rate limit status")
 			continue

@@ -34,7 +34,7 @@ func BenchmarkServer(b *testing.B) {
 	require.NoError(b, err, "Error in conf.SetDefaults")
 	requestTime := epochMillis(clock.Now())
 
-	b.Run("GetPeerRateLimit() with no batching", func(b *testing.B) {
+	b.Run("GetPeerRateLimit", func(b *testing.B) {
 		client, err := guber.NewPeerClient(guber.PeerConfig{
 			Info:     cluster.GetRandomPeer(cluster.DataCenterNone),
 			Behavior: conf.Behaviors,
@@ -46,9 +46,9 @@ func BenchmarkServer(b *testing.B) {
 
 		for n := 0; n < b.N; n++ {
 			_, err := client.GetPeerRateLimit(ctx, &guber.RateLimitReq{
-				Name:        b.Name(),
-				UniqueKey:   guber.RandomString(10),
-				Behavior:    guber.Behavior_NO_BATCHING,
+				Name:      b.Name(),
+				UniqueKey: guber.RandomString(10),
+				// Behavior:    guber.Behavior_NO_BATCHING,
 				Limit:       10,
 				Duration:    5,
 				Hits:        1,
@@ -60,7 +60,7 @@ func BenchmarkServer(b *testing.B) {
 		}
 	})
 
-	b.Run("GetRateLimit()", func(b *testing.B) {
+	b.Run("GetRateLimits batching", func(b *testing.B) {
 		client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
 		require.NoError(b, err, "Error in guber.DialV1Server")
 		b.ResetTimer()
@@ -83,7 +83,7 @@ func BenchmarkServer(b *testing.B) {
 		}
 	})
 
-	b.Run("GetRateLimitGlobal()", func(b *testing.B) {
+	b.Run("GetRateLimits global", func(b *testing.B) {
 		client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
 		require.NoError(b, err, "Error in guber.DialV1Server")
 		b.ResetTimer()

@@ -53,6 +53,10 @@ type V1Instance struct {
 	workerPool *WorkerPool
 }
 
+type RateLimitReqState struct {
+	IsOwner bool
+}
+
 var (
 	metricGetRateLimitCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "gubernator_getratelimit_counter",
@@ -240,9 +244,10 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 		}
 
 		// If our server instance is the owner of this rate limit
-		if peer.Info().IsOwner {
+		reqState := RateLimitReqState{IsOwner: peer.Info().IsOwner}
+		if reqState.IsOwner {
 			// Apply our rate limit algorithm to the request
-			resp.Responses[i], err = s.getLocalRateLimit(ctx, req)
+			resp.Responses[i], err = s.getLocalRateLimit(ctx, req, reqState)
 			if err != nil {
 				err = errors.Wrapf(err, "Error while apply rate limit for '%s'", key)
 				span := trace.SpanFromContext(ctx)
@@ -313,6 +318,7 @@ func (s *V1Instance) asyncRequest(ctx context.Context, req *AsyncReq) {
 	funcTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.asyncRequest"))
 	defer funcTimer.ObserveDuration()
 
+	reqState := RateLimitReqState{IsOwner: false}
 	resp := AsyncResp{
 		Idx: req.Idx,
 	}
@@ -332,7 +338,7 @@ func (s *V1Instance) asyncRequest(ctx context.Context, req *AsyncReq) {
 		// If we are attempting again, the owner of this rate limit might have changed to us!
 		if attempts != 0 {
 			if req.Peer.Info().IsOwner {
-				resp.Resp, err = s.getLocalRateLimit(ctx, req.Req)
+				resp.Resp, err = s.getLocalRateLimit(ctx, req.Req, reqState)
 				if err != nil {
 					s.log.WithContext(ctx).
 						WithError(err).
@@ -399,12 +405,13 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 		tracing.EndScope(ctx, err)
 	}()
 
-	cpy := proto.Clone(req).(*RateLimitReq)
-	SetBehavior(&cpy.Behavior, Behavior_NO_BATCHING, true)
-	SetBehavior(&cpy.Behavior, Behavior_GLOBAL, false)
+	req2 := proto.Clone(req).(*RateLimitReq)
+	SetBehavior(&req2.Behavior, Behavior_NO_BATCHING, true)
+	SetBehavior(&req2.Behavior, Behavior_GLOBAL, false)
+	reqState := RateLimitReqState{IsOwner: false}
 
 	// Process the rate limit like we own it
-	resp, err = s.getLocalRateLimit(ctx, cpy)
+	resp, err = s.getLocalRateLimit(ctx, req2, reqState)
 	if err != nil {
 		return nil, errors.Wrap(err, "during in getLocalRateLimit")
 	}
@@ -476,6 +483,7 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	respChan := make(chan respOut)
 	var respWg sync.WaitGroup
 	respWg.Add(1)
+	reqState := RateLimitReqState{IsOwner: true}
 
 	go func() {
 		// Capture each response and return in the same order
@@ -509,7 +517,7 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 				rin.req.RequestTime = &requestTime
 			}
 
-			rl, err := s.getLocalRateLimit(ctx, rin.req)
+			rl, err := s.getLocalRateLimit(ctx, rin.req, reqState)
 			if err != nil {
 				// Return the error for this request
 				err = errors.Wrap(err, "Error in getLocalRateLimit")
@@ -577,7 +585,7 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (health
 	return health, nil
 }
 
-func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (_ *RateLimitResp, err error) {
+func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq, rs RateLimitReqState) (_ *RateLimitResp, err error) {
 	ctx = tracing.StartNamedScope(ctx, "V1Instance.getLocalRateLimit", trace.WithAttributes(
 		attribute.String("ratelimit.key", r.UniqueKey),
 		attribute.String("ratelimit.name", r.Name),
@@ -587,7 +595,7 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (_ 
 	defer func() { tracing.EndScope(ctx, err) }()
 	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getLocalRateLimit")).ObserveDuration()
 
-	resp, err := s.workerPool.GetRateLimit(ctx, r)
+	resp, err := s.workerPool.GetRateLimit(ctx, r, rs)
 	if err != nil {
 		return nil, errors.Wrap(err, "during workerPool.GetRateLimit")
 	}

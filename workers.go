@@ -265,9 +265,9 @@ func (p *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) 
 	queueGauge.Inc()
 	defer queueGauge.Dec()
 	handlerRequest := request{
-		ctx:         ctx,
-		resp:        make(chan *response, 1),
-		request:     rlRequest,
+		ctx:     ctx,
+		resp:    make(chan *response, 1),
+		request: rlRequest,
 	}
 
 	// Send request.

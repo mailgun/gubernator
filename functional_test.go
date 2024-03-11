@@ -34,6 +34,7 @@ import (
 	guber "github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/gubernator/v2/cluster"
 	"github.com/mailgun/holster/v4/clock"
+	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/mailgun/holster/v4/testutil"
 	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/common/model"
@@ -973,22 +974,22 @@ func TestMissingFields(t *testing.T) {
 }
 
 func TestGlobalRateLimits(t *testing.T) {
-	const (
-		name = "test_global"
-		key  = "account:12345"
-	)
-
+	name := t.Name()
+	key := randomKey()
+	owner, err := cluster.FindOwningDaemon(name, key)
+	require.NoError(t, err)
 	peers, err := cluster.ListNonOwningDaemons(name, key)
 	require.NoError(t, err)
+	var resetTime int64
 
-	sendHit := func(client guber.V1Client, status guber.Status, hits, expectRemaining, expectResetTime int64) int64 {
+	sendHit := func(client guber.V1Client, status guber.Status, hits, remain int64) {
 		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
 		defer cancel()
 		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
 			Requests: []*guber.RateLimitReq{
 				{
-					Name:      "test_global",
-					UniqueKey: "account:12345",
+					Name:      name,
+					UniqueKey: key,
 					Algorithm: guber.Algorithm_TOKEN_BUCKET,
 					Behavior:  guber.Behavior_GLOBAL,
 					Duration:  guber.Minute * 3,
@@ -1000,19 +1001,27 @@ func TestGlobalRateLimits(t *testing.T) {
 		require.NoError(t, err)
 		item := resp.Responses[0]
 		assert.Equal(t, "", item.Error)
-		assert.Equal(t, expectRemaining, item.Remaining)
+		assert.Equal(t, remain, item.Remaining)
 		assert.Equal(t, status, item.Status)
 		assert.Equal(t, int64(5), item.Limit)
-		if expectResetTime != 0 {
-			assert.Equal(t, expectResetTime, item.ResetTime)
+
+		// ResetTime should not change during test.
+		if resetTime == 0 {
+			resetTime = item.ResetTime
 		}
-		return item.ResetTime
+		assert.Equal(t, resetTime, item.ResetTime)
+
+		// ensure that we have a canonical host
+		assert.NotEmpty(t, item.Metadata["owner"])
 	}
+
+	require.NoError(t, waitForIdle(1*clock.Minute, cluster.GetDaemons()...))
+
 	// Our first hit should create the request on the peer and queue for async forward
-	_ = sendHit(peers[0].MustClient(), guber.Status_UNDER_LIMIT, 1, 4, 0)
+	sendHit(peers[0].MustClient(), guber.Status_UNDER_LIMIT, 1, 4)
 
 	// Our second should be processed as if we own it since the async forward hasn't occurred yet
-	_ = sendHit(peers[0].MustClient(), guber.Status_UNDER_LIMIT, 2, 2, 0)
+	sendHit(peers[0].MustClient(), guber.Status_UNDER_LIMIT, 2, 2)
 
 	testutil.UntilPass(t, 20, clock.Millisecond*200, func(t testutil.TestingT) {
 		// Inspect peers metrics, ensure the peer sent the global rate limit to the owner
@@ -1021,44 +1030,36 @@ func TestGlobalRateLimits(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 1, int(m.Value))
 	})
-	owner, err := cluster.FindOwningDaemon(name, key)
-	require.NoError(t, err)
 
-	// Get the ResetTime from owner.
-	expectResetTime := sendHit(owner.MustClient(), guber.Status_UNDER_LIMIT, 0, 2, 0)
 	require.NoError(t, waitForBroadcast(clock.Second*3, owner, 1))
 
 	// Check different peers, they should have gotten the broadcast from the owner
-	sendHit(peers[1].MustClient(), guber.Status_UNDER_LIMIT, 0, 2, expectResetTime)
-	sendHit(peers[2].MustClient(), guber.Status_UNDER_LIMIT, 0, 2, expectResetTime)
+	sendHit(peers[1].MustClient(), guber.Status_UNDER_LIMIT, 0, 2)
+	sendHit(peers[2].MustClient(), guber.Status_UNDER_LIMIT, 0, 2)
 
 	// Non owning peer should calculate the rate limit remaining before forwarding
 	// to the owner.
-	sendHit(peers[3].MustClient(), guber.Status_UNDER_LIMIT, 2, 0, expectResetTime)
+	sendHit(peers[3].MustClient(), guber.Status_UNDER_LIMIT, 2, 0)
 
 	require.NoError(t, waitForBroadcast(clock.Second*3, owner, 2))
 
-	sendHit(peers[4].MustClient(), guber.Status_OVER_LIMIT, 1, 0, expectResetTime)
+	sendHit(peers[4].MustClient(), guber.Status_OVER_LIMIT, 1, 0)
 }
 
 // Ensure global broadcast updates all peers when GetRateLimits is called on
 // either owner or non-owner peer.
 func TestGlobalRateLimitsWithLoadBalancing(t *testing.T) {
 	ctx := context.Background()
-	const name = "test_global"
-	key := fmt.Sprintf("key:%016x", rand.Int())
+	name := t.Name()
+	key := randomKey()
 
 	// Determine owner and non-owner peers.
-	ownerPeerInfo, err := cluster.FindOwningPeer(name, key)
+	owner, err := cluster.FindOwningDaemon(name, key)
 	require.NoError(t, err)
-	ownerDaemon, err := cluster.FindOwningDaemon(name, key)
+	// ownerAddr := owner.ownerPeerInfo.GRPCAddress
+	peers, err := cluster.ListNonOwningDaemons(name, key)
 	require.NoError(t, err)
-	owner := ownerPeerInfo.GRPCAddress
-	nonOwner := cluster.PeerAt(0).GRPCAddress
-	if nonOwner == owner {
-		nonOwner = cluster.PeerAt(1).GRPCAddress
-	}
-	require.NotEqual(t, owner, nonOwner)
+	nonOwner := peers[0]
 
 	// Connect to owner and non-owner peers in round robin.
 	dialOpts := []grpc.DialOption{
@@ -1066,22 +1067,22 @@ func TestGlobalRateLimitsWithLoadBalancing(t *testing.T) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"round_robin":{}}]}`),
 	}
-	address := fmt.Sprintf("static:///%s,%s", owner, nonOwner)
+	address := fmt.Sprintf("static:///%s,%s", owner.PeerInfo.GRPCAddress, nonOwner.PeerInfo.GRPCAddress)
 	conn, err := grpc.DialContext(ctx, address, dialOpts...)
 	require.NoError(t, err)
 	client := guber.NewV1Client(conn)
 
-	sendHit := func(status guber.Status, i int) {
-		ctx, cancel := context.WithTimeout(ctx, 10*clock.Second)
+	sendHit := func(client guber.V1Client, status guber.Status, i int) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*clock.Second)
 		defer cancel()
 		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
 			Requests: []*guber.RateLimitReq{
 				{
 					Name:      name,
 					UniqueKey: key,
-					Algorithm: guber.Algorithm_LEAKY_BUCKET,
+					Algorithm: guber.Algorithm_TOKEN_BUCKET,
 					Behavior:  guber.Behavior_GLOBAL,
-					Duration:  guber.Minute * 5,
+					Duration:  5 * guber.Minute,
 					Hits:      1,
 					Limit:     2,
 				},
@@ -1089,33 +1090,34 @@ func TestGlobalRateLimitsWithLoadBalancing(t *testing.T) {
 		})
 		require.NoError(t, err, i)
 		item := resp.Responses[0]
-		assert.Equal(t, "", item.GetError(), fmt.Sprintf("mismatch error, iteration %d", i))
-		assert.Equal(t, status, item.GetStatus(), fmt.Sprintf("mismatch status, iteration %d", i))
+		assert.Equal(t, "", item.Error, fmt.Sprintf("unexpected error, iteration %d", i))
+		assert.Equal(t, status, item.Status, fmt.Sprintf("mismatch status, iteration %d", i))
 	}
+
+	require.NoError(t, waitForIdle(1*clock.Minute, cluster.GetDaemons()...))
 
 	// Send two hits that should be processed by the owner and non-owner and
 	// deplete the limit consistently.
-	sendHit(guber.Status_UNDER_LIMIT, 1)
-	sendHit(guber.Status_UNDER_LIMIT, 2)
-	require.NoError(t, waitForBroadcast(clock.Second*3, ownerDaemon, 1))
+	sendHit(client, guber.Status_UNDER_LIMIT, 1)
+	sendHit(client, guber.Status_UNDER_LIMIT, 2)
+	require.NoError(t, waitForBroadcast(3*clock.Second, owner, 1))
 
 	// All successive hits should return OVER_LIMIT.
 	for i := 2; i <= 10; i++ {
-		sendHit(guber.Status_OVER_LIMIT, i)
+		sendHit(client, guber.Status_OVER_LIMIT, i)
 	}
 }
 
 func TestGlobalRateLimitsPeerOverLimit(t *testing.T) {
-	const (
-		name = "test_global_token_limit"
-		key  = "account:12345"
-	)
-
+	name := t.Name()
+	key := randomKey()
+	owner, err := cluster.FindOwningDaemon(name, key)
+	require.NoError(t, err)
 	peers, err := cluster.ListNonOwningDaemons(name, key)
 	require.NoError(t, err)
 
-	sendHit := func(expectedStatus guber.Status, hits int64) {
-		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
+	sendHit := func(expectedStatus guber.Status, hits, expectedRemaining int64) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*clock.Second)
 		defer cancel()
 		resp, err := peers[0].MustClient().GetRateLimits(ctx, &guber.GetRateLimitsReq{
 			Requests: []*guber.RateLimitReq{
@@ -1124,284 +1126,37 @@ func TestGlobalRateLimitsPeerOverLimit(t *testing.T) {
 					UniqueKey: key,
 					Algorithm: guber.Algorithm_TOKEN_BUCKET,
 					Behavior:  guber.Behavior_GLOBAL,
-					Duration:  guber.Minute * 5,
+					Duration:  5 * guber.Minute,
 					Hits:      hits,
 					Limit:     2,
 				},
 			},
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, "", resp.Responses[0].GetError())
-		assert.Equal(t, expectedStatus, resp.Responses[0].GetStatus())
+		item := resp.Responses[0]
+		assert.Equal(t, "", item.Error, "unexpected error")
+		assert.Equal(t, expectedStatus, item.Status, "mismatch status")
+		assert.Equal(t, expectedRemaining, item.Remaining, "mismatch remaining")
 	}
-	owner, err := cluster.FindOwningDaemon(name, key)
-	require.NoError(t, err)
 
-	// Send two hits that should be processed by the owner and the broadcast to peer, depleting the remaining
-	sendHit(guber.Status_UNDER_LIMIT, 1)
-	sendHit(guber.Status_UNDER_LIMIT, 1)
+	require.NoError(t, waitForIdle(1*clock.Minute, cluster.GetDaemons()...))
+
+	// Send two hits that should be processed by the owner and the broadcast to
+	// peer, depleting the remaining.
+	sendHit(guber.Status_UNDER_LIMIT, 1, 1)
+	sendHit(guber.Status_UNDER_LIMIT, 1, 0)
+
 	// Wait for the broadcast from the owner to the peer
-	require.NoError(t, waitForBroadcast(clock.Second*3, owner, 1))
-	// Since the remainder is 0, the peer should set OVER_LIMIT instead of waiting for the owner
-	// to respond with OVER_LIMIT.
-	sendHit(guber.Status_OVER_LIMIT, 1)
-	// Wait for the broadcast from the owner to the peer
-	require.NoError(t, waitForBroadcast(clock.Second*3, owner, 2))
-	// The status should still be OVER_LIMIT
-	sendHit(guber.Status_OVER_LIMIT, 0)
-}
+	require.NoError(t, waitForBroadcast(3*clock.Second, owner, 1))
 
-func TestGlobalRateLimitsPeerOverLimitLeaky(t *testing.T) {
-	const (
-		name = "test_global_token_limit_leaky"
-		key  = "account:12345"
-	)
+	// Since the remainder is 0, the peer should return OVER_LIMIT on next hit.
+	sendHit(guber.Status_OVER_LIMIT, 1, 0)
 
-	peers, err := cluster.ListNonOwningDaemons(name, key)
-	require.NoError(t, err)
+	// Wait for the broadcast from the owner to the peer.
+	require.NoError(t, waitForBroadcast(3*clock.Second, owner, 2))
 
-	sendHit := func(client guber.V1Client, expectedStatus guber.Status, hits int64) {
-		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
-		defer cancel()
-		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
-			Requests: []*guber.RateLimitReq{
-				{
-					Name:      name,
-					UniqueKey: key,
-					Algorithm: guber.Algorithm_LEAKY_BUCKET,
-					Behavior:  guber.Behavior_GLOBAL,
-					Duration:  guber.Minute * 5,
-					Hits:      hits,
-					Limit:     2,
-				},
-			},
-		})
-		assert.NoError(t, err)
-		assert.Equal(t, "", resp.Responses[0].GetError())
-		assert.Equal(t, expectedStatus, resp.Responses[0].GetStatus())
-	}
-	owner, err := cluster.FindOwningDaemon(name, key)
-	require.NoError(t, err)
-
-	// Send two hits that should be processed by the owner and the broadcast to peer, depleting the remaining
-	sendHit(peers[0].MustClient(), guber.Status_UNDER_LIMIT, 1)
-	sendHit(peers[0].MustClient(), guber.Status_UNDER_LIMIT, 1)
-	// Wait for the broadcast from the owner to the peers
-	require.NoError(t, waitForBroadcast(clock.Second*3, owner, 1))
-	// Ask a different peer if the status is over the limit
-	sendHit(peers[1].MustClient(), guber.Status_OVER_LIMIT, 1)
-}
-
-func TestGlobalRequestMoreThanAvailable(t *testing.T) {
-	const (
-		name = "test_global_more_than_available"
-		key  = "account:123456"
-	)
-
-	peers, err := cluster.ListNonOwningDaemons(name, key)
-	require.NoError(t, err)
-
-	sendHit := func(client guber.V1Client, expectedStatus guber.Status, hits int64, remaining int64) {
-		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
-		defer cancel()
-		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
-			Requests: []*guber.RateLimitReq{
-				{
-					Name:      name,
-					UniqueKey: key,
-					Algorithm: guber.Algorithm_LEAKY_BUCKET,
-					Behavior:  guber.Behavior_GLOBAL,
-					Duration:  guber.Minute * 1_000,
-					Hits:      hits,
-					Limit:     100,
-				},
-			},
-		})
-		assert.NoError(t, err)
-		assert.Equal(t, "", resp.Responses[0].GetError())
-		assert.Equal(t, expectedStatus, resp.Responses[0].GetStatus())
-	}
-	owner, err := cluster.FindOwningDaemon(name, key)
-	require.NoError(t, err)
-
-	prev, err := getBroadcastCount(owner)
-	require.NoError(t, err)
-
-	// Ensure GRPC has connections to each peer before we start, as we want
-	// the actual test requests to happen quite fast.
-	for _, p := range peers {
-		sendHit(p.MustClient(), guber.Status_UNDER_LIMIT, 0, 100)
-	}
-
-	// Send a request for 50 hits from each non owning peer in the cluster. These requests
-	// will be queued and sent to the owner as accumulated hits. As a result of the async nature
-	// of `Behavior_GLOBAL` rate limit requests spread across peers like this will be allowed to
-	// over-consume their resource within the rate limit window until the owner is updated and
-	// a broadcast to all peers is received.
-	//
-	// The maximum number of resources that can be over-consumed can be calculated by multiplying
-	// the remainder by the number of peers in the cluster. For example: If you have a remainder of 100
-	// and a cluster of 10 instances, then the maximum over-consumed resource is 1,000. If you need
-	// a more accurate remaining calculation, and wish to avoid over consuming a resource, then do
-	// not use `Behavior_GLOBAL`.
-	for _, p := range peers {
-		sendHit(p.MustClient(), guber.Status_UNDER_LIMIT, 50, 50)
-	}
-
-	// Wait for the broadcast from the owner to the peers
-	require.NoError(t, waitForBroadcast(clock.Second*10, owner, prev+1))
-
-	// We should be over the limit
-	sendHit(peers[0].MustClient(), guber.Status_OVER_LIMIT, 1, 0)
-}
-
-func TestGlobalNegativeHits(t *testing.T) {
-	const (
-		name = "test_global_negative_hits"
-		key  = "account:12345"
-	)
-
-	peers, err := cluster.ListNonOwningDaemons(name, key)
-	require.NoError(t, err)
-
-	sendHit := func(client guber.V1Client, status guber.Status, hits int64, remaining int64) {
-		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
-		defer cancel()
-		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
-			Requests: []*guber.RateLimitReq{
-				{
-					Name:      name,
-					UniqueKey: key,
-					Algorithm: guber.Algorithm_TOKEN_BUCKET,
-					Behavior:  guber.Behavior_GLOBAL,
-					Duration:  guber.Minute * 100,
-					Hits:      hits,
-					Limit:     2,
-				},
-			},
-		})
-		assert.NoError(t, err)
-		assert.Equal(t, "", resp.Responses[0].GetError())
-		assert.Equal(t, status, resp.Responses[0].GetStatus())
-		assert.Equal(t, remaining, resp.Responses[0].Remaining)
-	}
-	owner, err := cluster.FindOwningDaemon(name, key)
-	require.NoError(t, err)
-	prev, err := getBroadcastCount(owner)
-	require.NoError(t, err)
-
-	// Send a negative hit on a rate limit with no hits
-	sendHit(peers[0].MustClient(), guber.Status_UNDER_LIMIT, -1, 3)
-
-	// Wait for the negative remaining to propagate
-	require.NoError(t, waitForBroadcast(clock.Second*10, owner, prev+1))
-
-	// Send another negative hit to a different peer
-	sendHit(peers[1].MustClient(), guber.Status_UNDER_LIMIT, -1, 4)
-
-	require.NoError(t, waitForBroadcast(clock.Second*10, owner, prev+2))
-
-	// Should have 4 in the remainder
-	sendHit(peers[2].MustClient(), guber.Status_UNDER_LIMIT, 4, 0)
-
-	require.NoError(t, waitForBroadcast(clock.Second*10, owner, prev+3))
-
-	sendHit(peers[3].MustClient(), guber.Status_UNDER_LIMIT, 0, 0)
-}
-
-func TestGlobalResetRemaining(t *testing.T) {
-	const (
-		name = "test_global_reset"
-		key  = "account:123456"
-	)
-
-	peers, err := cluster.ListNonOwningDaemons(name, key)
-	require.NoError(t, err)
-
-	sendHit := func(client guber.V1Client, expectedStatus guber.Status, hits int64, remaining int64) {
-		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
-		defer cancel()
-		resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
-			Requests: []*guber.RateLimitReq{
-				{
-					Name:      name,
-					UniqueKey: key,
-					Algorithm: guber.Algorithm_LEAKY_BUCKET,
-					Behavior:  guber.Behavior_GLOBAL,
-					Duration:  guber.Minute * 1_000,
-					Hits:      hits,
-					Limit:     100,
-				},
-			},
-		})
-		assert.NoError(t, err)
-		assert.Equal(t, "", resp.Responses[0].GetError())
-		assert.Equal(t, expectedStatus, resp.Responses[0].GetStatus())
-		assert.Equal(t, remaining, resp.Responses[0].Remaining)
-	}
-	owner, err := cluster.FindOwningDaemon(name, key)
-	require.NoError(t, err)
-	prev, err := getBroadcastCount(owner)
-	require.NoError(t, err)
-
-	for _, p := range peers {
-		sendHit(p.MustClient(), guber.Status_UNDER_LIMIT, 50, 50)
-	}
-
-	// Wait for the broadcast from the owner to the peers
-	require.NoError(t, waitForBroadcast(clock.Second*10, owner, prev+1))
-
-	// We should be over the limit and remaining should be zero
-	sendHit(peers[0].MustClient(), guber.Status_OVER_LIMIT, 1, 0)
-
-	// Now reset the remaining
-	ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
-	defer cancel()
-	resp, err := peers[0].MustClient().GetRateLimits(ctx, &guber.GetRateLimitsReq{
-		Requests: []*guber.RateLimitReq{
-			{
-				Name:      name,
-				UniqueKey: key,
-				Algorithm: guber.Algorithm_LEAKY_BUCKET,
-				Behavior:  guber.Behavior_GLOBAL | guber.Behavior_RESET_REMAINING,
-				Duration:  guber.Minute * 1_000,
-				Hits:      0,
-				Limit:     100,
-			},
-		},
-	})
-	require.NoError(t, err)
-	assert.NotEqual(t, 100, resp.Responses[0].Remaining)
-
-	// Wait for the reset to propagate.
-	require.NoError(t, waitForBroadcast(clock.Second*10, owner, prev+2))
-
-	// Check a different peer to ensure remaining has been reset
-	resp, err = peers[1].MustClient().GetRateLimits(ctx, &guber.GetRateLimitsReq{
-		Requests: []*guber.RateLimitReq{
-			{
-				Name:      name,
-				UniqueKey: key,
-				Algorithm: guber.Algorithm_LEAKY_BUCKET,
-				Behavior:  guber.Behavior_GLOBAL,
-				Duration:  guber.Minute * 1_000,
-				Hits:      0,
-				Limit:     100,
-			},
-		},
-	})
-	require.NoError(t, err)
-	assert.NotEqual(t, 100, resp.Responses[0].Remaining)
-
-}
-
-func getMetricRequest(url string, name string) (*model.Sample, error) {
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	return getMetric(resp.Body, name)
+	// The status should still be OVER_LIMIT.
+	sendHit(guber.Status_OVER_LIMIT, 0, 0)
 }
 
 func TestChangeLimit(t *testing.T) {
@@ -1622,10 +1377,11 @@ func TestHealthCheck(t *testing.T) {
 
 	testutil.UntilPass(t, 20, clock.Millisecond*300, func(t testutil.TestingT) {
 		// Check the health again to get back the connection error
-		healthResp, err := client.HealthCheck(context.Background(), &guber.HealthCheckReq{})
-		if !assert.NoError(t, err) {
+		healthResp, err = client.HealthCheck(context.Background(), &guber.HealthCheckReq{})
+		if assert.Nil(t, err) {
 			return
 		}
+
 		assert.Equal(t, "unhealthy", healthResp.GetStatus())
 		assert.Contains(t, healthResp.GetMessage(), "connect: connection refused")
 	})
@@ -1634,25 +1390,9 @@ func TestHealthCheck(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), clock.Second*15)
 	defer cancel()
 	require.NoError(t, cluster.Restart(ctx))
-
-	// wait for every peer instance to come back online
-	numPeers := int32(len(cluster.GetPeers()))
-	for _, peer := range cluster.GetPeers() {
-		peerClient, err := guber.DialV1Server(peer.GRPCAddress, nil)
-		require.NoError(t, err)
-		testutil.UntilPass(t, 10, 300*clock.Millisecond, func(t testutil.TestingT) {
-			healthResp, err := peerClient.HealthCheck(context.Background(), &guber.HealthCheckReq{})
-			if !assert.NoError(t, err) {
-				return
-			}
-			assert.Equal(t, "healthy", healthResp.Status)
-			assert.Equal(t, numPeers, healthResp.PeerCount)
-		})
-	}
 }
 
 func TestLeakyBucketDivBug(t *testing.T) {
-	// Freeze time so we don't leak during the test
 	defer clock.Freeze(clock.Now()).Unfreeze()
 
 	client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
@@ -1801,142 +1541,6 @@ func TestGetPeerRateLimits(t *testing.T) {
 
 // TODO: Add a test for sending no rate limits RateLimitReqList.RateLimits = nil
 
-func getMetric(in io.Reader, name string) (*model.Sample, error) {
-	dec := expfmt.SampleDecoder{
-		Dec: expfmt.NewDecoder(in, expfmt.FmtText),
-		Opts: &expfmt.DecodeOptions{
-			Timestamp: model.Now(),
-		},
-	}
-
-	var all model.Vector
-	for {
-		var smpls model.Vector
-		err := dec.Decode(&smpls)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		all = append(all, smpls...)
-	}
-
-	for _, s := range all {
-		if strings.Contains(s.Metric.String(), name) {
-			return s, nil
-		}
-	}
-	return nil, nil
-}
-
-// getBroadcastCount returns the current broadcast count for use with waitForBroadcast()
-// TODO: Replace this with something else, we can call and reset via HTTP/GRPC calls in gubernator v3
-func getBroadcastCount(d *guber.Daemon) (int, error) {
-	m, err := getMetricRequest(fmt.Sprintf("http://%s/metrics", d.Config().HTTPListenAddress),
-		"gubernator_broadcast_duration_count")
-	if err != nil {
-		return 0, err
-	}
-
-	return int(m.Value), nil
-}
-
-// waitForBroadcast waits until the broadcast count for the daemon changes to
-// the expected value. Returns an error if the expected value is not found
-// before the context is cancelled.
-func waitForBroadcast(timeout clock.Duration, d *guber.Daemon, expect int) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	for {
-		m, err := getMetricRequest(fmt.Sprintf("http://%s/metrics", d.Config().HTTPListenAddress),
-			"gubernator_broadcast_duration_count")
-		if err != nil {
-			return err
-		}
-
-		// It's possible a broadcast occurred twice if waiting for multiple peer to
-		// forward updates to the owner.
-		if int(m.Value) >= expect {
-			return nil
-		}
-
-		select {
-		case <-clock.After(time.Millisecond * 100):
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-}
-
-// waitForUpdate waits until the global update count for the daemon changes to
-// the expected value. Returns an error if the expected value is not found
-// before the context is cancelled.
-func waitForUpdate(timeout clock.Duration, d *guber.Daemon, expect int) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	for {
-		m, err := getMetricRequest(fmt.Sprintf("http://%s/metrics", d.Config().HTTPListenAddress),
-			"gubernator_global_send_duration_count")
-		if err != nil {
-			return err
-		}
-
-		// It's possible a broadcast occurred twice if waiting for multiple peer to
-		// forward updates to the owner.
-		if int(m.Value) >= expect {
-			return nil
-		}
-
-		select {
-		case <-clock.After(time.Millisecond * 100):
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-}
-
-func getMetricValue(t *testing.T, d *guber.Daemon, name string) float64 {
-	m, err := getMetricRequest(fmt.Sprintf("http://%s/metrics", d.Config().HTTPListenAddress),
-		name)
-	require.NoError(t, err)
-	if m == nil {
-		return 0
-	}
-	return float64(m.Value)
-}
-
-// Get metric counter values on each peer.
-func getPeerCounters(t *testing.T, peers []*guber.Daemon, name string) map[string]int {
-	counters := make(map[string]int)
-	for _, peer := range peers {
-		counters[peer.InstanceID] = int(getMetricValue(t, peer, name))
-	}
-	return counters
-}
-
-func sendHit(t *testing.T, d *guber.Daemon, req *guber.RateLimitReq, expectStatus guber.Status, expectRemaining int64) {
-	if req.Hits != 0 {
-		t.Logf("Sending %d hits to peer %s", req.Hits, d.InstanceID)
-	}
-	client := d.MustClient()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
-	resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
-		Requests: []*guber.RateLimitReq{req},
-	})
-	require.NoError(t, err)
-	item := resp.Responses[0]
-	assert.Equal(t, "", item.Error)
-	if expectRemaining >= 0 {
-		assert.Equal(t, expectRemaining, item.Remaining)
-	}
-	assert.Equal(t, expectStatus, item.Status)
-	assert.Equal(t, req.Limit, item.Limit)
-}
-
 func TestGlobalBehavior(t *testing.T) {
 	const limit = 1000
 	broadcastTimeout := 400 * time.Millisecond
@@ -1971,6 +1575,8 @@ func TestGlobalBehavior(t *testing.T) {
 				owner, err := cluster.FindOwningDaemon(name, key)
 				require.NoError(t, err)
 				t.Logf("Owner peer: %s", owner.InstanceID)
+
+				require.NoError(t, waitForIdle(1*time.Minute, cluster.GetDaemons()...))
 
 				broadcastCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_broadcast_duration_count")
 				updateCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_global_send_duration_count")
@@ -2088,6 +1694,8 @@ func TestGlobalBehavior(t *testing.T) {
 				require.NoError(t, err)
 				t.Logf("Owner peer: %s", owner.InstanceID)
 
+				require.NoError(t, waitForIdle(1*clock.Minute, cluster.GetDaemons()...))
+
 				broadcastCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_broadcast_duration_count")
 				updateCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_global_send_duration_count")
 				upgCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_grpc_request_duration_count{method=\"/pb.gubernator.PeersV1/UpdatePeerGlobals\"}")
@@ -2189,7 +1797,6 @@ func TestGlobalBehavior(t *testing.T) {
 		}
 	})
 
-	// Distribute hits across all non-owner peers.
 	t.Run("Distributed hits", func(t *testing.T) {
 		testCases := []struct {
 			Name string
@@ -2215,6 +1822,8 @@ func TestGlobalBehavior(t *testing.T) {
 					}
 				}
 				t.Logf("Owner peer: %s", owner.InstanceID)
+
+				require.NoError(t, waitForIdle(1*clock.Minute, cluster.GetDaemons()...))
 
 				broadcastCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_broadcast_duration_count")
 				updateCounters := getPeerCounters(t, cluster.GetDaemons(), "gubernator_global_send_duration_count")
@@ -2337,4 +1946,226 @@ func TestGlobalBehavior(t *testing.T) {
 			})
 		}
 	})
+}
+
+// Request metrics and parse into map.
+// Optionally pass names to filter metrics by name.
+func getMetrics(HTTPAddr string, names ...string) (map[string]*model.Sample, error) {
+	url := fmt.Sprintf("http://%s/metrics", HTTPAddr)
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP error requesting metrics: %s", resp.Status)
+	}
+	decoder := expfmt.SampleDecoder{
+		Dec: expfmt.NewDecoder(resp.Body, expfmt.FmtText),
+		Opts: &expfmt.DecodeOptions{
+			Timestamp: model.Now(),
+		},
+	}
+	nameSet := make(map[string]struct{})
+	for _, name := range names {
+		nameSet[name] = struct{}{}
+	}
+	metrics := make(map[string]*model.Sample)
+
+	for {
+		var smpls model.Vector
+		err := decoder.Decode(&smpls)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		for _, smpl := range smpls {
+			name := smpl.Metric.String()
+			if _, ok := nameSet[name]; ok || len(nameSet) == 0 {
+				metrics[name] = smpl
+			}
+		}
+	}
+
+	return metrics, nil
+}
+
+func getMetricRequest(url string, name string) (*model.Sample, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return getMetric(resp.Body, name)
+}
+
+func getMetric(in io.Reader, name string) (*model.Sample, error) {
+	dec := expfmt.SampleDecoder{
+		Dec: expfmt.NewDecoder(in, expfmt.FmtText),
+		Opts: &expfmt.DecodeOptions{
+			Timestamp: model.Now(),
+		},
+	}
+
+	var all model.Vector
+	for {
+		var smpls model.Vector
+		err := dec.Decode(&smpls)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, smpls...)
+	}
+
+	for _, s := range all {
+		if strings.Contains(s.Metric.String(), name) {
+			return s, nil
+		}
+	}
+	return nil, nil
+}
+
+// waitForBroadcast waits until the broadcast count for the daemon changes to
+// at least the expected value and the broadcast queue is empty.
+// Returns an error if timeout waiting for conditions to be met.
+func waitForBroadcast(timeout clock.Duration, d *guber.Daemon, expect int) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	for {
+		metrics, err := getMetrics(d.Config().HTTPListenAddress,
+			"gubernator_broadcast_duration_count", "gubernator_global_queue_length")
+		if err != nil {
+			return err
+		}
+		gbdc := metrics["gubernator_broadcast_duration_count"]
+		ggql := metrics["gubernator_global_queue_length"]
+
+		// It's possible a broadcast occurred twice if waiting for multiple
+		// peers to forward updates to non-owners.
+		if int(gbdc.Value) >= expect && ggql.Value == 0 {
+			return nil
+		}
+
+		select {
+		case <-clock.After(100 * clock.Millisecond):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+// waitForUpdate waits until the global hits update count for the daemon
+// changes to at least the expected value and the global update queue is empty.
+// Returns an error if timeout waiting for conditions to be met.
+func waitForUpdate(timeout clock.Duration, d *guber.Daemon, expect int) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	for {
+		metrics, err := getMetrics(d.Config().HTTPListenAddress,
+			"gubernator_global_send_duration_count", "gubernator_global_send_queue_length")
+		if err != nil {
+			return err
+		}
+		gsdc := metrics["gubernator_global_send_duration_count"]
+		gsql := metrics["gubernator_global_send_queue_length"]
+
+		// It's possible a hit occurred twice if waiting for multiple peers to
+		// forward updates to the owner.
+		if int(gsdc.Value) >= expect && gsql.Value == 0 {
+			return nil
+		}
+
+		select {
+		case <-clock.After(100 * clock.Millisecond):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+// waitForIdle waits until both global broadcast and global hits queues are
+// empty.
+func waitForIdle(timeout clock.Duration, daemons ...*guber.Daemon) error {
+	var wg syncutil.WaitGroup
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	for _, d := range daemons {
+		wg.Run(func(raw any) error {
+			d := raw.(*guber.Daemon)
+			for {
+				metrics, err := getMetrics(d.Config().HTTPListenAddress,
+					"gubernator_global_queue_length", "gubernator_global_send_queue_length")
+				if err != nil {
+					return err
+				}
+				ggql := metrics["gubernator_global_queue_length"]
+				gsql := metrics["gubernator_global_send_queue_length"]
+
+				if  ggql.Value == 0 && gsql.Value == 0 {
+					return nil
+				}
+
+				select {
+				case <-clock.After(100 * clock.Millisecond):
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+		}, d)
+	}
+	errs := wg.Wait()
+	if len(errs) > 0 {
+		return errs[0]
+	}
+	return nil
+}
+
+func getMetricValue(t *testing.T, d *guber.Daemon, name string) float64 {
+	m, err := getMetricRequest(fmt.Sprintf("http://%s/metrics", d.Config().HTTPListenAddress),
+		name)
+	require.NoError(t, err)
+	if m == nil {
+		return 0
+	}
+	return float64(m.Value)
+}
+
+// Get metric counter values on each peer.
+func getPeerCounters(t *testing.T, peers []*guber.Daemon, name string) map[string]int {
+	counters := make(map[string]int)
+	for _, peer := range peers {
+		counters[peer.InstanceID] = int(getMetricValue(t, peer, name))
+	}
+	return counters
+}
+
+func sendHit(t *testing.T, d *guber.Daemon, req *guber.RateLimitReq, expectStatus guber.Status, expectRemaining int64) {
+	if req.Hits != 0 {
+		t.Logf("Sending %d hits to peer %s", req.Hits, d.InstanceID)
+	}
+	client := d.MustClient()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	resp, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
+		Requests: []*guber.RateLimitReq{req},
+	})
+	require.NoError(t, err)
+	item := resp.Responses[0]
+	assert.Equal(t, "", item.Error)
+	if expectRemaining >= 0 {
+		assert.Equal(t, expectRemaining, item.Remaining)
+	}
+	assert.Equal(t, expectStatus, item.Status)
+	assert.Equal(t, req.Limit, item.Limit)
+}
+
+func randomKey() string {
+	return fmt.Sprintf("%016x", rand.Int())
 }

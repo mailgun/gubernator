@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/mailgun/errors"
 	"github.com/mailgun/holster/v4/clock"
@@ -188,6 +187,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 			"Requests.RateLimits list too large; max size is '%d'", maxBatchSize)
 	}
 
+	requestTime := EpochMillis(clock.Now())
 	resp := GetRateLimitsResp{
 		Responses: make([]*RateLimitResp, len(r.Requests)),
 	}
@@ -200,16 +200,18 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 		var peer *PeerClient
 		var err error
 
-		if len(req.UniqueKey) == 0 {
+		if req.UniqueKey == "" {
 			metricCheckErrorCounter.WithLabelValues("Invalid request").Inc()
 			resp.Responses[i] = &RateLimitResp{Error: "field 'unique_key' cannot be empty"}
 			continue
 		}
-
-		if len(req.Name) == 0 {
+		if req.Name == "" {
 			metricCheckErrorCounter.WithLabelValues("Invalid request").Inc()
 			resp.Responses[i] = &RateLimitResp{Error: "field 'namespace' cannot be empty"}
 			continue
+		}
+		if req.RequestTime == nil || *req.RequestTime == 0 {
+			req.RequestTime = &requestTime
 		}
 
 		if ctx.Err() != nil {
@@ -578,21 +580,14 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (_ 
 	defer func() { tracing.EndScope(ctx, err) }()
 	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getLocalRateLimit")).ObserveDuration()
 
-	var requestTime time.Time
-	if r.RequestTime != nil {
-		requestTime = time.UnixMilli(*r.RequestTime)
-	}
-	if requestTime.IsZero() {
-		requestTime = clock.Now()
-	}
-	resp, err := s.workerPool.GetRateLimit(ctx, r, requestTime)
+	resp, err := s.workerPool.GetRateLimit(ctx, r)
 	if err != nil {
 		return nil, errors.Wrap(err, "during workerPool.GetRateLimit")
 	}
 
 	// If global behavior, then broadcast update to all peers.
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
-		s.global.QueueUpdate(r, requestTime)
+		s.global.QueueUpdate(r)
 	}
 
 	metricGetRateLimitCounter.WithLabelValues("local").Inc()
@@ -736,10 +731,10 @@ func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
 	metricGetRateLimitCounter.Describe(ch)
 	metricOverLimitCounter.Describe(ch)
 	metricWorkerQueue.Describe(ch)
-	s.global.metricBroadcastCounter.Describe(ch)
 	s.global.metricBroadcastDuration.Describe(ch)
 	s.global.metricGlobalQueueLength.Describe(ch)
 	s.global.metricGlobalSendDuration.Describe(ch)
+	s.global.metricGlobalSendQueueLength.Describe(ch)
 }
 
 // Collect fetches metrics from the server for use by prometheus
@@ -754,10 +749,10 @@ func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
 	metricGetRateLimitCounter.Collect(ch)
 	metricOverLimitCounter.Collect(ch)
 	metricWorkerQueue.Collect(ch)
-	s.global.metricBroadcastCounter.Collect(ch)
 	s.global.metricBroadcastDuration.Collect(ch)
 	s.global.metricGlobalQueueLength.Collect(ch)
 	s.global.metricGlobalSendDuration.Collect(ch)
+	s.global.metricGlobalSendQueueLength.Collect(ch)
 }
 
 // HasBehavior returns true if the provided behavior is set

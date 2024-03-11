@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/collections"
@@ -70,7 +69,6 @@ type request struct {
 	request     *RateLimitReq
 	resp        chan *response
 	ctx         context.Context
-	requestTime time.Time
 }
 
 type PeerConfig struct {

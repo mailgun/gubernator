@@ -42,7 +42,6 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/OneOfOne/xxhash"
 	"github.com/mailgun/holster/v4/errors"
@@ -200,7 +199,7 @@ func (p *WorkerPool) dispatch(worker *Worker) {
 			}
 
 			resp := new(response)
-			resp.rl, resp.err = worker.handleGetRateLimit(req.ctx, req.request, req.requestTime, worker.cache)
+			resp.rl, resp.err = worker.handleGetRateLimit(req.ctx, req.request, worker.cache)
 			select {
 			case req.resp <- resp:
 				// Success.
@@ -259,7 +258,7 @@ func (p *WorkerPool) dispatch(worker *Worker) {
 }
 
 // GetRateLimit sends a GetRateLimit request to worker pool.
-func (p *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq, requestTime time.Time) (*RateLimitResp, error) {
+func (p *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq) (*RateLimitResp, error) {
 	// Delegate request to assigned channel based on request key.
 	worker := p.getWorker(rlRequest.HashKey())
 	queueGauge := metricWorkerQueue.WithLabelValues("GetRateLimit", worker.name)
@@ -269,7 +268,6 @@ func (p *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq, 
 		ctx:         ctx,
 		resp:        make(chan *response, 1),
 		request:     rlRequest,
-		requestTime: requestTime,
 	}
 
 	// Send request.
@@ -291,14 +289,14 @@ func (p *WorkerPool) GetRateLimit(ctx context.Context, rlRequest *RateLimitReq, 
 }
 
 // Handle request received by worker.
-func (worker *Worker) handleGetRateLimit(ctx context.Context, req *RateLimitReq, requestTime time.Time, cache Cache) (*RateLimitResp, error) {
+func (worker *Worker) handleGetRateLimit(ctx context.Context, req *RateLimitReq, cache Cache) (*RateLimitResp, error) {
 	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("Worker.handleGetRateLimit")).ObserveDuration()
 	var rlResponse *RateLimitResp
 	var err error
 
 	switch req.Algorithm {
 	case Algorithm_TOKEN_BUCKET:
-		rlResponse, err = tokenBucket(ctx, worker.conf.Store, cache, req, requestTime)
+		rlResponse, err = tokenBucket(ctx, worker.conf.Store, cache, req)
 		if err != nil {
 			msg := "Error in tokenBucket"
 			countError(err, msg)
@@ -307,7 +305,7 @@ func (worker *Worker) handleGetRateLimit(ctx context.Context, req *RateLimitReq,
 		}
 
 	case Algorithm_LEAKY_BUCKET:
-		rlResponse, err = leakyBucket(ctx, worker.conf.Store, cache, req, requestTime)
+		rlResponse, err = leakyBucket(ctx, worker.conf.Store, cache, req)
 		if err != nil {
 			msg := "Error in leakyBucket"
 			countError(err, msg)

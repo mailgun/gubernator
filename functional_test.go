@@ -748,14 +748,16 @@ func TestLeakyBucketGregorian(t *testing.T) {
 	now = now.Truncate(1 * time.Minute)
 	// So we don't start on the minute boundary
 	now = now.Add(time.Millisecond * 100)
+	name := t.Name()
+	key := guber.RandomString(10)
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
 			resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
 				Requests: []*guber.RateLimitReq{
 					{
-						Name:      "test_leaky_bucket_greg",
-						UniqueKey: "account:12345",
+						Name:      name,
+						UniqueKey: key,
 						Behavior:  guber.Behavior_DURATION_IS_GREGORIAN,
 						Algorithm: guber.Algorithm_LEAKY_BUCKET,
 						Duration:  guber.GregorianMinutes,
@@ -764,15 +766,13 @@ func TestLeakyBucketGregorian(t *testing.T) {
 					},
 				},
 			})
-			clock.Freeze(clock.Now())
 			require.NoError(t, err)
 
 			rl := resp.Responses[0]
-
 			assert.Equal(t, test.Status, rl.Status)
 			assert.Equal(t, test.Remaining, rl.Remaining)
 			assert.Equal(t, int64(60), rl.Limit)
-			assert.True(t, rl.ResetTime > now.Unix())
+			assert.Greater(t, rl.ResetTime, now.Unix())
 			clock.Advance(test.Sleep)
 		})
 	}

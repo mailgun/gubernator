@@ -188,7 +188,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 			"Requests.RateLimits list too large; max size is '%d'", maxBatchSize)
 	}
 
-	requestTime := EpochMillis(clock.Now())
+	requestTime := epochMillis(clock.Now())
 	resp := GetRateLimitsResp{
 		Responses: make([]*RateLimitResp, len(r.Requests)),
 	}
@@ -795,6 +795,6 @@ func isDeadlineExceeded(err error) bool {
 	return errors.Is(err, context.DeadlineExceeded)
 }
 
-func EpochMillis(t time.Time) int64 {
+func epochMillis(t time.Time) int64 {
 	return t.UnixNano() / 1_000_000
 }

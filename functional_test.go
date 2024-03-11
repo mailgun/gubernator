@@ -1526,6 +1526,8 @@ func TestResetRemaining(t *testing.T) {
 }
 
 func TestHealthCheck(t *testing.T) {
+	name := t.Name()
+	key := randomKey()
 	client, err := guber.DialV1Server(cluster.DaemonAt(0).GRPCListeners[0].Addr().String(), nil)
 	require.NoError(t, err)
 
@@ -1539,8 +1541,8 @@ func TestHealthCheck(t *testing.T) {
 	_, err = client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
 		Requests: []*guber.RateLimitReq{
 			{
-				Name:      "test_health_check",
-				UniqueKey: "account:12345",
+				Name:      name,
+				UniqueKey: key,
 				Algorithm: guber.Algorithm_TOKEN_BUCKET,
 				Behavior:  guber.Behavior_BATCHING,
 				Duration:  guber.Second * 3,
@@ -1589,19 +1591,32 @@ func TestHealthCheck(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), clock.Second*15)
 	defer cancel()
 	require.NoError(t, cluster.Restart(ctx))
+
+	// wait for every peer instance to come back online
+	numPeers := int32(len(cluster.GetPeers()))
+	for _, peer := range cluster.GetPeers() {
+		peerClient, err := guber.DialV1Server(peer.GRPCAddress, nil)
+		require.NoError(t, err)
+		testutil.UntilPass(t, 10, 300*clock.Millisecond, func(t testutil.TestingT) {
+			healthResp, err = peerClient.HealthCheck(context.Background(), &guber.HealthCheckReq{})
+			assert.Equal(t, "healthy", healthResp.GetStatus())
+			assert.Equal(t, numPeers, healthResp.PeerCount)
+		})
+	}
 }
 
 func TestLeakyBucketDivBug(t *testing.T) {
 	defer clock.Freeze(clock.Now()).Unfreeze()
-
+	name := t.Name()
+	key := randomKey()
 	client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
 	require.NoError(t, err)
 
 	resp, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
 		Requests: []*guber.RateLimitReq{
 			{
-				Name:      "test_leaky_bucket_div",
-				UniqueKey: "account:12345",
+				Name:      name,
+				UniqueKey: key,
 				Algorithm: guber.Algorithm_LEAKY_BUCKET,
 				Duration:  guber.Millisecond * 1000,
 				Hits:      1,
@@ -1619,8 +1634,8 @@ func TestLeakyBucketDivBug(t *testing.T) {
 	resp, err = client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
 		Requests: []*guber.RateLimitReq{
 			{
-				Name:      "test_leaky_bucket_div",
-				UniqueKey: "account:12345",
+				Name:      name,
+				UniqueKey: key,
 				Algorithm: guber.Algorithm_LEAKY_BUCKET,
 				Duration:  guber.Millisecond * 1000,
 				Hits:      100,
@@ -1644,6 +1659,8 @@ func TestMultiRegion(t *testing.T) {
 }
 
 func TestGRPCGateway(t *testing.T) {
+	name := t.Name()
+	key := randomKey()
 	address := cluster.GetRandomPeer(cluster.DataCenterNone).HTTPAddress
 	resp, err := http.DefaultClient.Get("http://" + address + "/v1/HealthCheck")
 	require.NoError(t, err)
@@ -1663,8 +1680,8 @@ func TestGRPCGateway(t *testing.T) {
 	payload, err := json.Marshal(&guber.GetRateLimitsReq{
 		Requests: []*guber.RateLimitReq{
 			{
-				Name:      "requests_per_sec",
-				UniqueKey: "account:12345",
+				Name:      name,
+				UniqueKey: key,
 				Duration:  guber.Millisecond * 1000,
 				Hits:      1,
 				Limit:     10,
@@ -1692,6 +1709,7 @@ func TestGRPCGateway(t *testing.T) {
 }
 
 func TestGetPeerRateLimits(t *testing.T) {
+	name := t.Name()
 	ctx := context.Background()
 	peerClient, err := guber.NewPeerClient(guber.PeerConfig{
 		Info: cluster.GetRandomPeer(cluster.DataCenterNone),
@@ -1701,6 +1719,7 @@ func TestGetPeerRateLimits(t *testing.T) {
 	t.Run("Stable rate check request order", func(t *testing.T) {
 		// Ensure response order matches rate check request order.
 		// Try various batch sizes.
+		requestTime := epochMillis(clock.Now())
 		testCases := []int{1, 2, 5, 10, 100, 1000}
 
 		for _, n := range testCases {
@@ -1711,13 +1730,14 @@ func TestGetPeerRateLimits(t *testing.T) {
 				}
 				for i := 0; i < n; i++ {
 					req.Requests[i] = &guber.RateLimitReq{
-						Name:      "Foobar",
-						UniqueKey: fmt.Sprintf("%08x", i),
-						Hits:      0,
-						Limit:     1000 + int64(i),
-						Duration:  1000,
-						Algorithm: guber.Algorithm_TOKEN_BUCKET,
-						Behavior:  guber.Behavior_BATCHING,
+						Name:        name,
+						UniqueKey:   randomKey(),
+						Hits:        0,
+						Limit:       1000 + int64(i),
+						Duration:    1000,
+						Algorithm:   guber.Algorithm_TOKEN_BUCKET,
+						Behavior:    guber.Behavior_BATCHING,
+						RequestTime: &requestTime,
 					}
 				}
 
@@ -1743,16 +1763,18 @@ func TestGetPeerRateLimits(t *testing.T) {
 func TestGlobalBehavior(t *testing.T) {
 	const limit = 1000
 	broadcastTimeout := 400 * time.Millisecond
+	requestTime := epochMillis(clock.Now())
 
 	makeReq := func(name, key string, hits int64) *guber.RateLimitReq {
 		return &guber.RateLimitReq{
-			Name:      name,
-			UniqueKey: key,
-			Algorithm: guber.Algorithm_TOKEN_BUCKET,
-			Behavior:  guber.Behavior_GLOBAL,
-			Duration:  guber.Minute * 3,
-			Hits:      hits,
-			Limit:     limit,
+			Name:        name,
+			UniqueKey:   key,
+			Algorithm:   guber.Algorithm_TOKEN_BUCKET,
+			Behavior:    guber.Behavior_GLOBAL,
+			Duration:    guber.Minute * 3,
+			Hits:        hits,
+			Limit:       limit,
+			RequestTime: &requestTime,
 		}
 	}
 
@@ -2367,4 +2389,8 @@ func sendHit(t *testing.T, d *guber.Daemon, req *guber.RateLimitReq, expectStatu
 
 func randomKey() string {
 	return fmt.Sprintf("%016x", rand.Int())
+}
+
+func epochMillis(t time.Time) int64 {
+	return t.UnixNano() / 1_000_000
 }

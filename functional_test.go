@@ -1563,8 +1563,8 @@ func TestHealthCheck(t *testing.T) {
 	_, err = client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
 		Requests: []*guber.RateLimitReq{
 			{
-				Name:      "test_health_check",
-				UniqueKey: "account:12345",
+				Name:      name,
+				UniqueKey: key,
 				Algorithm: guber.Algorithm_TOKEN_BUCKET,
 				Behavior:  guber.Behavior_GLOBAL,
 				Duration:  guber.Second * 3,
@@ -1575,7 +1575,7 @@ func TestHealthCheck(t *testing.T) {
 	})
 	require.Nil(t, err)
 
-	testutil.UntilPass(t, 20, clock.Millisecond*300, func(t testutil.TestingT) {
+	testutil.UntilPass(t, 20, 300*clock.Millisecond, func(t testutil.TestingT) {
 		// Check the health again to get back the connection error
 		healthResp, err = client.HealthCheck(context.Background(), &guber.HealthCheckReq{})
 		if assert.Nil(t, err) {

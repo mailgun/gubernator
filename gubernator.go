@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/mailgun/errors"
 	"github.com/mailgun/holster/v4/clock"
@@ -792,4 +793,8 @@ func isDeadlineExceeded(err error) bool {
 		return false
 	}
 	return errors.Is(err, context.DeadlineExceeded)
+}
+
+func EpochMillis(t time.Time) int64 {
+	return t.UnixNano() / 1_000_000
 }

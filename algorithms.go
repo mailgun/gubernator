@@ -18,7 +18,6 @@ package gubernator
 
 import (
 	"context"
-	"time"
 
 	"github.com/mailgun/holster/v4/clock"
 	"github.com/prometheus/client_golang/prometheus"
@@ -479,8 +478,4 @@ func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq) 
 	}
 
 	return &rl, nil
-}
-
-func EpochMillis(t time.Time) int64 {
-	return t.UnixNano() / 1_000_000
 }

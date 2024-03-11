@@ -504,9 +504,9 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 			}
 
 			// Assign default to RequestTime for backwards compatibility.
-			if r.RequestTime == nil || *r.RequestTime == 0 {
+			if rin.req.RequestTime == nil || *rin.req.RequestTime == 0 {
 				requestTime := epochMillis(clock.Now())
-				r.RequestTime = &requestTime
+				rin.req.RequestTime = &requestTime
 			}
 
 			rl, err := s.getLocalRateLimit(ctx, rin.req)

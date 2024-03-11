@@ -975,12 +975,12 @@ func TestMissingFields(t *testing.T) {
 
 func TestGlobalRateLimits(t *testing.T) {
 	name := t.Name()
-	key := randomKey()
+	key := guber.RandomString(10)
 	owner, err := cluster.FindOwningDaemon(name, key)
 	require.NoError(t, err)
 	peers, err := cluster.ListNonOwningDaemons(name, key)
 	require.NoError(t, err)
-	var resetTime int64
+	var firstResetTime int64
 
 	sendHit := func(client guber.V1Client, status guber.Status, hits, remain int64) {
 		ctx, cancel := context.WithTimeout(context.Background(), clock.Second*10)
@@ -1006,10 +1006,10 @@ func TestGlobalRateLimits(t *testing.T) {
 		assert.Equal(t, int64(5), item.Limit)
 
 		// ResetTime should not change during test.
-		if resetTime == 0 {
-			resetTime = item.ResetTime
+		if firstResetTime == 0 {
+			firstResetTime = item.ResetTime
 		}
-		assert.Equal(t, resetTime, item.ResetTime)
+		assert.Equal(t, firstResetTime, item.ResetTime)
 
 		// ensure that we have a canonical host
 		assert.NotEmpty(t, item.Metadata["owner"])
@@ -1051,12 +1051,11 @@ func TestGlobalRateLimits(t *testing.T) {
 func TestGlobalRateLimitsWithLoadBalancing(t *testing.T) {
 	ctx := context.Background()
 	name := t.Name()
-	key := randomKey()
+	key := guber.RandomString(10)
 
 	// Determine owner and non-owner peers.
 	owner, err := cluster.FindOwningDaemon(name, key)
 	require.NoError(t, err)
-	// ownerAddr := owner.ownerPeerInfo.GRPCAddress
 	peers, err := cluster.ListNonOwningDaemons(name, key)
 	require.NoError(t, err)
 	nonOwner := peers[0]
@@ -1110,7 +1109,7 @@ func TestGlobalRateLimitsWithLoadBalancing(t *testing.T) {
 
 func TestGlobalRateLimitsPeerOverLimit(t *testing.T) {
 	name := t.Name()
-	key := randomKey()
+	key := guber.RandomString(10)
 	owner, err := cluster.FindOwningDaemon(name, key)
 	require.NoError(t, err)
 	peers, err := cluster.ListNonOwningDaemons(name, key)
@@ -1161,7 +1160,7 @@ func TestGlobalRateLimitsPeerOverLimit(t *testing.T) {
 
 func TestGlobalRequestMoreThanAvailable(t *testing.T) {
 	name := t.Name()
-	key := randomKey()
+	key := guber.RandomString(10)
 	owner, err := cluster.FindOwningDaemon(name, key)
 	require.NoError(t, err)
 	peers, err := cluster.ListNonOwningDaemons(name, key)
@@ -1221,7 +1220,7 @@ func TestGlobalRequestMoreThanAvailable(t *testing.T) {
 
 func TestGlobalNegativeHits(t *testing.T) {
 	name := t.Name()
-	key := randomKey()
+	key := guber.RandomString(10)
 	owner, err := cluster.FindOwningDaemon(name, key)
 	require.NoError(t, err)
 	peers, err := cluster.ListNonOwningDaemons(name, key)
@@ -1275,7 +1274,7 @@ func TestGlobalNegativeHits(t *testing.T) {
 
 func TestGlobalResetRemaining(t *testing.T) {
 	name := t.Name()
-	key := randomKey()
+	key := guber.RandomString(10)
 	owner, err := cluster.FindOwningDaemon(name, key)
 	require.NoError(t, err)
 	peers, err := cluster.ListNonOwningDaemons(name, key)
@@ -1527,7 +1526,7 @@ func TestResetRemaining(t *testing.T) {
 
 func TestHealthCheck(t *testing.T) {
 	name := t.Name()
-	key := randomKey()
+	key := guber.RandomString(10)
 	client, err := guber.DialV1Server(cluster.DaemonAt(0).GRPCListeners[0].Addr().String(), nil)
 	require.NoError(t, err)
 
@@ -1608,7 +1607,7 @@ func TestHealthCheck(t *testing.T) {
 func TestLeakyBucketDivBug(t *testing.T) {
 	defer clock.Freeze(clock.Now()).Unfreeze()
 	name := t.Name()
-	key := randomKey()
+	key := guber.RandomString(10)
 	client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
 	require.NoError(t, err)
 
@@ -1660,7 +1659,7 @@ func TestMultiRegion(t *testing.T) {
 
 func TestGRPCGateway(t *testing.T) {
 	name := t.Name()
-	key := randomKey()
+	key := guber.RandomString(10)
 	address := cluster.GetRandomPeer(cluster.DataCenterNone).HTTPAddress
 	resp, err := http.DefaultClient.Get("http://" + address + "/v1/HealthCheck")
 	require.NoError(t, err)
@@ -1731,7 +1730,7 @@ func TestGetPeerRateLimits(t *testing.T) {
 				for i := 0; i < n; i++ {
 					req.Requests[i] = &guber.RateLimitReq{
 						Name:        name,
-						UniqueKey:   randomKey(),
+						UniqueKey:   guber.RandomString(10),
 						Hits:        0,
 						Limit:       1000 + int64(i),
 						Duration:    1000,
@@ -2385,10 +2384,6 @@ func sendHit(t *testing.T, d *guber.Daemon, req *guber.RateLimitReq, expectStatu
 	}
 	assert.Equal(t, expectStatus, item.Status)
 	assert.Equal(t, req.Limit, item.Limit)
-}
-
-func randomKey() string {
-	return fmt.Sprintf("%016x", rand.Int())
 }
 
 func epochMillis(t time.Time) int64 {

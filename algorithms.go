@@ -34,7 +34,7 @@ import (
 // with 100 emails and the request will succeed. You can override this default behavior with `DRAIN_OVER_LIMIT`
 
 // Implements token bucket algorithm for rate limiting. https://en.wikipedia.org/wiki/Token_bucket
-func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, rs RateLimitReqState) (resp *RateLimitResp, err error) {
+func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, reqState RateLimitReqState) (resp *RateLimitResp, err error) {
 	tokenBucketTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("tokenBucket"))
 	defer tokenBucketTimer.ObserveDuration()
 
@@ -99,7 +99,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, rs Rate
 				s.Remove(ctx, hashKey)
 			}
 
-			return tokenBucketNewItem(ctx, s, c, r, rs)
+			return tokenBucketNewItem(ctx, s, c, r, reqState)
 		}
 
 		// Update the limit if it changed.
@@ -146,7 +146,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, rs Rate
 			rl.ResetTime = expire
 		}
 
-		if s != nil {
+		if s != nil && reqState.IsOwner {
 			defer func() {
 				s.OnChange(ctx, r, item)
 			}()
@@ -161,7 +161,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, rs Rate
 		// If we are already at the limit.
 		if rl.Remaining == 0 && r.Hits > 0 {
 			trace.SpanFromContext(ctx).AddEvent("Already over the limit")
-			if rs.IsOwner {
+			if reqState.IsOwner {
 				metricOverLimitCounter.Add(1)
 			}
 			rl.Status = Status_OVER_LIMIT
@@ -181,7 +181,7 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, rs Rate
 		// without updating the cache.
 		if r.Hits > t.Remaining {
 			trace.SpanFromContext(ctx).AddEvent("Over the limit")
-			if rs.IsOwner {
+			if reqState.IsOwner {
 				metricOverLimitCounter.Add(1)
 			}
 			rl.Status = Status_OVER_LIMIT
@@ -199,11 +199,11 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, rs Rate
 	}
 
 	// Item is not found in cache or store, create new.
-	return tokenBucketNewItem(ctx, s, c, r, rs)
+	return tokenBucketNewItem(ctx, s, c, r, reqState)
 }
 
 // Called by tokenBucket() when adding a new item in the store.
-func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, rs RateLimitReqState) (resp *RateLimitResp, err error) {
+func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, reqState RateLimitReqState) (resp *RateLimitResp, err error) {
 	requestTime := *r.RequestTime
 	expire := requestTime + r.Duration
 
@@ -239,7 +239,7 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, 
 	// Client could be requesting that we always return OVER_LIMIT.
 	if r.Hits > r.Limit {
 		trace.SpanFromContext(ctx).AddEvent("Over the limit")
-		if rs.IsOwner {
+		if reqState.IsOwner {
 			metricOverLimitCounter.Add(1)
 		}
 		rl.Status = Status_OVER_LIMIT
@@ -249,7 +249,7 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, 
 
 	c.Add(item)
 
-	if s != nil {
+	if s != nil && reqState.IsOwner {
 		s.OnChange(ctx, r, item)
 	}
 
@@ -257,7 +257,7 @@ func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, 
 }
 
 // Implements leaky bucket algorithm for rate limiting https://en.wikipedia.org/wiki/Leaky_bucket
-func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, rs RateLimitReqState) (resp *RateLimitResp, err error) {
+func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, reqState RateLimitReqState) (resp *RateLimitResp, err error) {
 	leakyBucketTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getRateLimit_leakyBucket"))
 	defer leakyBucketTimer.ObserveDuration()
 
@@ -314,7 +314,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, rs Rate
 				s.Remove(ctx, hashKey)
 			}
 
-			return leakyBucketNewItem(ctx, s, c, r, rs)
+			return leakyBucketNewItem(ctx, s, c, r, reqState)
 		}
 
 		if HasBehavior(r.Behavior, Behavior_RESET_REMAINING) {
@@ -379,7 +379,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, rs Rate
 
 		// TODO: Feature missing: check for Duration change between item/request.
 
-		if s != nil {
+		if s != nil && reqState.IsOwner {
 			defer func() {
 				s.OnChange(ctx, r, item)
 			}()
@@ -387,7 +387,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, rs Rate
 
 		// If we are already at the limit
 		if int64(b.Remaining) == 0 && r.Hits > 0 {
-			if rs.IsOwner {
+			if reqState.IsOwner {
 				metricOverLimitCounter.Add(1)
 			}
 			rl.Status = Status_OVER_LIMIT
@@ -405,7 +405,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, rs Rate
 		// If requested is more than available, then return over the limit
 		// without updating the bucket, unless `DRAIN_OVER_LIMIT` is set.
 		if r.Hits > int64(b.Remaining) {
-			if rs.IsOwner {
+			if reqState.IsOwner {
 				metricOverLimitCounter.Add(1)
 			}
 			rl.Status = Status_OVER_LIMIT
@@ -430,11 +430,11 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, rs Rate
 		return rl, nil
 	}
 
-	return leakyBucketNewItem(ctx, s, c, r, rs)
+	return leakyBucketNewItem(ctx, s, c, r, reqState)
 }
 
 // Called by leakyBucket() when adding a new item in the store.
-func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, rs RateLimitReqState) (resp *RateLimitResp, err error) {
+func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, reqState RateLimitReqState) (resp *RateLimitResp, err error) {
 	requestTime := *r.RequestTime
 	duration := r.Duration
 	rate := float64(duration) / float64(r.Limit)
@@ -467,7 +467,7 @@ func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, 
 
 	// Client could be requesting that we start with the bucket OVER_LIMIT
 	if r.Hits > r.Burst {
-		if rs.IsOwner {
+		if reqState.IsOwner {
 			metricOverLimitCounter.Add(1)
 		}
 		rl.Status = Status_OVER_LIMIT
@@ -485,7 +485,7 @@ func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, 
 
 	c.Add(item)
 
-	if s != nil {
+	if s != nil && reqState.IsOwner {
 		s.OnChange(ctx, r, item)
 	}
 

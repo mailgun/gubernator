@@ -585,7 +585,7 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (health
 	return health, nil
 }
 
-func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq, rs RateLimitReqState) (_ *RateLimitResp, err error) {
+func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq, reqState RateLimitReqState) (_ *RateLimitResp, err error) {
 	ctx = tracing.StartNamedScope(ctx, "V1Instance.getLocalRateLimit", trace.WithAttributes(
 		attribute.String("ratelimit.key", r.UniqueKey),
 		attribute.String("ratelimit.name", r.Name),
@@ -595,7 +595,7 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq, rs 
 	defer func() { tracing.EndScope(ctx, err) }()
 	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getLocalRateLimit")).ObserveDuration()
 
-	resp, err := s.workerPool.GetRateLimit(ctx, r, rs)
+	resp, err := s.workerPool.GetRateLimit(ctx, r, reqState)
 	if err != nil {
 		return nil, errors.Wrap(err, "during workerPool.GetRateLimit")
 	}
@@ -605,7 +605,7 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq, rs 
 		s.global.QueueUpdate(r)
 	}
 
-	if rs.IsOwner {
+	if reqState.IsOwner {
 		metricGetRateLimitCounter.WithLabelValues("local").Inc()
 	}
 	return resp, nil

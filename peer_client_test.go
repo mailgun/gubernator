@@ -37,7 +37,7 @@ func TestPeerClientShutdown(t *testing.T) {
 	}
 
 	const threads = 10
-	requestTime := epochMillis(clock.Now())
+	createdAt := epochMillis(clock.Now())
 
 	cases := []test{
 		{"No batching", gubernator.Behavior_NO_BATCHING},
@@ -72,10 +72,10 @@ func TestPeerClientShutdown(t *testing.T) {
 				wg.Go(func() error {
 					ctx := context.Background()
 					_, err := client.GetPeerRateLimit(ctx, &gubernator.RateLimitReq{
-						Hits:        1,
-						Limit:       100,
-						Behavior:    c.Behavior,
-						RequestTime: &requestTime,
+						Hits:      1,
+						Limit:     100,
+						Behavior:  c.Behavior,
+						CreatedAt: &createdAt,
 					})
 
 					if err != nil {

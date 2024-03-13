@@ -132,12 +132,12 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, reqStat
 			}
 
 			// If our new duration means we are currently expired.
-			requestTime := *r.RequestTime
-			if expire <= requestTime {
+			createdAt := *r.CreatedAt
+			if expire <= createdAt {
 				// Renew item.
 				span.AddEvent("Limit has expired")
-				expire = requestTime + r.Duration
-				t.CreatedAt = requestTime
+				expire = createdAt + r.Duration
+				t.CreatedAt = createdAt
 				t.Remaining = t.Limit
 			}
 
@@ -204,14 +204,14 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, reqStat
 
 // Called by tokenBucket() when adding a new item in the store.
 func tokenBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, reqState RateLimitReqState) (resp *RateLimitResp, err error) {
-	requestTime := *r.RequestTime
-	expire := requestTime + r.Duration
+	createdAt := *r.CreatedAt
+	expire := createdAt + r.Duration
 
 	t := &TokenBucketItem{
 		Limit:     r.Limit,
 		Duration:  r.Duration,
 		Remaining: r.Limit - r.Hits,
-		CreatedAt: requestTime,
+		CreatedAt: createdAt,
 	}
 
 	// Add a new rate limit to the cache.
@@ -265,7 +265,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, reqStat
 		r.Burst = r.Limit
 	}
 
-	requestTime := *r.RequestTime
+	createdAt := *r.CreatedAt
 
 	// Get rate limit from cache.
 	hashKey := r.HashKey()
@@ -354,16 +354,16 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, reqStat
 		}
 
 		if r.Hits != 0 {
-			c.UpdateExpiration(r.HashKey(), requestTime+duration)
+			c.UpdateExpiration(r.HashKey(), createdAt+duration)
 		}
 
 		// Calculate how much leaked out of the bucket since the last time we leaked a hit
-		elapsed := requestTime - b.UpdatedAt
+		elapsed := createdAt - b.UpdatedAt
 		leak := float64(elapsed) / rate
 
 		if int64(leak) > 0 {
 			b.Remaining += leak
-			b.UpdatedAt = requestTime
+			b.UpdatedAt = createdAt
 		}
 
 		if int64(b.Remaining) > b.Burst {
@@ -374,7 +374,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, reqStat
 			Limit:     b.Limit,
 			Remaining: int64(b.Remaining),
 			Status:    Status_UNDER_LIMIT,
-			ResetTime: requestTime + (b.Limit-int64(b.Remaining))*int64(rate),
+			ResetTime: createdAt + (b.Limit-int64(b.Remaining))*int64(rate),
 		}
 
 		// TODO: Feature missing: check for Duration change between item/request.
@@ -398,7 +398,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, reqStat
 		if int64(b.Remaining) == r.Hits {
 			b.Remaining = 0
 			rl.Remaining = int64(b.Remaining)
-			rl.ResetTime = requestTime + (rl.Limit-rl.Remaining)*int64(rate)
+			rl.ResetTime = createdAt + (rl.Limit-rl.Remaining)*int64(rate)
 			return rl, nil
 		}
 
@@ -426,7 +426,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, reqStat
 
 		b.Remaining -= float64(r.Hits)
 		rl.Remaining = int64(b.Remaining)
-		rl.ResetTime = requestTime + (rl.Limit-rl.Remaining)*int64(rate)
+		rl.ResetTime = createdAt + (rl.Limit-rl.Remaining)*int64(rate)
 		return rl, nil
 	}
 
@@ -435,7 +435,7 @@ func leakyBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, reqStat
 
 // Called by leakyBucket() when adding a new item in the store.
 func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, reqState RateLimitReqState) (resp *RateLimitResp, err error) {
-	requestTime := *r.RequestTime
+	createdAt := *r.CreatedAt
 	duration := r.Duration
 	rate := float64(duration) / float64(r.Limit)
 	if HasBehavior(r.Behavior, Behavior_DURATION_IS_GREGORIAN) {
@@ -454,7 +454,7 @@ func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, 
 		Remaining: float64(r.Burst - r.Hits),
 		Limit:     r.Limit,
 		Duration:  duration,
-		UpdatedAt: requestTime,
+		UpdatedAt: createdAt,
 		Burst:     r.Burst,
 	}
 
@@ -462,7 +462,7 @@ func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, 
 		Status:    Status_UNDER_LIMIT,
 		Limit:     b.Limit,
 		Remaining: r.Burst - r.Hits,
-		ResetTime: requestTime + (b.Limit-(r.Burst-r.Hits))*int64(rate),
+		ResetTime: createdAt + (b.Limit-(r.Burst-r.Hits))*int64(rate),
 	}
 
 	// Client could be requesting that we start with the bucket OVER_LIMIT
@@ -472,12 +472,12 @@ func leakyBucketNewItem(ctx context.Context, s Store, c Cache, r *RateLimitReq, 
 		}
 		rl.Status = Status_OVER_LIMIT
 		rl.Remaining = 0
-		rl.ResetTime = requestTime + (rl.Limit-rl.Remaining)*int64(rate)
+		rl.ResetTime = createdAt + (rl.Limit-rl.Remaining)*int64(rate)
 		b.Remaining = 0
 	}
 
 	item := &CacheItem{
-		ExpireAt:  requestTime + duration,
+		ExpireAt:  createdAt + duration,
 		Algorithm: r.Algorithm,
 		Key:       r.HashKey(),
 		Value:     &b,

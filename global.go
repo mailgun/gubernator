@@ -248,11 +248,11 @@ func (gm *globalManager) broadcastPeers(ctx context.Context, updates map[string]
 			continue
 		}
 		updateReq := &UpdatePeerGlobal{
-			Key:         update.HashKey(),
-			Algorithm:   update.Algorithm,
-			Duration:    update.Duration,
-			Status:      status,
-			RequestTime: *update.RequestTime,
+			Key:       update.HashKey(),
+			Algorithm: update.Algorithm,
+			Duration:  update.Duration,
+			Status:    status,
+			CreatedAt: *update.CreatedAt,
 		}
 		req.Globals = append(req.Globals, updateReq)
 	}

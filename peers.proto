@@ -58,8 +58,16 @@ message UpdatePeerGlobal {
   Algorithm algorithm = 3;
   // The duration of the rate limit in milliseconds
   int64 duration = 4;
-  // Time of original GetRateLimits request so that ExpiresAt timestamps can be
-  // synchronized.
-  int64 request_time = 5;
+  // The exact time the original request was created in Epoch milliseconds.
+  // Due to time drift between systems, it may be advantageous for a client to
+  // set the exact time the request was created. It possible the system clock
+  // for the client has drifted from the system clock where gubernator daemon
+  // is running.
+  //
+  // The created time is used by gubernator to calculate the reset time for
+  // both token and leaky algorithms. If it is not set by the client,
+  // gubernator will set the created time when it receives the rate limit
+  // request.
+  int64 created_at = 5;
 }
 message UpdatePeerGlobalsResp {}

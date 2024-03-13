@@ -32,7 +32,7 @@ func BenchmarkServer(b *testing.B) {
 	conf := guber.Config{}
 	err := conf.SetDefaults()
 	require.NoError(b, err, "Error in conf.SetDefaults")
-	requestTime := epochMillis(clock.Now())
+	createdAt := epochMillis(clock.Now())
 
 	b.Run("GetPeerRateLimit", func(b *testing.B) {
 		client, err := guber.NewPeerClient(guber.PeerConfig{
@@ -49,10 +49,10 @@ func BenchmarkServer(b *testing.B) {
 				Name:      b.Name(),
 				UniqueKey: guber.RandomString(10),
 				// Behavior:    guber.Behavior_NO_BATCHING,
-				Limit:       10,
-				Duration:    5,
-				Hits:        1,
-				RequestTime: &requestTime,
+				Limit:     10,
+				Duration:  5,
+				Hits:      1,
+				CreatedAt: &createdAt,
 			})
 			if err != nil {
 				b.Errorf("Error in client.GetPeerRateLimit: %s", err)

@@ -192,7 +192,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 			"Requests.RateLimits list too large; max size is '%d'", maxBatchSize)
 	}
 
-	requestTime := epochMillis(clock.Now())
+	createdAt := epochMillis(clock.Now())
 	resp := GetRateLimitsResp{
 		Responses: make([]*RateLimitResp, len(r.Requests)),
 	}
@@ -215,8 +215,8 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 			resp.Responses[i] = &RateLimitResp{Error: "field 'namespace' cannot be empty"}
 			continue
 		}
-		if req.RequestTime == nil || *req.RequestTime == 0 {
-			req.RequestTime = &requestTime
+		if req.CreatedAt == nil || *req.CreatedAt == 0 {
+			req.CreatedAt = &createdAt
 		}
 
 		if ctx.Err() != nil {
@@ -511,10 +511,10 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 				SetBehavior(&rin.req.Behavior, Behavior_DRAIN_OVER_LIMIT, true)
 			}
 
-			// Assign default to RequestTime for backwards compatibility.
-			if rin.req.RequestTime == nil || *rin.req.RequestTime == 0 {
-				requestTime := epochMillis(clock.Now())
-				rin.req.RequestTime = &requestTime
+			// Assign default to CreatedAt for backwards compatibility.
+			if rin.req.CreatedAt == nil || *rin.req.CreatedAt == 0 {
+				createdAt := epochMillis(clock.Now())
+				rin.req.CreatedAt = &createdAt
 			}
 
 			rl, err := s.getLocalRateLimit(ctx, rin.req, reqState)

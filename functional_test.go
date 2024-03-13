@@ -1646,7 +1646,7 @@ func TestGetPeerRateLimits(t *testing.T) {
 	t.Run("Stable rate check request order", func(t *testing.T) {
 		// Ensure response order matches rate check request order.
 		// Try various batch sizes.
-		requestTime := epochMillis(clock.Now())
+		createdAt := epochMillis(clock.Now())
 		testCases := []int{1, 2, 5, 10, 100, 1000}
 
 		for _, n := range testCases {
@@ -1657,14 +1657,14 @@ func TestGetPeerRateLimits(t *testing.T) {
 				}
 				for i := 0; i < n; i++ {
 					req.Requests[i] = &guber.RateLimitReq{
-						Name:        name,
-						UniqueKey:   guber.RandomString(10),
-						Hits:        0,
-						Limit:       1000 + int64(i),
-						Duration:    1000,
-						Algorithm:   guber.Algorithm_TOKEN_BUCKET,
-						Behavior:    guber.Behavior_BATCHING,
-						RequestTime: &requestTime,
+						Name:      name,
+						UniqueKey: guber.RandomString(10),
+						Hits:      0,
+						Limit:     1000 + int64(i),
+						Duration:  1000,
+						Algorithm: guber.Algorithm_TOKEN_BUCKET,
+						Behavior:  guber.Behavior_BATCHING,
+						CreatedAt: &createdAt,
 					}
 				}
 
@@ -1690,18 +1690,18 @@ func TestGetPeerRateLimits(t *testing.T) {
 func TestGlobalBehavior(t *testing.T) {
 	const limit = 1000
 	broadcastTimeout := 400 * time.Millisecond
-	requestTime := epochMillis(clock.Now())
+	createdAt := epochMillis(clock.Now())
 
 	makeReq := func(name, key string, hits int64) *guber.RateLimitReq {
 		return &guber.RateLimitReq{
-			Name:        name,
-			UniqueKey:   key,
-			Algorithm:   guber.Algorithm_TOKEN_BUCKET,
-			Behavior:    guber.Behavior_GLOBAL,
-			Duration:    guber.Minute * 3,
-			Hits:        hits,
-			Limit:       limit,
-			RequestTime: &requestTime,
+			Name:      name,
+			UniqueKey: key,
+			Algorithm: guber.Algorithm_TOKEN_BUCKET,
+			Behavior:  guber.Behavior_GLOBAL,
+			Duration:  guber.Minute * 3,
+			Hits:      hits,
+			Limit:     limit,
+			CreatedAt: &createdAt,
 		}
 	}
 

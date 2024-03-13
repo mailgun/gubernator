@@ -146,16 +146,16 @@ func tokenBucket(ctx context.Context, s Store, c Cache, r *RateLimitReq, reqStat
 			rl.ResetTime = expire
 		}
 
-		if s != nil && reqState.IsOwner {
-			defer func() {
-				s.OnChange(ctx, r, item)
-			}()
-		}
-
 		// Client is only interested in retrieving the current status or
 		// updating the rate limit config.
 		if r.Hits == 0 {
 			return rl, nil
+		}
+
+		if s != nil && reqState.IsOwner {
+			defer func() {
+				s.OnChange(ctx, r, item)
+			}()
 		}
 
 		// If we are already at the limit.

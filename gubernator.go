@@ -318,7 +318,7 @@ func (s *V1Instance) asyncRequest(ctx context.Context, req *AsyncReq) {
 	funcTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.asyncRequest"))
 	defer funcTimer.ObserveDuration()
 
-	reqState := RateLimitReqState{IsOwner: false}
+	reqState := RateLimitReqState{IsOwner: req.Peer.Info().IsOwner}
 	resp := AsyncResp{
 		Idx: req.Idx,
 	}
@@ -337,7 +337,7 @@ func (s *V1Instance) asyncRequest(ctx context.Context, req *AsyncReq) {
 
 		// If we are attempting again, the owner of this rate limit might have changed to us!
 		if attempts != 0 {
-			if req.Peer.Info().IsOwner {
+			if reqState.IsOwner {
 				resp.Resp, err = s.getLocalRateLimit(ctx, req.Req, reqState)
 				if err != nil {
 					s.log.WithContext(ctx).

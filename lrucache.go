@@ -112,16 +112,7 @@ func (c *LRUCache) GetItem(key string) (item *CacheItem, ok bool) {
 	if ele, hit := c.cache[key]; hit {
 		entry := ele.Value.(*CacheItem)
 
-		now := MillisecondNow()
-		// If the entry is invalidated
-		if entry.InvalidAt != 0 && entry.InvalidAt < now {
-			c.removeElement(ele)
-			metricCacheAccess.WithLabelValues("miss").Add(1)
-			return
-		}
-
-		// If the entry has expired, remove it from the cache
-		if entry.ExpireAt < now {
+		if entry.IsExpired() {
 			c.removeElement(ele)
 			metricCacheAccess.WithLabelValues("miss").Add(1)
 			return

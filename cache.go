@@ -39,3 +39,19 @@ type CacheItem struct {
 	// for the latest rate limit data.
 	InvalidAt int64
 }
+
+func (item *CacheItem) IsExpired() bool {
+	now := MillisecondNow()
+
+	// If the entry is invalidated
+	if item.InvalidAt != 0 && item.InvalidAt < now {
+		return true
+	}
+
+	// If the entry has expired, remove it from the cache
+	if item.ExpireAt < now {
+		return true
+	}
+
+	return false
+}

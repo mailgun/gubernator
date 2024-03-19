@@ -26,32 +26,48 @@ import "gubernator.proto";
 
 // NOTE: For use by gubernator peers only
 service PeersV1 {
-    // Used by peers to relay batches of requests to an owner peer
-    rpc GetPeerRateLimits (GetPeerRateLimitsReq) returns (GetPeerRateLimitsResp) {}
+  // Used by peers to relay batches of requests to an owner peer
+  rpc GetPeerRateLimits (GetPeerRateLimitsReq) returns (GetPeerRateLimitsResp) {}
 
-    // Used by owner peers to send global rate limit updates to non-owner peers
-    rpc UpdatePeerGlobals (UpdatePeerGlobalsReq) returns (UpdatePeerGlobalsResp) {}
+  // Used by owner peers to send global rate limit updates to non-owner peers
+  rpc UpdatePeerGlobals (UpdatePeerGlobalsReq) returns (UpdatePeerGlobalsResp) {}
 }
 
 message GetPeerRateLimitsReq {
-    // Must specify at least one RateLimit. The peer that recives this request MUST be authoritative for
-    // each rate_limit[x].unique_key provided, as the peer will not forward the request to any other peers
-    repeated RateLimitReq requests = 1;
+  // Must specify at least one RateLimit. The peer that recives this request MUST be authoritative for
+  // each rate_limit[x].unique_key provided, as the peer will not forward the request to any other peers
+  repeated RateLimitReq requests = 1;
 }
 
 message GetPeerRateLimitsResp {
-    // Responses are in the same order as they appeared in the PeerRateLimitRequests
-    repeated RateLimitResp rate_limits = 1;
+  // Responses are in the same order as they appeared in the PeerRateLimitRequests
+  repeated RateLimitResp rate_limits = 1;
 }
 
 message UpdatePeerGlobalsReq {
-    // Must specify at least one RateLimit
-    repeated UpdatePeerGlobal globals = 1;
+  // Must specify at least one RateLimit
+  repeated UpdatePeerGlobal globals = 1;
 }
 
 message UpdatePeerGlobal {
-    string key = 1;
-    RateLimitResp status = 2;
-    Algorithm algorithm = 3;
+  // Uniquely identifies this rate limit IE: 'ip:10.2.10.7' or 'account:123445'
+  string key = 1;
+  RateLimitResp status = 2;
+  // The algorithm used to calculate the rate limit. The algorithm may change on
+  // subsequent requests, when this occurs any previous rate limit hit counts are reset.
+  Algorithm algorithm = 3;
+  // The duration of the rate limit in milliseconds
+  int64 duration = 4;
+  // The exact time the original request was created in Epoch milliseconds.
+  // Due to time drift between systems, it may be advantageous for a client to
+  // set the exact time the request was created. It possible the system clock
+  // for the client has drifted from the system clock where gubernator daemon
+  // is running.
+  //
+  // The created time is used by gubernator to calculate the reset time for
+  // both token and leaky algorithms. If it is not set by the client,
+  // gubernator will set the created time when it receives the rate limit
+  // request.
+  int64 created_at = 5;
 }
 message UpdatePeerGlobalsResp {}

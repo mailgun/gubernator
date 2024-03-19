@@ -22,6 +22,7 @@ import (
 
 	guber "github.com/mailgun/gubernator/v2"
 	"github.com/mailgun/gubernator/v2/cluster"
+	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/stretchr/testify/require"
 )
@@ -31,8 +32,9 @@ func BenchmarkServer(b *testing.B) {
 	conf := guber.Config{}
 	err := conf.SetDefaults()
 	require.NoError(b, err, "Error in conf.SetDefaults")
+	createdAt := epochMillis(clock.Now())
 
-	b.Run("GetPeerRateLimit() with no batching", func(b *testing.B) {
+	b.Run("GetPeerRateLimit", func(b *testing.B) {
 		client, err := guber.NewPeerClient(guber.PeerConfig{
 			Info:     cluster.GetRandomPeer(cluster.DataCenterNone),
 			Behavior: conf.Behaviors,
@@ -40,17 +42,17 @@ func BenchmarkServer(b *testing.B) {
 		if err != nil {
 			b.Errorf("Error building client: %s", err)
 		}
-
 		b.ResetTimer()
 
 		for n := 0; n < b.N; n++ {
-			_, err := client.GetPeerRateLimit(context.Background(), &guber.RateLimitReq{
-				Name:      "get_peer_rate_limits_benchmark",
+			_, err := client.GetPeerRateLimit(ctx, &guber.RateLimitReq{
+				Name:      b.Name(),
 				UniqueKey: guber.RandomString(10),
-				Behavior:  guber.Behavior_NO_BATCHING,
+				// Behavior:    guber.Behavior_NO_BATCHING,
 				Limit:     10,
 				Duration:  5,
 				Hits:      1,
+				CreatedAt: &createdAt,
 			})
 			if err != nil {
 				b.Errorf("Error in client.GetPeerRateLimit: %s", err)
@@ -58,17 +60,16 @@ func BenchmarkServer(b *testing.B) {
 		}
 	})
 
-	b.Run("GetRateLimit()", func(b *testing.B) {
+	b.Run("GetRateLimits batching", func(b *testing.B) {
 		client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
 		require.NoError(b, err, "Error in guber.DialV1Server")
-
 		b.ResetTimer()
 
 		for n := 0; n < b.N; n++ {
 			_, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
 				Requests: []*guber.RateLimitReq{
 					{
-						Name:      "get_rate_limit_benchmark",
+						Name:      b.Name(),
 						UniqueKey: guber.RandomString(10),
 						Limit:     10,
 						Duration:  guber.Second * 5,
@@ -82,17 +83,16 @@ func BenchmarkServer(b *testing.B) {
 		}
 	})
 
-	b.Run("GetRateLimitGlobal()", func(b *testing.B) {
+	b.Run("GetRateLimits global", func(b *testing.B) {
 		client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
 		require.NoError(b, err, "Error in guber.DialV1Server")
-
 		b.ResetTimer()
 
 		for n := 0; n < b.N; n++ {
-			_, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+			_, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
 				Requests: []*guber.RateLimitReq{
 					{
-						Name:      "get_rate_limit_benchmark",
+						Name:      b.Name(),
 						UniqueKey: guber.RandomString(10),
 						Behavior:  guber.Behavior_GLOBAL,
 						Limit:     10,
@@ -110,11 +110,10 @@ func BenchmarkServer(b *testing.B) {
 	b.Run("HealthCheck", func(b *testing.B) {
 		client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
 		require.NoError(b, err, "Error in guber.DialV1Server")
-
 		b.ResetTimer()
 
 		for n := 0; n < b.N; n++ {
-			if _, err := client.HealthCheck(context.Background(), &guber.HealthCheckReq{}); err != nil {
+			if _, err := client.HealthCheck(ctx, &guber.HealthCheckReq{}); err != nil {
 				b.Errorf("Error in client.HealthCheck: %s", err)
 			}
 		}
@@ -123,17 +122,15 @@ func BenchmarkServer(b *testing.B) {
 	b.Run("Thundering herd", func(b *testing.B) {
 		client, err := guber.DialV1Server(cluster.GetRandomPeer(cluster.DataCenterNone).GRPCAddress, nil)
 		require.NoError(b, err, "Error in guber.DialV1Server")
-
 		b.ResetTimer()
-
 		fan := syncutil.NewFanOut(100)
 
 		for n := 0; n < b.N; n++ {
 			fan.Run(func(o interface{}) error {
-				_, err := client.GetRateLimits(context.Background(), &guber.GetRateLimitsReq{
+				_, err := client.GetRateLimits(ctx, &guber.GetRateLimitsReq{
 					Requests: []*guber.RateLimitReq{
 						{
-							Name:      "get_rate_limit_benchmark",
+							Name:      b.Name(),
 							UniqueKey: guber.RandomString(10),
 							Limit:     10,
 							Duration:  guber.Second * 5,

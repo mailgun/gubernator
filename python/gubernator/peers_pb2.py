@@ -15,7 +15,7 @@ _sym_db = _symbol_database.Default()
 import gubernator_pb2 as gubernator__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0bpeers.proto\x12\rpb.gubernator\x1a\x10gubernator.proto\"O\n\x14GetPeerRateLimitsReq\x12\x37\n\x08requests\x18\x01 \x03(\x0b\x32\x1b.pb.gubernator.RateLimitReqR\x08requests\"V\n\x15GetPeerRateLimitsResp\x12=\n\x0brate_limits\x18\x01 \x03(\x0b\x32\x1c.pb.gubernator.RateLimitRespR\nrateLimits\"Q\n\x14UpdatePeerGlobalsReq\x12\x39\n\x07globals\x18\x01 \x03(\x0b\x32\x1f.pb.gubernator.UpdatePeerGlobalR\x07globals\"\x92\x01\n\x10UpdatePeerGlobal\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x34\n\x06status\x18\x02 \x01(\x0b\x32\x1c.pb.gubernator.RateLimitRespR\x06status\x12\x36\n\talgorithm\x18\x03 \x01(\x0e\x32\x18.pb.gubernator.AlgorithmR\talgorithm\"\x17\n\x15UpdatePeerGlobalsResp2\xcd\x01\n\x07PeersV1\x12`\n\x11GetPeerRateLimits\x12#.pb.gubernator.GetPeerRateLimitsReq\x1a$.pb.gubernator.GetPeerRateLimitsResp\"\x00\x12`\n\x11UpdatePeerGlobals\x12#.pb.gubernator.UpdatePeerGlobalsReq\x1a$.pb.gubernator.UpdatePeerGlobalsResp\"\x00\x42\"Z\x1dgithub.com/mailgun/gubernator\x80\x01\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0bpeers.proto\x12\rpb.gubernator\x1a\x10gubernator.proto\"O\n\x14GetPeerRateLimitsReq\x12\x37\n\x08requests\x18\x01 \x03(\x0b\x32\x1b.pb.gubernator.RateLimitReqR\x08requests\"V\n\x15GetPeerRateLimitsResp\x12=\n\x0brate_limits\x18\x01 \x03(\x0b\x32\x1c.pb.gubernator.RateLimitRespR\nrateLimits\"Q\n\x14UpdatePeerGlobalsReq\x12\x39\n\x07globals\x18\x01 \x03(\x0b\x32\x1f.pb.gubernator.UpdatePeerGlobalR\x07globals\"\xcd\x01\n\x10UpdatePeerGlobal\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x34\n\x06status\x18\x02 \x01(\x0b\x32\x1c.pb.gubernator.RateLimitRespR\x06status\x12\x36\n\talgorithm\x18\x03 \x01(\x0e\x32\x18.pb.gubernator.AlgorithmR\talgorithm\x12\x1a\n\x08\x64uration\x18\x04 \x01(\x03R\x08\x64uration\x12\x1d\n\ncreated_at\x18\x05 \x01(\x03R\tcreatedAt\"\x17\n\x15UpdatePeerGlobalsResp2\xcd\x01\n\x07PeersV1\x12`\n\x11GetPeerRateLimits\x12#.pb.gubernator.GetPeerRateLimitsReq\x1a$.pb.gubernator.GetPeerRateLimitsResp\"\x00\x12`\n\x11UpdatePeerGlobals\x12#.pb.gubernator.UpdatePeerGlobalsReq\x1a$.pb.gubernator.UpdatePeerGlobalsResp\"\x00\x42\"Z\x1dgithub.com/mailgun/gubernator\x80\x01\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -30,9 +30,9 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   _globals['_UPDATEPEERGLOBALSREQ']._serialized_start=217
   _globals['_UPDATEPEERGLOBALSREQ']._serialized_end=298
   _globals['_UPDATEPEERGLOBAL']._serialized_start=301
-  _globals['_UPDATEPEERGLOBAL']._serialized_end=447
-  _globals['_UPDATEPEERGLOBALSRESP']._serialized_start=449
-  _globals['_UPDATEPEERGLOBALSRESP']._serialized_end=472
-  _globals['_PEERSV1']._serialized_start=475
-  _globals['_PEERSV1']._serialized_end=680
+  _globals['_UPDATEPEERGLOBAL']._serialized_end=506
+  _globals['_UPDATEPEERGLOBALSRESP']._serialized_start=508
+  _globals['_UPDATEPEERGLOBALSRESP']._serialized_end=531
+  _globals['_PEERSV1']._serialized_start=534
+  _globals['_PEERSV1']._serialized_end=739
 # @@protoc_insertion_point(module_scope)

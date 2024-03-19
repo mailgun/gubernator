@@ -13,7 +13,7 @@ $(GOLANGCI_LINT): ## Download Go linter
 
 .PHONY: lint
 lint: $(GOLANGCI_LINT) ## Run Go linter
-	$(GOLANGCI_LINT) run -v --fix -c .golangci.yml ./...
+	$(GOLANGCI_LINT) run -v -c .golangci.yml ./...
 
 .PHONY: test
 test: ## Run unit tests and measure code coverage
@@ -24,7 +24,7 @@ test: ## Run unit tests and measure code coverage
 
 .PHONY: bench
 bench: ## Run Go benchmarks
-	go test ./... -bench . -benchtime 5s -timeout 0 -run=XXX -benchmem
+	go test ./... -bench . -benchtime 5s -timeout 0 -run='^$$' -benchmem
 
 .PHONY: docker
 docker: ## Build Docker image

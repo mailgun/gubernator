@@ -21,8 +21,10 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/mailgun/errors"
+	"github.com/mailgun/holster/v4/clock"
 	"github.com/mailgun/holster/v4/syncutil"
 	"github.com/mailgun/holster/v4/tracing"
 	"github.com/prometheus/client_golang/prometheus"
@@ -49,6 +51,10 @@ type V1Instance struct {
 	conf       Config
 	isClosed   bool
 	workerPool *WorkerPool
+}
+
+type RateLimitReqState struct {
+	IsOwner bool
 }
 
 var (
@@ -186,6 +192,7 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 			"Requests.RateLimits list too large; max size is '%d'", maxBatchSize)
 	}
 
+	createdAt := epochMillis(clock.Now())
 	resp := GetRateLimitsResp{
 		Responses: make([]*RateLimitResp, len(r.Requests)),
 	}
@@ -198,16 +205,18 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 		var peer *PeerClient
 		var err error
 
-		if len(req.UniqueKey) == 0 {
+		if req.UniqueKey == "" {
 			metricCheckErrorCounter.WithLabelValues("Invalid request").Inc()
 			resp.Responses[i] = &RateLimitResp{Error: "field 'unique_key' cannot be empty"}
 			continue
 		}
-
-		if len(req.Name) == 0 {
+		if req.Name == "" {
 			metricCheckErrorCounter.WithLabelValues("Invalid request").Inc()
 			resp.Responses[i] = &RateLimitResp{Error: "field 'namespace' cannot be empty"}
 			continue
+		}
+		if req.CreatedAt == nil || *req.CreatedAt == 0 {
+			req.CreatedAt = &createdAt
 		}
 
 		if ctx.Err() != nil {
@@ -235,9 +244,10 @@ func (s *V1Instance) GetRateLimits(ctx context.Context, r *GetRateLimitsReq) (*G
 		}
 
 		// If our server instance is the owner of this rate limit
-		if peer.Info().IsOwner {
+		reqState := RateLimitReqState{IsOwner: peer.Info().IsOwner}
+		if reqState.IsOwner {
 			// Apply our rate limit algorithm to the request
-			resp.Responses[i], err = s.getLocalRateLimit(ctx, req)
+			resp.Responses[i], err = s.getLocalRateLimit(ctx, req, reqState)
 			if err != nil {
 				err = errors.Wrapf(err, "Error while apply rate limit for '%s'", key)
 				span := trace.SpanFromContext(ctx)
@@ -308,6 +318,7 @@ func (s *V1Instance) asyncRequest(ctx context.Context, req *AsyncReq) {
 	funcTimer := prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.asyncRequest"))
 	defer funcTimer.ObserveDuration()
 
+	reqState := RateLimitReqState{IsOwner: req.Peer.Info().IsOwner}
 	resp := AsyncResp{
 		Idx: req.Idx,
 	}
@@ -326,8 +337,8 @@ func (s *V1Instance) asyncRequest(ctx context.Context, req *AsyncReq) {
 
 		// If we are attempting again, the owner of this rate limit might have changed to us!
 		if attempts != 0 {
-			if req.Peer.Info().IsOwner {
-				resp.Resp, err = s.getLocalRateLimit(ctx, req.Req)
+			if reqState.IsOwner {
+				resp.Resp, err = s.getLocalRateLimit(ctx, req.Req, reqState)
 				if err != nil {
 					s.log.WithContext(ctx).
 						WithError(err).
@@ -394,12 +405,13 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 		tracing.EndScope(ctx, err)
 	}()
 
-	cpy := proto.Clone(req).(*RateLimitReq)
-	SetBehavior(&cpy.Behavior, Behavior_NO_BATCHING, true)
-	SetBehavior(&cpy.Behavior, Behavior_GLOBAL, false)
+	req2 := proto.Clone(req).(*RateLimitReq)
+	SetBehavior(&req2.Behavior, Behavior_NO_BATCHING, true)
+	SetBehavior(&req2.Behavior, Behavior_GLOBAL, false)
+	reqState := RateLimitReqState{IsOwner: false}
 
 	// Process the rate limit like we own it
-	resp, err = s.getLocalRateLimit(ctx, cpy)
+	resp, err = s.getLocalRateLimit(ctx, req2, reqState)
 	if err != nil {
 		return nil, errors.Wrap(err, "during in getLocalRateLimit")
 	}
@@ -411,6 +423,7 @@ func (s *V1Instance) getGlobalRateLimit(ctx context.Context, req *RateLimitReq) 
 // UpdatePeerGlobals updates the local cache with a list of global rate limits. This method should only
 // be called by a peer who is the owner of a global rate limit.
 func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobalsReq) (*UpdatePeerGlobalsResp, error) {
+	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.UpdatePeerGlobals")).ObserveDuration()
 	now := MillisecondNow()
 	for _, g := range r.Globals {
 		item := &CacheItem{
@@ -423,6 +436,7 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 			item.Value = &LeakyBucketItem{
 				Remaining: float64(g.Status.Remaining),
 				Limit:     g.Status.Limit,
+				Duration:  g.Duration,
 				Burst:     g.Status.Limit,
 				UpdatedAt: now,
 			}
@@ -430,6 +444,7 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 			item.Value = &TokenBucketItem{
 				Status:    g.Status.Status,
 				Limit:     g.Status.Limit,
+				Duration:  g.Duration,
 				Remaining: g.Status.Remaining,
 				CreatedAt: now,
 			}
@@ -445,6 +460,7 @@ func (s *V1Instance) UpdatePeerGlobals(ctx context.Context, r *UpdatePeerGlobals
 
 // GetPeerRateLimits is called by other peers to get the rate limits owned by this peer.
 func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimitsReq) (resp *GetPeerRateLimitsResp, err error) {
+	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.GetPeerRateLimits")).ObserveDuration()
 	if len(r.Requests) > maxBatchSize {
 		err := fmt.Errorf("'PeerRequest.rate_limits' list too large; max size is '%d'", maxBatchSize)
 		metricCheckErrorCounter.WithLabelValues("Request too large").Inc()
@@ -467,6 +483,7 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 	respChan := make(chan respOut)
 	var respWg sync.WaitGroup
 	respWg.Add(1)
+	reqState := RateLimitReqState{IsOwner: true}
 
 	go func() {
 		// Capture each response and return in the same order
@@ -494,7 +511,13 @@ func (s *V1Instance) GetPeerRateLimits(ctx context.Context, r *GetPeerRateLimits
 				SetBehavior(&rin.req.Behavior, Behavior_DRAIN_OVER_LIMIT, true)
 			}
 
-			rl, err := s.getLocalRateLimit(ctx, rin.req)
+			// Assign default to CreatedAt for backwards compatibility.
+			if rin.req.CreatedAt == nil || *rin.req.CreatedAt == 0 {
+				createdAt := epochMillis(clock.Now())
+				rin.req.CreatedAt = &createdAt
+			}
+
+			rl, err := s.getLocalRateLimit(ctx, rin.req, reqState)
 			if err != nil {
 				// Return the error for this request
 				err = errors.Wrap(err, "Error in getLocalRateLimit")
@@ -562,7 +585,7 @@ func (s *V1Instance) HealthCheck(ctx context.Context, r *HealthCheckReq) (health
 	return health, nil
 }
 
-func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (_ *RateLimitResp, err error) {
+func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq, reqState RateLimitReqState) (_ *RateLimitResp, err error) {
 	ctx = tracing.StartNamedScope(ctx, "V1Instance.getLocalRateLimit", trace.WithAttributes(
 		attribute.String("ratelimit.key", r.UniqueKey),
 		attribute.String("ratelimit.name", r.Name),
@@ -572,17 +595,19 @@ func (s *V1Instance) getLocalRateLimit(ctx context.Context, r *RateLimitReq) (_ 
 	defer func() { tracing.EndScope(ctx, err) }()
 	defer prometheus.NewTimer(metricFuncTimeDuration.WithLabelValues("V1Instance.getLocalRateLimit")).ObserveDuration()
 
-	resp, err := s.workerPool.GetRateLimit(ctx, r)
+	resp, err := s.workerPool.GetRateLimit(ctx, r, reqState)
 	if err != nil {
 		return nil, errors.Wrap(err, "during workerPool.GetRateLimit")
 	}
 
-	metricGetRateLimitCounter.WithLabelValues("local").Inc()
 	// If global behavior, then broadcast update to all peers.
 	if HasBehavior(r.Behavior, Behavior_GLOBAL) {
-		s.global.QueueUpdate(r, resp)
+		s.global.QueueUpdate(r)
 	}
 
+	if reqState.IsOwner {
+		metricGetRateLimitCounter.WithLabelValues("local").Inc()
+	}
 	return resp, nil
 }
 
@@ -723,10 +748,10 @@ func (s *V1Instance) Describe(ch chan<- *prometheus.Desc) {
 	metricGetRateLimitCounter.Describe(ch)
 	metricOverLimitCounter.Describe(ch)
 	metricWorkerQueue.Describe(ch)
-	s.global.metricBroadcastCounter.Describe(ch)
 	s.global.metricBroadcastDuration.Describe(ch)
 	s.global.metricGlobalQueueLength.Describe(ch)
 	s.global.metricGlobalSendDuration.Describe(ch)
+	s.global.metricGlobalSendQueueLength.Describe(ch)
 }
 
 // Collect fetches metrics from the server for use by prometheus
@@ -741,10 +766,10 @@ func (s *V1Instance) Collect(ch chan<- prometheus.Metric) {
 	metricGetRateLimitCounter.Collect(ch)
 	metricOverLimitCounter.Collect(ch)
 	metricWorkerQueue.Collect(ch)
-	s.global.metricBroadcastCounter.Collect(ch)
 	s.global.metricBroadcastDuration.Collect(ch)
 	s.global.metricGlobalQueueLength.Collect(ch)
 	s.global.metricGlobalSendDuration.Collect(ch)
+	s.global.metricGlobalSendQueueLength.Collect(ch)
 }
 
 // HasBehavior returns true if the provided behavior is set
@@ -784,4 +809,8 @@ func isDeadlineExceeded(err error) bool {
 		return false
 	}
 	return errors.Is(err, context.DeadlineExceeded)
+}
+
+func epochMillis(t time.Time) int64 {
+	return t.UnixNano() / 1_000_000
 }

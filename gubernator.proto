@@ -168,6 +168,18 @@ message RateLimitReq {
   // this to pass trace context to other peers. Might be useful for future clients to pass along
   // trace information to gubernator.
   map<string, string> metadata = 9;
+
+  // The exact time this request was created in Epoch milliseconds.  Due to
+  // time drift between systems, it may be advantageous for a client to set the
+  // exact time the request was created. It possible the system clock for the
+  // client has drifted from the system clock where gubernator daemon is
+  // running.
+  //
+  // The created time is used by gubernator to calculate the reset time for
+  // both token and leaky algorithms. If it is not set by the client,
+  // gubernator will set the created time when it receives the rate limit
+  // request.
+  optional int64 created_at = 10;
 }
 
 enum Status {

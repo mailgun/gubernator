@@ -3,6 +3,9 @@
     Distributed RateLimiting Service
 </h2>
 
+> ## DEVELOPMENT ON GUBERNATOR HAS MOVED TO A NEW HOME AT [gubernator-io/gubernator](https://github.com/gubernator-io/gubernator)
+> v2.4.0 is the final version available from his repo, all new features and bug fixes will occur under the new repo.
+
 # Gubernator
 Gubernator is a distributed, high performance, cloud native and stateless rate-limiting service.
 

@@ -74,9 +74,12 @@ func main() {
 	}
 
 	// Read our config from the environment or optional environment config file
-	configFileReader, err := os.Open(configFile)
-	if err != nil {
-		log.WithError(err).Fatal("while opening config file")
+	var configFileReader io.Reader
+	if configFile != "" {
+		configFileReader, err = os.Open(configFile)
+		if err != nil {
+			log.WithError(err).Fatal("while opening config file")
+		}
 	}
 	conf, err := gubernator.SetupDaemonConfig(logrus.StandardLogger(), configFileReader)
 	checkErr(err, "while getting config")

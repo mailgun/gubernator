@@ -20,6 +20,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"strings"
@@ -89,9 +90,12 @@ func main() {
 		cmdLine := strings.Join(os.Args[1:], " ")
 		logrus.WithContext(ctx).Info("Command line: " + cmdLine)
 
-		configFileReader, err := os.Open(configFile)
-		if err != nil {
-			return fmt.Errorf("while opening config file: %s", err)
+		var configFileReader io.Reader
+		if configFile != "" {
+			configFileReader, err = os.Open(configFile)
+			if err != nil {
+				log.WithError(err).Fatal("while opening config file")
+			}
 		}
 		conf, err := guber.SetupDaemonConfig(log, configFileReader)
 		if err != nil {

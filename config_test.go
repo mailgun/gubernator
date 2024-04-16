@@ -38,3 +38,10 @@ func TestDefaultInstanceId(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, daemonConfig.InstanceID)
 }
+
+func TestNoConfigFile(t *testing.T) {
+	os.Clearenv()
+	daemonConfig, err := SetupDaemonConfig(logrus.StandardLogger(), nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, daemonConfig.InstanceID)
+}
